@@ -65,15 +65,15 @@ def test_interrupted_export_leaves_no_partial_archive(tmp_path: Path, monkeypatc
     run(capsys, "init", "--whatsapp-path", str(wa), "--timezone", "UTC")
     run(capsys, "sync", "--source", "whatsapp")
     out = tmp_path / "out"
-    with mock.patch("chatstore.archive.container.write_encrypted_zip", side_effect=KeyboardInterrupt):
-        with pytest.raises(KeyboardInterrupt):
-            from chatstore.archive import export as E
-            cache = Cache(dd / "cache.sqlite3")
-            from chatstore.config import load_config, load_identity
-            from chatstore.paths import DataDir
-            plan = E.collect_catalogue(cache)
-            E.write_archive(cache, DataDir(dd), load_config(DataDir(dd)), load_identity(DataDir(dd)), plan, output=out,
-                            password="x", media="text", force=False, adapter_versions={})
+    from chatstore.archive import export as E
+    from chatstore.config import load_config, load_identity
+    from chatstore.paths import DataDir
+    cache = Cache(dd / "cache.sqlite3")
+    plan = E.collect_catalogue(cache)
+    with (mock.patch("chatstore.archive.container.write_encrypted_zip", side_effect=KeyboardInterrupt),
+          pytest.raises(KeyboardInterrupt)):
+        E.write_archive(cache, DataDir(dd), load_config(DataDir(dd)), load_identity(DataDir(dd)), plan, output=out,
+                        password="x", media="text", force=False, adapter_versions={})
     assert not list(out.glob("*")) if out.exists() else True
     assert not list((dd / "staging").iterdir())
     cache.close()
