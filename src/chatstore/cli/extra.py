@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -210,6 +211,109 @@ def cmd_archive_list(ctx: Any) -> Any:
     return A.Result({"exports": exp, "imports": imp}, human=human)
 
 
+# ---- identity / scope / conflicts / purge -------------------------------------------------------------
+
+def cmd_identity(ctx: Any) -> Any:
+    from .. import curation as C
+    A = _app()
+    ctx.require_init()
+    a = ctx.args
+    cache = ctx.cache()
+    if a.identity_command == "suggest":
+        items = C.suggest(cache, limit=ctx.limit(200))
+
+        def human(d: Any) -> str:
+            lines = []
+            for s in d:
+                lines.append(f"{s['evidence']['type']} {s['evidence']['detail']}")
+                for i in s["identities"]:
+                    lines.append(f"    [{i['source']}] {i['urn']}  {', '.join(n for n in i['names'] if n)}" + ("  (linked)" if i["already_linked"] else ""))
+            return "\n".join(lines) or "no suggestions"
+        return A.Result(items, human=human)
+    if a.identity_command == "link":
+        with cache.write():
+            try:
+                if a.person:
+                    person_urn = a.person
+                else:
+                    person_urn = C.create_person(cache, a.label)["urn"]
+                links = C.link(cache, person_urn, a.identities)
+            except ValueError as e:
+                raise A.CliError(A.EXIT_NOT_FOUND, "not_found", str(e)) from None
+        return A.Result({"person_urn": person_urn, "links": links},
+                        human=lambda d: f"{d['person_urn']}: linked {len(d['links'])} identit{'y' if len(d['links']) == 1 else 'ies'}")
+    if a.identity_command == "unlink":
+        with cache.write():
+            links = C.unlink(cache, a.identity, a.person)
+        if not links:
+            raise A.CliError(A.EXIT_NOT_FOUND, "not_found", "no active link for that identity")
+        return A.Result({"rejected": links}, human=lambda d: f"rejected {len(d['rejected'])} link(s)")
+    raise A.CliError(A.EXIT_USAGE, "usage", "identity link|unlink|suggest")
+
+
+def cmd_scope(ctx: Any) -> Any:
+    from .. import curation as C
+    A = _app()
+    ctx.require_init()
+    a = ctx.args
+    cache = ctx.cache()
+    if a.scope_command == "list":
+        rows = C.list_scopes(cache, ctx.ident)
+        return A.Result(rows, human=lambda d: "\n".join(
+            f"{r['source'] or '?':<9} {r['scope']}  {r['records']:>8} records  {r['origin']}" + (f"  -> {r['mapped_to']}" if r.get("mapped_to") else "") for r in d) or "no scopes")
+    if a.scope_command == "map":
+        try:
+            with cache.write():
+                res = C.map_scope(cache, ctx.ident, a.from_scope, a.to_scope)
+        except ValueError as e:
+            raise A.CliError(A.EXIT_USAGE, "bad_scope", str(e)) from None
+        save_identity(ctx.data_dir, ctx.ident)
+        return A.Result(res, human=lambda d: f"mapped {d['from']} -> {d['to']}: {d['aliases_created']} aliases created")
+    raise A.CliError(A.EXIT_USAGE, "usage", "scope list|map")
+
+
+def cmd_conflicts(ctx: Any) -> Any:
+    from .. import curation as C
+    A = _app()
+    ctx.require_init()
+    a = ctx.args
+    cache = ctx.cache()
+    if a.conflicts_command == "list":
+        rows = cache.conflicts(unresolved_only=not a.all)
+        return A.Result(rows, human=lambda d: "\n".join(
+            f"#{r['id']} {r['kind']:<14} {r['entity_urn'] or ''} {json.dumps(r['detail'])[:100]}" + ("  resolved" if r["resolved_at"] else "") for r in d) or "no conflicts")
+    if a.conflicts_command == "resolve":
+        try:
+            with cache.write():
+                res = C.resolve_conflict(cache, a.id, keep=a.keep, accept=a.accept)
+        except KeyError:
+            raise A.CliError(A.EXIT_NOT_FOUND, "not_found", f"no conflict #{a.id}") from None
+        except ValueError as e:
+            raise A.CliError(A.EXIT_USAGE, "bad_resolution", str(e)) from None
+        return A.Result(res, human=lambda d: f"resolved #{d['id']}: {json.dumps(d['resolution'])}")
+    raise A.CliError(A.EXIT_USAGE, "usage", "conflicts list|resolve")
+
+
+def cmd_purge(ctx: Any) -> Any:
+    from .. import curation as C
+    A = _app()
+    ctx.require_init()
+    a = ctx.args
+    if not a.confirm:
+        raise A.CliError(A.EXIT_USAGE, "confirm_required", "purge is irreversible locally; add --confirm")
+    if bool(a.entity) == bool(a.source):
+        raise A.CliError(A.EXIT_USAGE, "usage", "give exactly one of --entity <urn> or --source <source>")
+    cache = ctx.cache()
+    try:
+        with cache.write():
+            res = C.purge_entity(cache, a.entity) if a.entity else C.purge_source(cache, a.source, a.scope)
+    except KeyError:
+        raise A.CliError(A.EXIT_NOT_FOUND, "not_found", f"unknown entity {a.entity}") from None
+    warning = "already exported archives still contain the purged records; re-export produces a new revision"
+    return A.Result(res | {"warning": warning}, warnings=[{"code": "archives_unchanged", "message": warning}],
+                    human=lambda d: f"removed {d['removed']} record(s). {warning}")
+
+
 # ---- registration -----------------------------------------------------------------------------------
 
 def register_extra(sub: Any) -> None:
@@ -242,4 +346,45 @@ def register_extra(sub: Any) -> None:
     s.set_defaults(fn=cmd_archive_password)
 
     ars.add_parser("list", help="Show export and import ledgers.").set_defaults(fn=cmd_archive_list)
+
+    idp = sub.add_parser("identity", help="Curate people and identity links.")
+    ids = idp.add_subparsers(dest="identity_command", metavar="action")
+    s = ids.add_parser("link", help="Link identities to a person (creates the person unless --person).")
+    s.add_argument("identities", nargs="+", metavar="identity-urn")
+    s.add_argument("--person", help="Existing person URN.")
+    s.add_argument("--label", help="Label for a new person.")
+    s.set_defaults(fn=cmd_identity)
+    s = ids.add_parser("unlink", help="Reject a link (kept as evidence, state=rejected).")
+    s.add_argument("identity", metavar="identity-urn")
+    s.add_argument("--person")
+    s.set_defaults(fn=cmd_identity)
+    s = ids.add_parser("suggest", help="Suggest cross-source links by normalised phone/e-mail.")
+    s.add_argument("--limit", type=int)
+    s.set_defaults(fn=cmd_identity)
+
+    scp = sub.add_parser("scope", help="Account scopes and explicit scope mapping.")
+    scs = scp.add_subparsers(dest="scope_command", metavar="action")
+    scs.add_parser("list", help="List account scopes.").set_defaults(fn=cmd_scope)
+    s = scs.add_parser("map", help="Declare two scopes the same account; emits aliases.")
+    s.add_argument("from_scope", metavar="from")
+    s.add_argument("to_scope", metavar="to")
+    s.set_defaults(fn=cmd_scope)
+
+    cfp = sub.add_parser("conflicts", help="Inspect and resolve import conflicts.")
+    cfs = cfp.add_subparsers(dest="conflicts_command", metavar="action")
+    s = cfs.add_parser("list")
+    s.add_argument("--all", action="store_true", help="Include resolved conflicts.")
+    s.set_defaults(fn=cmd_conflicts)
+    s = cfs.add_parser("resolve")
+    s.add_argument("id", type=int)
+    s.add_argument("--keep", metavar="revision_digest", help="Content conflicts: revision to make current.")
+    s.add_argument("--accept", action="store_true", help="Archive branch conflicts: allow the branch to import.")
+    s.set_defaults(fn=cmd_conflicts)
+
+    s = sub.add_parser("purge", help="Irreversibly delete records from the local cache.")
+    s.add_argument("--entity", metavar="urn")
+    s.add_argument("--source", choices=["whatsapp", "messages"])
+    s.add_argument("--scope")
+    s.add_argument("--confirm", action="store_true")
+    s.set_defaults(fn=cmd_purge)
     _ = argparse

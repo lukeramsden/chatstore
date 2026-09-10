@@ -127,7 +127,7 @@ def test_messages_sync_and_queries(env, capsys):
     assert code == 0, e
     r = e["data"][0]
     assert r["status"] == "complete"
-    assert r["counts"]["messages"] == 7 and r["counts"]["identities"] == 4  # 3 handles + me
+    assert r["counts"]["messages"] == 7 and r["counts"]["identities"] == 5  # 4 handles + me
     assert r["counts"]["chats"] == 3 and r["counts"]["stub_chats"] == 1
     assert r["counts"]["messages_inferred_chat"] == 2
     assert r["counts"]["events"] == 1  # the tapback
@@ -154,7 +154,7 @@ def test_messages_sync_and_queries(env, capsys):
 
     code, e = run(capsys, "chats", "--source", "messages")
     fam = next(c for c in e["data"] if c["label"] == "Family")
-    assert fam["chat_kind"] == "group" and len(fam["participants"]) == 2
+    assert fam["chat_kind"] == "group" and len(fam["participants"]) == 3
     code, e = run(capsys, "read", fam["urn"])
     assert e["data"][0]["reply_to_urn"] is not None
 

@@ -107,3 +107,31 @@ delivery. Each entry says what was decided and what evidence drove it.
   empty data dir in 3m52s with an identical current view (same `(urn, revision_digest)` set,
   same revision/observation/FTS counts, 0 conflicts). One month with media: 803 blobs, 496 MB,
   export 30 s / import 25 s.
+
+### Phase 4 (reconciliation, curation, hardening)
+
+- **Source absence is evidence, not deletion.** A full reconcile (`--mode full`, initial sync,
+  or an adapter-detected source reset) marks `source_observations.present =
+  absent_from_source`; the record and its revisions stay current and searchable. `resolve`
+  shows the observation state. Only `purge` removes data.
+- **Source-reset detection** (max row id went backwards) switches an incremental run to
+  `full_reconcile` automatically so absence is reconciled in the same run.
+- **People and links are source-independent** (`source: null`). Link URNs are UUIDv5 over
+  `(person_urn, identity_urn)` so re-linking is idempotent; unlink sets `state=rejected` and
+  keeps the record as evidence. Suggestions match the last 10 digits of a phone number or an
+  exact lower-cased e-mail across *different* sources; they are listed, never auto-applied.
+- **Scope mapping** never rewrites records. `scope map <from> <to>` emits `aliases`
+  (`reason: scope_map`) for every non-minted record in `<from>` by re-deriving the URN in
+  `<to>`, and stores the mapping in `identity.json`. Entity-type table for derivation is in
+  `curation.ENTITY_TYPE` and `specs/identity.md`.
+- **Conflict resolution**: content conflicts are resolved by choosing a revision digest
+  (`--keep`); the chosen revision becomes current and supersedes the previous head. Archive
+  branch conflicts are resolved with `--accept`, after which the branch imports normally.
+- **Purge** deletes records, revisions, observations, index rows and FTS entries for an entity
+  (messages take parts/attachments/events; chats take their messages and memberships) or a
+  whole source/scope. The response always carries the warning that exported archives are
+  unchanged.
+- **Acceptance run** (real sources, both apps quit, `scripts/acceptance.py --media-month
+  2026-04`): 17/17 checks after fixing two test-harness issues (sync_runs rows counted as
+  non-idempotence; unresolved cross-archive refs compared against 0 instead of against the
+  source's own dangling reply/reaction targets, which were 14 on this machine).

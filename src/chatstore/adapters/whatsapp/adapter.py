@@ -256,6 +256,7 @@ class WhatsAppAdapter:
             since_pk = int(checkpoints["max_message_pk"])
             if since_pk > max_pk:
                 stats.notes.append("source reset detected: max Z_PK went backwards; falling back to full scan")
+                stats.full_scan = True
                 since_pk = 0
         stats.checkpoints["max_message_pk"] = max_pk
         # Logical message groups. Incremental: groups containing at least one new row; also a recent

@@ -127,9 +127,11 @@ def build_messages(root: Path, *, extra_messages: int = 0) -> Path:
     c.execute("INSERT INTO handle VALUES (1, '+15550003333', 'us', 'iMessage', '(555) 000-3333', NULL)")
     c.execute("INSERT INTO handle VALUES (2, 'Carol@Example.com', 'us', 'iMessage', NULL, NULL)")
     c.execute("INSERT INTO handle VALUES (3, '+15550003333', 'us', 'SMS', NULL, NULL)")
+    # same phone as the WhatsApp fixture's Alice -> `identity suggest` candidate
+    c.execute("INSERT INTO handle VALUES (4, '+1 (555) 000-1111', 'us', 'SMS', NULL, NULL)")
     c.execute("INSERT INTO chat (ROWID, guid, style, chat_identifier, service_name, display_name, is_archived) VALUES (1, 'iMessage;-;+15550003333', 45, '+15550003333', 'iMessage', NULL, 0)")
     c.execute("INSERT INTO chat (ROWID, guid, style, chat_identifier, service_name, display_name, is_archived) VALUES (2, 'iMessage;+;chat100200300', 43, 'chat100200300', 'iMessage', 'Family', 0)")
-    c.executemany("INSERT INTO chat_handle_join VALUES (?,?)", [(1, 1), (2, 1), (2, 2)])
+    c.executemany("INSERT INTO chat_handle_join VALUES (?,?)", [(1, 1), (2, 1), (2, 2), (2, 4)])
 
     def ns(sec: int) -> int:
         return sec * 1_000_000_000

@@ -257,6 +257,7 @@ class MessagesAdapter:
         prev = int(checkpoints.get("max_message_rowid", 0)) if checkpoints else 0
         if prev > max_rowid:
             stats.notes.append("source reset detected: max message ROWID went backwards; full scan")
+            stats.full_scan = True
         stats.checkpoints["max_message_rowid"] = max_rowid
 
         proc = subprocess.Popen([str(helper), str(db_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,

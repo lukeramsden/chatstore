@@ -102,7 +102,9 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
                 flush()
                 say(f"imported {n} records")
         flush()
-        if full or mode == "initial":
+        if stats.full_scan and mode == "incremental":
+            run["mode"] = mode = "full_reconcile"
+        if full or mode in ("initial", "full_reconcile"):
             with cache.write():
                 for t in seen_tables:
                     absent = cache.mark_absent(adapter.source, scope, t, started, run_urn)

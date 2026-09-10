@@ -102,6 +102,18 @@ adapter mints a UUIDv4, records `source_observations.native_key = null`,
 `minted = true`, and the matching evidence (row id, fingerprint) so later syncs reuse it.
 Ambiguous matches are reported, never auto-merged.
 
+## Entity types per table
+
+| table | `entity_type` in derivation |
+| --- | --- |
+| identities, accounts | `identity` |
+| chats | `chat` |
+| messages | `message` |
+| attachments, blobs | `attachment` |
+| message_parts, events, chat_memberships, aliases | `event` |
+
+`chatstore scope map` relies on this table to re-derive URNs in another scope.
+
 ## Aliases
 
 `aliases` map an old URN to a current URN with `reason`, `evidence`, and `created_at`.

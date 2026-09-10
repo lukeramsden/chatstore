@@ -52,6 +52,7 @@ class ExtractStats:
     errors: list[dict[str, Any]] = field(default_factory=list)
     checkpoints: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    full_scan: bool = False  # adapter fell back to a full scan (e.g. source reset); sync reconciles absence
 
     def bump(self, key: str, n: int = 1) -> None:
         self.counts[key] = self.counts.get(key, 0) + n

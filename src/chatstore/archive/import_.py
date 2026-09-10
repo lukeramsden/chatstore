@@ -61,6 +61,9 @@ def _lineage_check(cache: Cache, m: dict[str, Any]) -> tuple[str, list[str]]:
         "SELECT export_id, lineage, superseded_by FROM imports WHERE export_set=? AND kind=? AND bucket_label=?",
         (m["export_set"], m["kind"], (m.get("bucket") or {}).get("label") or m["kind"])).fetchall()
     my_lineage = list(m.get("lineage") or [export_id])
+    from ..curation import branch_accepted
+    if branch_accepted(cache, export_id):
+        return "proceed", ["branch previously accepted via `chatstore conflicts resolve --accept`"]
     for r in rows:
         other_lineage = json.loads(r["lineage"])
         if export_id in other_lineage:
