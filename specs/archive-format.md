@@ -37,11 +37,13 @@ records/messages.jsonl
 records/message_parts.jsonl
 records/events.jsonl
 records/attachments.jsonl
+records/blobs.jsonl
 records/revisions.jsonl
 records/source_observations.jsonl
 records/sync_runs.jsonl
 records/people.jsonl              (catalogue only)
 records/identity_links.jsonl      (catalogue only)
+records/stubs.jsonl               (only when cross-bucket references exist)
 blobs/sha256/ab/abcdef...         (available-media mode only)
 ```
 
@@ -83,14 +85,18 @@ Rules:
   "attachment_policy": "text" | "available-media",
   "media": {"included_blobs": 0, "missing": 0, "not_downloaded": 0, "not_exported": 0},
   "payload_digest": "sha256:...",
+  "content_digest": "sha256:...|media=text",
   "limits": {"max_member_bytes": ..., "max_total_bytes": ...},
   "requires": [],
   "members": ["records/messages.jsonl", ...]
 }
 ```
 
-`checksums.json`: `{"<member path>": "sha256:<hex>"}` for every member except itself.
-`payload_digest` is the SHA-256 of the plaintext TAR and is checked after decryption.
+`checksums.json`: `{"<member path>": "sha256:<hex>"}` for every member except itself and
+`manifest.json`. `payload_digest` is the SHA-256 over the sorted `name\0checksum\n` lines of
+`checksums.json`; it binds the manifest to every other member (the manifest cannot contain a
+digest of a TAR that contains the manifest). It is checked after decryption, together with every
+member checksum, before any record is read.
 
 ## Bucket membership
 
@@ -122,8 +128,11 @@ Rules:
 
 ## Attachments
 
-`text` (default): metadata only; `availability` is exported as observed, with
-`not_exported` for bytes that existed but were excluded. `available-media`: also includes
+`text` (default): metadata only. Attachment records are exported verbatim (`availability` is a
+statement about the source at observation time, and rewriting it would break the revision
+digest); `manifest.media.not_exported` counts blobs that existed but were not shipped. After
+import, `chatstore archive import` reports `media_not_restored` for attachments whose blob is
+not present locally. `available-media`: also includes
 blobs at `blobs/sha256/<2>/<hex>`, deduplicated within the archive, hashed while streaming
 from an open file descriptor; a size or hash mismatch during copy fails the export.
 

@@ -582,18 +582,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return EXIT_USAGE
     ctx = Ctx(args, DataDir(resolve_data_dir(args.data_dir)))
+    command = " ".join(str(v) for k, v in vars(args).items() if k == "command" or k.endswith("_command") and v)
     try:
         res = args.fn(ctx)
         fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init") and ctx.data_dir.exists() else None
-        return emit(args, args.command, res, fresh)
+        return emit(args, command, res, fresh)
     except CliError as e:
-        return emit(args, args.command, Result(None, e.code, errors=[{"code": e.err_code, "message": e.message}]), None)
+        return emit(args, command, Result(None, e.code, errors=[{"code": e.err_code, "message": e.message}]), None)
     except NotInitialised as e:
-        return emit(args, args.command, Result(None, EXIT_NOT_INIT, errors=[{"code": "not_initialised", "message": str(e)}]), None)
+        return emit(args, command, Result(None, EXIT_NOT_INIT, errors=[{"code": "not_initialised", "message": str(e)}]), None)
     except KeyboardInterrupt:
         return 130
     except Exception as e:  # noqa: BLE001 - last resort: keep the JSON contract, never leak bodies
-        return emit(args, args.command, Result(None, EXIT_FAIL, errors=[{"code": "internal", "message": f"{type(e).__name__}: {e}"}]), None)
+        return emit(args, command, Result(None, EXIT_FAIL, errors=[{"code": "internal", "message": f"{type(e).__name__}: {e}"}]), None)
     finally:
         if ctx._cache is not None:
             ctx._cache.close()

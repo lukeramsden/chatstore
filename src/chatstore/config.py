@@ -46,6 +46,13 @@ class Config:
 class Identity:
     scopes: dict[str, dict[str, Any]] = field(default_factory=dict)  # source -> {scope, created_at, label}
     scope_mappings: list[dict[str, Any]] = field(default_factory=list)
+    export_set: str | None = None  # urn:uuid identifying this data dir's archive export set
+
+    def ensure_export_set(self) -> tuple[str, bool]:
+        if self.export_set:
+            return self.export_set, False
+        self.export_set = f"urn:uuid:{uuid.uuid4()}"
+        return self.export_set, True
 
     def scope_for(self, source: str) -> str:
         if source not in self.scopes:
@@ -60,11 +67,13 @@ class Identity:
         return scope, True
 
     def to_json(self) -> dict[str, Any]:
-        return {"version": CONFIG_VERSION, "scopes": self.scopes, "scope_mappings": self.scope_mappings}
+        return {"version": CONFIG_VERSION, "scopes": self.scopes, "scope_mappings": self.scope_mappings,
+                "export_set": self.export_set}
 
     @classmethod
     def from_json(cls, d: dict[str, Any]) -> Identity:
-        return cls(scopes=dict(d.get("scopes", {})), scope_mappings=list(d.get("scope_mappings", [])))
+        return cls(scopes=dict(d.get("scopes", {})), scope_mappings=list(d.get("scope_mappings", [])),
+                   export_set=d.get("export_set"))
 
 
 def _write_private(path: Path, data: dict[str, Any]) -> None:

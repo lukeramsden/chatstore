@@ -26,3 +26,7 @@ markers = ["real_source: needs a real local source database; never run in CI"]
 
 [tool.ruff]
 line-length = 100
+
+[[tool.mypy.overrides]]
+module = ["pyzipper", "pyzipper.*"]
+ignore_missing_imports = true

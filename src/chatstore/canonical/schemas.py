@@ -320,5 +320,26 @@ def write_all(directory: Path) -> None:
     (directory / "timestamp.json").write_text(json.dumps(TIMESTAMP, indent=2) + "\n")
 
 
+_VALIDATORS: dict[str, Any] = {}
+
+
+def validate_record(rec: dict[str, Any]) -> str | None:
+    """Return a short error string if `rec` violates its entity schema, else None."""
+    import jsonschema
+
+    kind = rec.get("entity")
+    schema = SCHEMAS.get(str(kind))
+    if schema is None:
+        return f"unknown entity {kind!r}"
+    v = _VALIDATORS.get(str(kind))
+    if v is None:
+        v = _VALIDATORS[str(kind)] = jsonschema.Draft202012Validator(schema)
+    err = jsonschema.exceptions.best_match(v.iter_errors(rec))
+    if err is None:
+        return None
+    path = "/".join(str(p) for p in err.absolute_path)
+    return f"{path or '<root>'}: {err.message[:120]}"
+
+
 if __name__ == "__main__":
     write_all(Path(sys.argv[1]))

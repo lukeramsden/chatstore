@@ -79,3 +79,31 @@ delivery. Each entry says what was decided and what evidence drove it.
   `unsupported`; nothing is guessed. Observed but unmapped on the test machine: message types
   10, 12, 13, 14, 19, 20, 23, 27, 28, 30, 32, 41, 42, 43, 46, 54, 59, 60, 63, 66, 73, 75, 76 and
   many `ZGROUPEVENTTYPE` values.
+
+### Phase 3 (archives)
+
+- **Manifest binding**: `payload_digest` is a digest over `checksums.json` entries rather than of
+  the TAR (which contains the manifest itself). Every member checksum is verified before any
+  record is read; wrong password, byte flips in the ciphertext, extra ZIP members, ZipCrypto,
+  non-regular or path-escaping TAR members, and declared-size/ratio limits all fail closed with
+  exit 7 and leave the cache untouched (integration tests cover each).
+- **Attachment records are exported verbatim** in `--media text` mode. Rewriting `availability`
+  to `not_exported` would break the revision digest, so instead the manifest counts
+  `media.not_exported` and import reports `media_not_restored`.
+- **Bucket context is duplicated**: each monthly bucket carries the chats, identities,
+  memberships and aliases it needs, so a single bucket is interpretable alone. On the test
+  machine this makes 81 text-only buckets total ~290 MB (WhatsApp has ~9.7k LID aliases and
+  ~19k identities that recur in most buckets). Accepted for v1; a "slim bucket" mode that relies
+  on the catalogue is a possible follow-up.
+- **Revision numbering** is per `(export_set, kind, label)`. A re-export whose content digest
+  (sorted `(urn, revision_digest)` pairs plus media policy) is unchanged writes nothing.
+  `--force` writes a new revision anyway.
+- **Import lineage**: an archive already covered by a later imported revision is `superseded`
+  and not re-applied; an archive for the same bucket whose lineage does not contain the
+  already-imported one is a `branch_conflict` (exit 6, recorded in `conflicts`).
+- **Keychain**: macOS `security -i` (commands on stdin) so the password is never an argv.
+  Non-macOS platforms use `CHATSTORE_PASSWORD_FILE` (must be mode 0600) or a tty prompt.
+- **Measured**: full text export of 272,981 messages → 81 archives in 4m51s; restore into an
+  empty data dir in 3m52s with an identical current view (same `(urn, revision_digest)` set,
+  same revision/observation/FTS counts, 0 conflicts). One month with media: 803 blobs, 496 MB,
+  export 30 s / import 25 s.

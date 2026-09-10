@@ -129,6 +129,20 @@ DDL = [
         superseded_by TEXT,
         manifest TEXT NOT NULL
     )""",
+    """CREATE TABLE IF NOT EXISTS exports (
+        export_id TEXT PRIMARY KEY,
+        export_set TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        bucket_label TEXT,
+        start_utc_ms INTEGER,
+        end_utc_ms INTEGER,
+        revision INTEGER NOT NULL,
+        content_digest TEXT NOT NULL,
+        lineage TEXT NOT NULL,
+        path TEXT,
+        created_at INTEGER NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS exports_bucket ON exports(export_set, kind, bucket_label, revision)",
     """CREATE TABLE IF NOT EXISTS bucket_membership (
         export_id TEXT NOT NULL REFERENCES imports(export_id) ON DELETE CASCADE,
         urn TEXT NOT NULL,
