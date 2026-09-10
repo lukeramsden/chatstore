@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/events.json",
+  "title": "events",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "target_urn",
+    "actor_urn",
+    "at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "reaction",
+            "reaction_removed",
+            "edit",
+            "retraction",
+            "membership_add",
+            "membership_remove",
+            "subject_change",
+            "icon_change",
+            "delivery",
+            "read"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^unknown:"
+        }
+      ]
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "target_urn": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target_native": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "actor_urn": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "at": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "raw",
+            "unit",
+            "epoch",
+            "utc_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "s",
+                "ms",
+                "us",
+                "ns"
+              ]
+            },
+            "epoch": {
+              "type": "string"
+            },
+            "utc_ms": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "payload": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "carrier_message_urn": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

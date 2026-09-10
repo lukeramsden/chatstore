@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/blobs.json",
+  "title": "blobs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "sha256",
+    "size",
+    "first_seen"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "const": "blobs"
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size": {
+      "type": "integer"
+    },
+    "mime_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "first_seen": {
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/aliases.json",
+  "title": "aliases",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "old_urn",
+    "new_urn",
+    "reason",
+    "evidence",
+    "created_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "const": "aliases"
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages",
+        null
+      ]
+    },
+    "account_scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "old_urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "new_urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "reason": {
+      "enum": [
+        "scope_map",
+        "lid_phone_pair",
+        "handle_merge",
+        "manual"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "detail": {}
+        }
+      }
+    },
+    "created_at": {
+      "type": "integer"
+    }
+  }
+}

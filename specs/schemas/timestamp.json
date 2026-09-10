@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "required": [
+    "raw",
+    "unit",
+    "epoch",
+    "utc_ms"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "raw": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "unit": {
+      "enum": [
+        "s",
+        "ms",
+        "us",
+        "ns"
+      ]
+    },
+    "epoch": {
+      "type": "string"
+    },
+    "utc_ms": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/sync_runs.json",
+  "title": "sync_runs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "started_at",
+    "finished_at",
+    "status",
+    "mode",
+    "counts",
+    "errors"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "const": "sync_runs"
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "integer"
+    },
+    "finished_at": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "partial",
+        "failed",
+        "running"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "initial",
+        "incremental",
+        "full_reconcile",
+        "import"
+      ]
+    },
+    "snapshot": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "checkpoints": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "counts": {
+      "type": "object"
+    },
+    "coverage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "errors": {
+      "type": "array"
+    },
+    "adapter_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parser_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

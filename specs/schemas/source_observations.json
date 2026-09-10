@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/source_observations.json",
+  "title": "source_observations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "entity_urn",
+    "native_table",
+    "native_row_ids",
+    "native_key",
+    "minted",
+    "fingerprint",
+    "adapter_version",
+    "present"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "const": "source_observations"
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "entity_urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "native_table": {
+      "type": "string"
+    },
+    "native_row_ids": {
+      "type": "array",
+      "items": {
+        "type": [
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "native_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "minted": {
+      "type": "boolean"
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "adapter_version": {
+      "type": "string"
+    },
+    "present": {
+      "enum": [
+        "present",
+        "absent_from_source",
+        "deleted_evidence"
+      ]
+    }
+  }
+}

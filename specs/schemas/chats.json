@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/chats.json",
+  "title": "chats",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "native_key",
+    "assignment"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "direct",
+            "group",
+            "broadcast",
+            "status",
+            "unknown"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^unknown:"
+        }
+      ]
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "native_key": {
+      "type": "string"
+    },
+    "observed_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "service": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "assignment": {
+      "enum": [
+        "source",
+        "inferred",
+        "stub"
+      ]
+    },
+    "is_archived": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "created_at": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "raw",
+            "unit",
+            "epoch",
+            "utc_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "s",
+                "ms",
+                "us",
+                "ns"
+              ]
+            },
+            "epoch": {
+              "type": "string"
+            },
+            "utc_ms": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

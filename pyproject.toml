@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chatstore"
+version = "0.0.0"
+description = "Local-first ingestion, search, and encrypted archiving of personal message data."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "pyzipper>=0.4.0,<0.5",
+  "jsonschema>=4.20",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy", "types-jsonschema"]
+
+[project.scripts]
+chatstore = "chatstore.cli.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["real_source: needs a real local source database; never run in CI"]
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chatstore.local/schemas/chatstore-canonical-v1/chat_memberships.json",
+  "title": "chat_memberships",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "urn",
+    "revision_digest",
+    "observed_at",
+    "source",
+    "account_scope",
+    "chat_urn",
+    "identity_urn",
+    "role",
+    "state"
+  ],
+  "properties": {
+    "schema": {
+      "const": "chatstore-canonical-v1"
+    },
+    "kind": {
+      "const": "chat_memberships"
+    },
+    "urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "revision_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "integer"
+    },
+    "sync_run": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "whatsapp",
+        "messages"
+      ]
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "chat_urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "identity_urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "role": {
+      "enum": [
+        "member",
+        "admin",
+        "owner",
+        "unknown"
+      ]
+    },
+    "state": {
+      "enum": [
+        "active",
+        "left",
+        "removed",
+        "unknown"
+      ]
+    },
+    "first_seen": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "raw",
+            "unit",
+            "epoch",
+            "utc_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "s",
+                "ms",
+                "us",
+                "ns"
+              ]
+            },
+            "epoch": {
+              "type": "string"
+            },
+            "utc_ms": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "last_seen": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "raw",
+            "unit",
+            "epoch",
+            "utc_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "s",
+                "ms",
+                "us",
+                "ns"
+              ]
+            },
+            "epoch": {
+              "type": "string"
+            },
+            "utc_ms": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "detail": {}
+        }
+      }
+    }
+  }
+}

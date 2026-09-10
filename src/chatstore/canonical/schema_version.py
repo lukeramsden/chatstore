@@ -1,0 +1,5 @@
+CANONICAL_SCHEMA = "chatstore-canonical-v1"
+ARCHIVE_FORMAT = "chatstore-archive-v1"
+CLI_ENVELOPE = "chatstore-cli-v1"
+ID_VERSION = "chatstore-id-v1"
+DECODER_JSONL = "chatstore-messages-decoder-v1"

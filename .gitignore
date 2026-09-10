@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+.venv/
+helpers/messages-decoder/target/
+
+# Never commit private data
+*.sqlite3
+*.sqlite
+*.db
+*.zip
+tests/fixtures/real/
+.env
+Cargo.lock.bak
+*.tar
+.chatstore-dev/
+.pi/

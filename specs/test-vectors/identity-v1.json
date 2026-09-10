@@ -1,0 +1,150 @@
+{
+  "version": "chatstore-id-v1",
+  "namespace": "3f14f01c-5cc4-4325-950f-a56812da489b",
+  "serialisation": "compact JSON array of 5 NFC strings, ensure_ascii=false, separators ',' ':' , UTF-8; uuid5(namespace, name)",
+  "vectors": [
+    {
+      "name": "ascii message guid",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "message",
+        "native_key": "A1B2C3D4-0000-0000-0000-000000000001"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"message\",\"A1B2C3D4-0000-0000-0000-000000000001\"]",
+      "urn": "urn:uuid:74ad09df-7b82-52ac-bfef-43b916940242"
+    },
+    {
+      "name": "messages chat",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "chat",
+        "native_key": "[\"guid\",\"iMessage;-;+15550000000\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"chat\",\"[\\\"guid\\\",\\\"iMessage;-;+15550000000\\\"]\"]",
+      "urn": "urn:uuid:6530d5fe-ef77-59d0-beed-ec3b5b841728"
+    },
+    {
+      "name": "messages handle email lowercased",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "identity",
+        "native_key": "[\"handle\",\"iMessage\",\"person@example.com\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"identity\",\"[\\\"handle\\\",\\\"iMessage\\\",\\\"person@example.com\\\"]\"]",
+      "urn": "urn:uuid:f9b542c0-975d-53b5-9daf-7f2489f63ba5"
+    },
+    {
+      "name": "messages handle phone verbatim",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "identity",
+        "native_key": "[\"handle\",\"SMS\",\"+15550000000\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"identity\",\"[\\\"handle\\\",\\\"SMS\\\",\\\"+15550000000\\\"]\"]",
+      "urn": "urn:uuid:056fb80c-4690-5204-a6a0-04d9e904174a"
+    },
+    {
+      "name": "messages me",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "identity",
+        "native_key": "[\"me\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"identity\",\"[\\\"me\\\"]\"]",
+      "urn": "urn:uuid:7d976e6d-15ae-5cdd-9a1b-c75a7ef935b4"
+    },
+    {
+      "name": "messages inferred chat",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "chat",
+        "native_key": "[\"ck_chat_id\",\"SMS;-;+15550000000\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"chat\",\"[\\\"ck_chat_id\\\",\\\"SMS;-;+15550000000\\\"]\"]",
+      "urn": "urn:uuid:6dc27fa6-faf4-5787-b603-f9acfc723389"
+    },
+    {
+      "name": "whatsapp chat jid lowercased",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "chat",
+        "native_key": "15550000000@s.whatsapp.net"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"chat\",\"15550000000@s.whatsapp.net\"]",
+      "urn": "urn:uuid:51323601-0297-5f2f-bac2-4818898046dd"
+    },
+    {
+      "name": "whatsapp outgoing message",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "message",
+        "native_key": "[\"15550000000@s.whatsapp.net\",\"me\",\"3EB0ABCDEF0123456789\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"message\",\"[\\\"15550000000@s.whatsapp.net\\\",\\\"me\\\",\\\"3EB0ABCDEF0123456789\\\"]\"]",
+      "urn": "urn:uuid:b4ed49b9-96e8-5a33-80f6-9efb7010cacd"
+    },
+    {
+      "name": "whatsapp incoming group message",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "message",
+        "native_key": "[\"120363000000000000@g.us\",\"15550000001@lid\",\"ABCDEF0123456789ABCDEF0123456789\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"message\",\"[\\\"120363000000000000@g.us\\\",\\\"15550000001@lid\\\",\\\"ABCDEF0123456789ABCDEF0123456789\\\"]\"]",
+      "urn": "urn:uuid:1ae2b65f-8f5e-5b4d-9be0-e6ba004fdb3b"
+    },
+    {
+      "name": "whatsapp attachment",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "attachment",
+        "native_key": "[\"[\\\"15550000000@s.whatsapp.net\\\",\\\"me\\\",\\\"3EB0ABCDEF0123456789\\\"]\",\"media\",\"0\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"attachment\",\"[\\\"[\\\\\\\"15550000000@s.whatsapp.net\\\\\\\",\\\\\\\"me\\\\\\\",\\\\\\\"3EB0ABCDEF0123456789\\\\\\\"]\\\",\\\"media\\\",\\\"0\\\"]\"]",
+      "urn": "urn:uuid:37bcf089-1a31-5617-b602-e06a1a1145d7"
+    },
+    {
+      "name": "non-ascii NFD input normalises to NFC",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "chat",
+        "native_key": "[\"guid\",\"iMessage;+;chat-café\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"chat\",\"[\\\"guid\\\",\\\"iMessage;+;chat-café\\\"]\"]",
+      "urn": "urn:uuid:bbabdb43-6731-560f-912c-90417edc226e"
+    },
+    {
+      "name": "non-ascii NFC input",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "chat",
+        "native_key": "[\"guid\",\"iMessage;+;chat-café\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"chat\",\"[\\\"guid\\\",\\\"iMessage;+;chat-café\\\"]\"]",
+      "urn": "urn:uuid:bbabdb43-6731-560f-912c-90417edc226e"
+    },
+    {
+      "name": "quote and backslash escaping",
+      "input": {
+        "source": "messages",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "message",
+        "native_key": "g\"u\\id"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"message\",\"g\\\"u\\\\id\"]",
+      "urn": "urn:uuid:41a2093e-f766-59c1-a3f0-200eccc9b6dd"
+    }
+  ]
+}
