@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema",
-    "kind",
+    "entity",
     "urn",
     "revision_digest",
     "observed_at",
@@ -21,7 +21,7 @@
     "schema": {
       "const": "chatstore-canonical-v1"
     },
-    "kind": {
+    "entity": {
       "const": "message_parts"
     },
     "urn": {

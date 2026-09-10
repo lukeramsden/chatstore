@@ -6,12 +6,13 @@
   "additionalProperties": false,
   "required": [
     "schema",
-    "kind",
+    "entity",
     "urn",
     "revision_digest",
     "observed_at",
     "source",
     "account_scope",
+    "kind",
     "target_urn",
     "actor_urn",
     "at"
@@ -20,27 +21,8 @@
     "schema": {
       "const": "chatstore-canonical-v1"
     },
-    "kind": {
-      "anyOf": [
-        {
-          "enum": [
-            "reaction",
-            "reaction_removed",
-            "edit",
-            "retraction",
-            "membership_add",
-            "membership_remove",
-            "subject_change",
-            "icon_change",
-            "delivery",
-            "read"
-          ]
-        },
-        {
-          "type": "string",
-          "pattern": "^unknown:"
-        }
-      ]
+    "entity": {
+      "const": "events"
     },
     "urn": {
       "type": "string",
@@ -72,6 +54,28 @@
     },
     "account_scope": {
       "type": "string"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "reaction",
+            "reaction_removed",
+            "edit",
+            "retraction",
+            "membership_add",
+            "membership_remove",
+            "subject_change",
+            "icon_change",
+            "delivery",
+            "read"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^unknown:"
+        }
+      ]
     },
     "target_urn": {
       "oneOf": [

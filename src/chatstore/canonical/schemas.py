@@ -53,13 +53,13 @@ def _enum_or_unknown(*values: str) -> dict[str, Any]:
 def _record(kind: str, props: dict[str, Any], required: list[str], *, sourced: bool = True) -> dict[str, Any]:
     base: dict[str, Any] = {
         "schema": {"const": CANONICAL_SCHEMA},
-        "kind": {"const": kind},
+        "entity": {"const": kind},
         "urn": URN,
         "revision_digest": SHA,
         "observed_at": INT,
         "sync_run": NURN,
     }
-    base_req = ["schema", "kind", "urn", "revision_digest", "observed_at"]
+    base_req = ["schema", "entity", "urn", "revision_digest", "observed_at"]
     if sourced:
         base["source"] = SOURCE
         base["account_scope"] = STR

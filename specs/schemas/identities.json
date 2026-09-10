@@ -6,13 +6,14 @@
   "additionalProperties": false,
   "required": [
     "schema",
-    "kind",
+    "entity",
     "urn",
     "revision_digest",
     "observed_at",
     "source",
     "account_scope",
     "native_key",
+    "kind",
     "address",
     "is_me",
     "observed_names"
@@ -21,27 +22,8 @@
     "schema": {
       "const": "chatstore-canonical-v1"
     },
-    "kind": {
-      "anyOf": [
-        {
-          "enum": [
-            "phone",
-            "email",
-            "jid_phone",
-            "jid_lid",
-            "jid_group",
-            "jid_broadcast",
-            "jid_status",
-            "jid_bot",
-            "me",
-            "unknown"
-          ]
-        },
-        {
-          "type": "string",
-          "pattern": "^unknown:"
-        }
-      ]
+    "entity": {
+      "const": "identities"
     },
     "urn": {
       "type": "string",
@@ -76,6 +58,28 @@
     },
     "native_key": {
       "type": "string"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "phone",
+            "email",
+            "jid_phone",
+            "jid_lid",
+            "jid_group",
+            "jid_broadcast",
+            "jid_status",
+            "jid_bot",
+            "me",
+            "unknown"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^unknown:"
+        }
+      ]
     },
     "address": {
       "type": [

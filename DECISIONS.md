@@ -50,3 +50,32 @@ delivery. Each entry says what was decided and what evidence drove it.
   `scripts/build-helper.sh` detects and applies this; it is not a project requirement.
 - **Toolchain updates**: installed Rust 1.95 via `rustup toolchain install` (non-default,
   selected by `rust-toolchain.toml`) and Homebrew `7zip` for interop tests only.
+
+### Phase 2 (ingestion, cache, CLI)
+
+- **Rust helper scope**: `chatstore-messages-decoder` decodes only what needs `imessage_database`
+  (typedstream bodies, edit history, tapback/variant classification, attachment rows). Handles,
+  chats, joins and `ck_chat_id` inference stay in Python SQL. Output format
+  `chatstore-messages-decoder/1`, header/footer framed; the adapter fails closed on format or
+  exit-code mismatch. Decoding the full test store (77k rows) takes ~1 s.
+- **Messages incremental sync** re-decodes every row each run and relies on fingerprint
+  comparison (`unchanged` upserts) rather than a row-id checkpoint, because edits, read receipts
+  and tapbacks mutate or reference old rows. Cost ~10 s on 77k rows; acceptable.
+- **WhatsApp incremental sync** processes logical groups with any row `Z_PK` above the
+  checkpoint plus a 5,000-row look-back window for status changes. Checkpoint going backwards
+  is reported as a source reset and forces a full scan.
+- **Messages attachment placeholders**: attributed bodies frequently reference attachments
+  (`at_<part>_<message guid>`) whose `attachment` row has been purged (1,819 of 2,297 inline
+  refs on the test machine). These become `attachments` records with
+  `availability = missing`, keyed `["purged", "<ref>"]`, so the message still records that an
+  attachment existed.
+- **Shared attachment rows**: an `attachment` row can join to several messages (observed once).
+  The lowest message ROWID owns the attachment record; other messages reference its URN.
+- **FTS tables** are keyed by rowid (`messages_idx.id`, `revisions.id`) — deleting by an
+  UNINDEXED column was a full-table scan and made sync superlinear.
+- **Partial vs complete**: any per-record extraction error (e.g. a WhatsApp message with no
+  chat session — one on the test machine) marks the run `partial` (exit 5). Honest over tidy.
+- **Unknown WhatsApp codes** are preserved verbatim as `unknown:<n>` kinds and counted under
+  `unsupported`; nothing is guessed. Observed but unmapped on the test machine: message types
+  10, 12, 13, 14, 19, 20, 23, 27, 28, 30, 32, 41, 42, 43, 46, 54, 59, 60, 63, 66, 73, 75, 76 and
+  many `ZGROUPEVENTTYPE` values.

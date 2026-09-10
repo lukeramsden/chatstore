@@ -90,3 +90,22 @@ Conclusions:
 - Messages from the local user have `handle_id = 0`; the sender is the account owner.
 - `attributedBody` decoding is mandatory. Delegated to the Rust helper.
 - Nanosecond timestamps exceed 2^53; JSON carries them as decimal strings.
+
+## Validated by full ingestion (Phase 2)
+
+Counts only; both sources ingested end-to-end into a scratch cache.
+
+| Metric | WhatsApp | Messages |
+| --- | --- | --- |
+| Logical messages | 195,783 (+1 skipped: no chat session) | 77,198 |
+| Chats (incl. stubs) | 724 | 644 + 5 stubs |
+| Identities | 18,543 + me | 980 handles → 981 identities + me |
+| Attachments | 15,542 (3,411 distinct blobs available) | 2,621 (1,819 purged placeholders) |
+| Events | 7,243 (system + group changes) | 1,923 (tapbacks, edits, group actions) |
+| LID→phone aliases | 9,734 | — |
+| Initial sync wall time | ~230 s | ~90 s |
+| Incremental no-op sync | ~9 s | ~10 s |
+| Spurious revisions on re-sync | 0 | 0 |
+
+Messages helper: 77,047 rows `decoded`, 151 `empty` (no text, no attributed body), 0 errors;
+variants: 74,819 normal, 1,826 tapback, 534 app, 19 edited.

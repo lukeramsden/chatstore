@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema",
-    "kind",
+    "entity",
     "urn",
     "revision_digest",
     "observed_at",
@@ -15,22 +15,15 @@
     "native_key",
     "message_urn",
     "availability",
-    "blob_sha256"
+    "blob_sha256",
+    "kind"
   ],
   "properties": {
     "schema": {
       "const": "chatstore-canonical-v1"
     },
-    "kind": {
-      "enum": [
-        "image",
-        "video",
-        "audio",
-        "document",
-        "contact",
-        "location",
-        "other"
-      ]
+    "entity": {
+      "const": "attachments"
     },
     "urn": {
       "type": "string",
@@ -137,6 +130,17 @@
       "type": [
         "boolean",
         "null"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "image",
+        "video",
+        "audio",
+        "document",
+        "contact",
+        "location",
+        "other"
       ]
     }
   }

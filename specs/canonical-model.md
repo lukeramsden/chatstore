@@ -7,7 +7,8 @@ consumers. SQLite tables are a rebuildable projection of it.
 
 - One JSONL file per entity type: `records/<entity>.jsonl`, UTF-8, one object per line,
   sorted by `urn` (then `revision_digest`) before writing so payloads are deterministic.
-- Every record has `schema: "chatstore-canonical-v1"` and `kind: "<entity>"`.
+- Every record has `schema: "chatstore-canonical-v1"` and `entity: "<entity table name>"`.
+  (`kind` is reserved for per-entity classification, e.g. message kind.)
 - Every record has an `urn` (`urn:uuid:...`).
 - Timestamps are objects, never bare numbers:
 
@@ -26,7 +27,7 @@ consumers. SQLite tables are a rebuildable projection of it.
 
 | Field | Meaning |
 | --- | --- |
-| `schema`, `kind`, `urn` | as above |
+| `schema`, `entity`, `urn` | as above |
 | `source` | `whatsapp`, `messages`, or `null` for source-independent entities (people, links) |
 | `account_scope` | scope UUID (null for source-independent entities) |
 | `revision_digest` | `sha256:` digest of the record excluding volatile fields |
