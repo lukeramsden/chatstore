@@ -118,6 +118,7 @@ class WhatsAppAdapter:
         problems = check_schema(conn, REQUIRED)
         if problems:
             raise IncompatibleSource("; ".join(problems))
+        stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE"}
         # Indexes on our private copy only.
         conn.execute("CREATE INDEX IF NOT EXISTS cs_msg_key ON ZWAMESSAGE(ZCHATSESSION, ZSTANZAID)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_media_msg ON ZWAMEDIAITEM(ZMESSAGE)")
@@ -259,6 +260,8 @@ class WhatsAppAdapter:
                 stats.full_scan = True
                 since_pk = 0
         stats.checkpoints["max_message_pk"] = max_pk
+        if full or since_pk == 0:
+            stats.scanned_tables |= {"ZWAMESSAGE", "ZWAMEDIAITEM"}
         # Logical message groups. Incremental: groups containing at least one new row; also a recent
         # window rescan (last 5000 rows) to pick up status/text changes on recently observed groups.
         window_pk = max(0, since_pk - 5000) if since_pk else 0

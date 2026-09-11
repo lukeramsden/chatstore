@@ -53,6 +53,9 @@ class ExtractStats:
     checkpoints: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     full_scan: bool = False  # adapter fell back to a full scan (e.g. source reset); sync reconciles absence
+    # Source tables the adapter scanned completely this run (even if they emitted nothing). Sync marks
+    # observations of these tables that were not re-seen as absent on full/initial/reconcile runs.
+    scanned_tables: set[str] = field(default_factory=set)
 
     def bump(self, key: str, n: int = 1) -> None:
         self.counts[key] = self.counts.get(key, 0) + n

@@ -14,7 +14,8 @@ from typing import Any
 from ..cache.store import Cache
 from ..canonical.records import now_ms
 from ..config import Config, Identity
-from ..paths import DataDir, blob_path
+from ..media import locate_blob
+from ..paths import DataDir
 from . import container
 from . import manifest as M
 from .container import DEFAULT_LIMITS, TarBuilder
@@ -215,8 +216,26 @@ def collect_catalogue(cache: Cache) -> BucketPlan:
 
 
 def plan_buckets(cache: Cache, since_ms: int | None, until_ms: int | None) -> list[M.Bucket]:
+    """Monthly buckets covering current messages *and* every bucket exported before. A bucket that has
+    become empty must still be planned so a superseding (empty) revision retires its old contents."""
     if since_ms is not None and until_ms is not None:
         return [M.Bucket("range", M.range_label(since_ms, until_ms), since_ms, until_ms)]
+    out = _current_buckets(cache, since_ms, until_ms)
+    have = {b.label for b in out}
+    for r in cache.conn.execute("SELECT DISTINCT kind, bucket_label, start_utc_ms, end_utc_ms FROM exports WHERE kind IN ('bucket', 'undated')"):
+        if r["bucket_label"] in have:
+            continue
+        if since_ms is not None and r["end_utc_ms"] is not None and r["end_utc_ms"] <= since_ms:
+            continue
+        if until_ms is not None and r["start_utc_ms"] is not None and r["start_utc_ms"] >= until_ms:
+            continue
+        out.append(M.Bucket(r["kind"], r["bucket_label"], r["start_utc_ms"], r["end_utc_ms"]))
+        have.add(r["bucket_label"])
+    out.sort(key=lambda b: (b.start_utc_ms is None, b.start_utc_ms or 0, b.label))
+    return out
+
+
+def _current_buckets(cache: Cache, since_ms: int | None, until_ms: int | None) -> list[M.Bucket]:
     r = cache.conn.execute("SELECT min(utc_ms), max(utc_ms) FROM messages_idx WHERE utc_ms IS NOT NULL").fetchone()
     out: list[M.Bucket] = []
     if r and r[0] is not None:
@@ -232,24 +251,6 @@ def plan_buckets(cache: Cache, since_ms: int | None, until_ms: int | None) -> li
         if n:
             out.append(M.Bucket("undated", "undated"))
     return out
-
-
-# ---- media location -------------------------------------------------------------------------------
-
-def locate_blob(dd: DataDir, cfg: Config, att: dict[str, Any]) -> Path | None:
-    sha = att.get("blob_sha256")
-    if sha:
-        p = blob_path(dd, sha)
-        if p.is_file():
-            return p
-    hint = att.get("source_path_hint")
-    if not hint or hint.startswith("/") or ".." in hint.split("/"):
-        return None
-    root = cfg.source_root(att["source"])
-    if att["source"] == "whatsapp":
-        root = root / "Message"
-    p = root / hint
-    return p if p.is_file() and not p.is_symlink() else None
 
 
 # ---- writing --------------------------------------------------------------------------------------
@@ -270,9 +271,10 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
     bucket = plan.bucket
     export_set, _ = ident.ensure_export_set()
     total = sum(len(v) for k, v in plan.records.items() if k not in ("revisions", "source_observations", "accounts", "sync_runs"))
-    if total == 0:
-        return ExportResult(bucket.kind, bucket.label, "skipped_empty")
     prev = _previous(cache, export_set, bucket)
+    if total == 0 and prev is None:
+        return ExportResult(bucket.kind, bucket.label, "skipped_empty")
+    # total == 0 with a previous revision: write an empty superseding revision so restores retire the old contents.
     media_counts = {"included_blobs": 0, "missing": 0, "not_downloaded": 0, "not_exported": 0}
     for a in plan.records["attachments"]:
         av = a.get("availability")

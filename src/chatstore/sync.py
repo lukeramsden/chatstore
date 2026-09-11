@@ -9,7 +9,7 @@ from typing import Any
 
 from .adapters.base import Emit, ExtractStats, IncompatibleSource, SourceAdapter
 from .adapters.snapshot import PermissionProblem, SnapshotError
-from .cache import Cache
+from .cache import Cache, SourceObservation
 from .canonical.records import now_ms, record, restamp
 from .config import Config, Identity
 from .paths import DataDir
@@ -92,8 +92,8 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
                     if e.observation:
                         o = e.observation
                         seen_tables.add(o.native_table)
-                        obs.append((e.record["urn"], adapter.source, scope, o.native_table, o.native_row_ids, o.native_key,
-                                    o.fingerprint, adapter.version, started, run_urn, o.minted))
+                        obs.append(SourceObservation(e.record["urn"], adapter.source, scope, o.native_table, o.native_row_ids,
+                                                     o.native_key, o.fingerprint, adapter.version, started, run_urn, o.minted))
                 cache.observe_many(obs)
             batch.clear()
 
@@ -108,7 +108,7 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
             run["mode"] = mode = "full_reconcile"
         if full or mode in ("initial", "full_reconcile"):
             with cache.write():
-                for t in seen_tables:
+                for t in seen_tables | stats.scanned_tables:
                     absent = cache.mark_absent(adapter.source, scope, t, started, run_urn)
                     if absent:
                         stats.bump(f"absent_from_source:{t}", absent)

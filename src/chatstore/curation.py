@@ -188,19 +188,8 @@ def resolve_conflict(cache: Cache, conflict_id: int, *, keep: str | None = None,
         if not keep:
             raise ValueError("content conflicts need --keep <revision_digest>")
         urn = row["entity_urn"]
-        rev = cache.revision_record(urn, keep)
-        if rev is None:
+        if cache.set_head(urn, keep, now_ms()) is None:
             raise ValueError(f"{keep} is not a known revision of {urn}")
-        rec = {k: v for k, v in rev.items() if k not in ("observed_at", "sync_run")}
-        rec["revision_digest"] = keep
-        cur = cache.get(urn)
-        if cur and cur.get("revision_digest") != keep:
-            # make the chosen revision current by forcing an update (a new head that supersedes the current one)
-            cache.conn.execute("UPDATE records SET revision_digest=?, record=?, observed_at=? WHERE urn=?",
-                               (keep, json.dumps(rev, ensure_ascii=False, sort_keys=True, separators=(",", ":")), now_ms(), urn))
-            cache.conn.execute("UPDATE revisions SET supersedes=? WHERE entity_urn=? AND revision_digest=? AND supersedes IS NULL",
-                               (cur["revision_digest"], urn, keep))
-            cache._index(rec["entity"], rev)
         resolution: dict[str, Any] = {"kept": keep}
     elif row["kind"] == "archive_branch":
         if not accept:

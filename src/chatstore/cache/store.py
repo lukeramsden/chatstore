@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..canonical.records import now_ms
 from ..identity.urn import revision_digest
@@ -21,6 +21,27 @@ from .migrations import migrate
 
 def _j(o: Any) -> str:
     return json.dumps(o, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+class SourceObservation(NamedTuple):
+    """One sighting of a canonical entity in a source table."""
+
+    entity_urn: str
+    source: str
+    account_scope: str
+    native_table: str
+    native_row_ids: list[Any]
+    native_key: str | None
+    fingerprint: str
+    adapter_version: str
+    observed_at: int
+    sync_run: str | None
+    minted: bool = False
+    present: str = "present"
+
+    def row(self) -> tuple[Any, ...]:
+        return (self.entity_urn, self.source, self.account_scope, self.native_table, _j(self.native_row_ids), self.native_key,
+                1 if self.minted else 0, self.fingerprint, self.adapter_version, self.observed_at, self.sync_run, self.present)
 
 
 class Cache:
@@ -88,38 +109,43 @@ class Cache:
         """Insert or update the current view of a record. Must run inside write().
 
         Returns 'inserted', 'updated', 'unchanged', 'older', or 'conflict'.
-        For origin='import', a differing current digest is only replaced when it appears in
-        `prior_digests` (the importing archive's known history for this URN); otherwise a
-        conflict is recorded and the current record kept.
-        """
-        cur = self.conn.execute("SELECT revision_digest FROM records WHERE urn=?", (rec["urn"],)).fetchone()
-        return self._upsert(rec, cur["revision_digest"] if cur else None, observed_at, sync_run, prior_digests, origin)
 
-    def current_digests(self, urns: Iterable[str]) -> dict[str, str]:
-        """Current revision digest per URN (missing URNs are absent from the result)."""
-        out: dict[str, str] = {}
+        A revision digest identifies *content*; the head of a URN is the content most recently
+        observed. For origin='import', a differing current digest is only replaced when it appears in
+        `prior_digests` (the importing archive's known history for this URN) and the incoming
+        observation is newer; an older observation from the same history returns 'older'. A current
+        digest outside the archive's history records a conflict and keeps the current record.
+        """
+        cur = self.conn.execute("SELECT revision_digest, observed_at FROM records WHERE urn=?", (rec["urn"],)).fetchone()
+        head = (cur["revision_digest"], cur["observed_at"]) if cur else None
+        return self._upsert(rec, head, observed_at, sync_run, prior_digests, origin)
+
+    def current_heads(self, urns: Iterable[str]) -> dict[str, tuple[str, int]]:
+        """(revision digest, observed_at) per URN (missing URNs are absent from the result)."""
+        out: dict[str, tuple[str, int]] = {}
         batch = list(urns)
         for i in range(0, len(batch), 500):
             chunk = batch[i:i + 500]
-            q = f"SELECT urn, revision_digest FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
-            out.update((r[0], r[1]) for r in self.conn.execute(q, chunk))
+            q = f"SELECT urn, revision_digest, observed_at FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
+            out.update((r[0], (r[1], r[2])) for r in self.conn.execute(q, chunk))
         return out
 
     def upsert_many(self, recs: list[dict[str, Any]], *, observed_at: int | None = None,
                     sync_run: str | None = None, origin: str = "sync") -> dict[str, int]:
         """Batch form of upsert(): one lookup for the whole batch. Must run inside write()."""
-        digests = self.current_digests(r["urn"] for r in recs)
+        heads = self.current_heads(r["urn"] for r in recs)
         outcomes: dict[str, int] = {}
         for rec in recs:
-            o = self._upsert(rec, digests.get(rec["urn"]), observed_at, sync_run, None, origin)
-            digests[rec["urn"]] = rec["revision_digest"]
+            o = self._upsert(rec, heads.get(rec["urn"]), observed_at, sync_run, None, origin)
+            heads[rec["urn"]] = (rec["revision_digest"], observed_at if observed_at is not None else now_ms())
             outcomes[o] = outcomes.get(o, 0) + 1
         return outcomes
 
-    def _upsert(self, rec: dict[str, Any], cur_digest: str | None, observed_at: int | None, sync_run: str | None,
+    def _upsert(self, rec: dict[str, Any], head: tuple[str, int] | None, observed_at: int | None, sync_run: str | None,
                 prior_digests: set[str] | None, origin: str) -> str:
         conn = self.conn
         observed_at = observed_at if observed_at is not None else now_ms()
+        cur_digest, cur_observed = head if head else (None, 0)
         digest = rec.get("revision_digest") or revision_digest(rec)
         rec["revision_digest"] = digest
         urn = rec["urn"]
@@ -137,11 +163,10 @@ class Cache:
             self._index(kind, stored, new=True)
             return "inserted"
         if cur_digest == digest:
-            conn.execute("UPDATE records SET observed_at=?, sync_run=? WHERE urn=?", (observed_at, sync_run, urn))
+            if observed_at >= cur_observed:
+                conn.execute("UPDATE records SET observed_at=?, sync_run=? WHERE urn=?", (observed_at, sync_run, urn))
             return "unchanged"
         # Differing content.
-        if origin == "import" and self._is_ancestor(urn, cur_digest, digest):
-            return "older"  # we already moved past this revision
         if origin == "import" and cur_digest not in (prior_digests or set()):
             self.add_conflict("content", urn, {
                 "current_digest": cur_digest, "incoming_digest": digest,
@@ -150,6 +175,8 @@ class Cache:
             # keep the incoming content as a non-current revision for inspection
             self._add_revision(urn, kind, digest, observed_at, sync_run, None, stored, current=False)
             return "conflict"
+        if origin == "import" and observed_at < cur_observed:
+            return "older"  # the same history already moved past this observation
         conn.execute(
             "UPDATE records SET revision_digest=?, observed_at=?, sync_run=?, tombstoned=?, record=?, source=?, account_scope=? WHERE urn=?",
             (digest, observed_at, sync_run, 1 if rec.get("tombstone") else 0, _j(stored), rec.get("source"), rec.get("account_scope"), urn),
@@ -158,26 +185,37 @@ class Cache:
         self._index(kind, stored)
         return "updated"
 
-    def _is_ancestor(self, urn: str, current: str, candidate: str) -> bool:
-        """True if `candidate` is in the supersedes chain below `current`."""
-        seen: set[str] = set()
-        d: str | None = current
-        while d and d not in seen:
-            seen.add(d)
-            row = self.conn.execute("SELECT supersedes FROM revisions WHERE entity_urn=? AND revision_digest=?", (urn, d)).fetchone()
-            d = row[0] if row else None
-            if d == candidate:
-                return True
-        return False
-
     def _add_revision(self, urn: str, kind: str, digest: str, observed_at: int, sync_run: str | None,
                       supersedes: str | None, stored: dict[str, Any], *, current: bool = True) -> None:
         cur = self.conn.execute(
             "INSERT OR IGNORE INTO revisions(entity_urn, revision_digest, entity_kind, observed_at, sync_run, supersedes, record) VALUES (?,?,?,?,?,?,?)",
             (urn, digest, kind, observed_at, sync_run, supersedes, _j(stored)),
         )
-        if kind == "messages" and cur.rowcount == 1 and cur.lastrowid is not None:
-            fts.add_revision_text(self.conn, cur.lastrowid, stored.get("text"))
+        if cur.rowcount == 1:
+            if kind == "messages" and cur.lastrowid is not None:
+                fts.add_revision_text(self.conn, cur.lastrowid, stored.get("text"))
+        elif current:
+            # Content seen before is the head again (A -> B -> A): move its revision row to the head.
+            self.conn.execute(
+                "UPDATE revisions SET observed_at=?, sync_run=?, supersedes=? WHERE entity_urn=? AND revision_digest=? AND observed_at<?",
+                (observed_at, sync_run, supersedes, urn, digest, observed_at))
+
+    def add_revision_row(self, rv: dict[str, Any]) -> None:
+        """Import a revision row exported by another cache (`records/revisions.jsonl`). Must run inside write()."""
+        self._add_revision(rv["entity_urn"], rv["entity_kind"], rv["revision_digest"], int(rv["observed_at"]), rv.get("sync_run"),
+                           rv.get("supersedes"), rv["record"])
+
+    def set_head(self, urn: str, digest: str, observed_at: int) -> dict[str, Any] | None:
+        """Make a stored revision the current record (conflict resolution). Returns the record or None."""
+        rev = self.revision_record(urn, digest)
+        if rev is None:
+            return None
+        cur = self.conn.execute("SELECT revision_digest FROM records WHERE urn=?", (urn,)).fetchone()
+        self.conn.execute("UPDATE records SET revision_digest=?, record=?, observed_at=? WHERE urn=?", (digest, _j(rev), observed_at, urn))
+        self.conn.execute("UPDATE revisions SET observed_at=?, supersedes=? WHERE entity_urn=? AND revision_digest=?",
+                          (observed_at, cur[0] if cur and cur[0] != digest else None, urn, digest))
+        self._index(rev["entity"], rev)
+        return rev
 
     def _index(self, kind: str, r: dict[str, Any], *, new: bool = False) -> None:
         c = self.conn
@@ -222,26 +260,17 @@ class Cache:
                  adapter_version=excluded.adapter_version, observed_at=excluded.observed_at,
                  sync_run=excluded.sync_run, present=excluded.present"""
 
-    def observe_many(self, rows: list[tuple[Any, ...]]) -> None:
-        """rows: (entity_urn, source, scope, native_table, native_row_ids, native_key, fingerprint,
-        adapter_version, observed_at, sync_run, minted). Must run inside write()."""
-        self.conn.executemany(self._OBSERVE_SQL, [
-            (r[0], r[1], r[2], r[3], _j(r[4]), r[5], 1 if r[10] else 0, r[6], r[7], r[8], r[9], "present") for r in rows])
+    def observe_many(self, rows: Iterable[SourceObservation]) -> None:
+        """Record sightings from a sync run (the live source always wins). Must run inside write()."""
+        self.conn.executemany(self._OBSERVE_SQL, [r.row() for r in rows])
 
-    def observe(self, entity_urn: str, source: str, account_scope: str, native_table: str,
-                native_row_ids: list[Any], native_key: str | None, fingerprint: str,
-                adapter_version: str, observed_at: int, sync_run: str | None,
-                *, minted: bool = False, present: str = "present") -> None:
-        self.conn.execute(
-            """INSERT INTO source_observations(entity_urn, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-               ON CONFLICT(entity_urn, source, account_scope, native_table) DO UPDATE SET
-                 native_row_ids=excluded.native_row_ids, fingerprint=excluded.fingerprint,
-                 adapter_version=excluded.adapter_version, observed_at=excluded.observed_at,
-                 sync_run=excluded.sync_run, present=excluded.present""",
-            (entity_urn, source, account_scope, native_table, _j(native_row_ids), native_key,
-             1 if minted else 0, fingerprint, adapter_version, observed_at, sync_run, present),
-        )
+    def observe(self, obs: SourceObservation) -> None:
+        self.conn.execute(self._OBSERVE_SQL, obs.row())
+
+    def merge_observations(self, rows: Iterable[SourceObservation]) -> None:
+        """Record sightings restored from an archive: only newer observations replace existing ones."""
+        self.conn.executemany(self._OBSERVE_SQL + " WHERE excluded.observed_at >= source_observations.observed_at",
+                              [r.row() for r in rows])
 
     def mark_absent(self, source: str, account_scope: str, native_table: str, seen_before: int,
                     sync_run: str | None, state: str = "absent_from_source") -> int:

@@ -9,7 +9,7 @@ import sqlite3
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -89,14 +89,14 @@ class Ctx:
         except (KeyError, ValueError, OSError):
             return ZoneInfo("UTC")
 
-    def parse_date(self, s: str | None, *, end: bool = False) -> int | None:
+    def parse_date(self, s: str | None) -> int | None:
+        """YYYY-MM-DD (local midnight in config.timezone) or RFC 3339 -> UTC ms. Both --since and --until
+        name an instant; --until is exclusive, so `--until 2026-04-01` stops before April 1."""
         if not s:
             return None
         try:
             if len(s) == 10:
                 d = datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=self.tz())
-                if end:
-                    d = d + timedelta(days=1)
                 return int(d.timestamp() * 1000)
             d = datetime.fromisoformat(s)
             if d.tzinfo is None:
@@ -305,7 +305,7 @@ def _filters(ctx: Ctx) -> Any:
         senders = (senders or []) + ctx.cache().identities_of_person(a.person)
         if not senders:
             raise CliError(EXIT_NOT_FOUND, "not_found", f"person {a.person} has no linked identities")
-    return Filters(since_ms=ctx.parse_date(getattr(a, "since", None)), until_ms=ctx.parse_date(getattr(a, "until", None), end=True),
+    return Filters(since_ms=ctx.parse_date(getattr(a, "since", None)), until_ms=ctx.parse_date(getattr(a, "until", None)),
                    source=getattr(a, "source", None), chat_urn=getattr(a, "chat", None), sender_urns=senders,
                    transport=getattr(a, "transport", None), kinds=kinds,
                    has_attachment=True if getattr(a, "has_attachment", False) else None)

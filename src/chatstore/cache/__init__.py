@@ -1,3 +1,3 @@
-from .store import Cache
+from .store import Cache, SourceObservation
 
-__all__ = ["Cache"]
+__all__ = ["Cache", "SourceObservation"]

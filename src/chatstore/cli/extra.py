@@ -42,7 +42,7 @@ def cmd_archive_export(ctx: Any) -> Any:
     ctx.require_init()
     a = ctx.args
     since = ctx.parse_date(a.since)
-    until = ctx.parse_date(a.until, end=True)
+    until = ctx.parse_date(a.until)
     output = Path(a.output).expanduser() if a.output else ctx.data_dir.exports
     pw = _password(ctx, confirm=True)
     cache = ctx.cache()
@@ -142,7 +142,6 @@ def cmd_archive_import(ctx: Any) -> Any:
             code = r.exit_code
         if r.exit_code == A.EXIT_CONFLICT and a.stop_on_conflict:
             break
-    save_identity(ctx.data_dir, ctx.ident)
     conflicts = sum(r["conflicts"] for r in results)
     if conflicts and code == A.EXIT_OK:
         code = A.EXIT_CONFLICT
@@ -321,38 +320,46 @@ def cmd_media(ctx: Any) -> Any:
     a = ctx.args
     cache = ctx.cache(readonly=True)
     tz = ctx.tz()
+    from ..media import LOCAL_STATES, local_state
+
+    def state(att: dict[str, Any]) -> str:
+        return local_state(ctx.data_dir, ctx.cfg, att)
+
     if a.media_command == "status":
-        summary = Q.media_summary(cache, source=a.source, chat_urn=a.chat)
+        summary = Q.media_summary(cache, state, source=a.source, chat_urn=a.chat)
         by_chat = Q.media_by_chat(cache, source=a.source, limit=a.top) if not a.chat else []
         blob_files = sum(1 for p in ctx.data_dir.blobs.rglob("*") if p.is_file()) if ctx.data_dir.blobs.exists() else 0
         data = {"summary": summary, "restored_blob_files": blob_files, "chats_with_most_unavailable": by_chat,
-                "reasons": Q.AVAILABILITY_REASONS}
+                "reasons": Q.AVAILABILITY_REASONS, "local_states": LOCAL_STATES}
 
         def human(d: dict[str, Any]) -> str:
-            lines = ["source     availability     count      declared MB  hashed"]
+            lines = ["source     availability (as observed)  local state   count      declared MB  hashed"]
             for r in d["summary"]:
-                lines.append(f"{r['source'] or '-':10} {r['availability']:16} {r['count']:6}  {r['declared_bytes'] / 1e6:12.1f}  {r['hashed']:6}")
-            lines.append(f"blobs restored from archives: {d['restored_blob_files']}")
+                lines.append(f"{r['source'] or '-':10} {r['availability']:26} {r['local_state']:12} {r['count']:6}  "
+                             f"{r['declared_bytes'] / 1e6:12.1f}  {r['hashed']:6}")
+            lines.append(f"blob files in this data dir: {d['restored_blob_files']}")
             if d["chats_with_most_unavailable"]:
                 lines.append("\nchats with most unavailable media:")
                 for c in d["chats_with_most_unavailable"]:
                     lines.append(f"  {c['unavailable']:5}  (nd {c['not_downloaded']}, missing {c['missing']}, unknown {c['unknown']})  "
                                  f"[{c['source']}] {c['chat_label'] or '?'}\n         {c['chat_urn']}")
-            lines.append("\nreasons:")
+            lines.append("\navailability (what the source app had when last synced):")
             lines += [f"  {k:15} {v}" for k, v in d["reasons"].items()]
+            lines.append("local state (where the bytes are on this machine now):")
+            lines += [f"  {k:15} {v}" for k, v in d["local_states"].items()]
             return "\n".join(lines)
 
         return A.Result(data, human=human)
     limit = ctx.limit()
     try:
-        items, cur = Q.media_list(cache, availability=a.availability, source=a.source, chat_urn=a.chat,
-                                  since_ms=ctx.parse_date(a.since), until_ms=ctx.parse_date(a.until, end=True),
+        items, cur = Q.media_list(cache, state, availability=a.availability, local=a.local_state, source=a.source, chat_urn=a.chat,
+                                  since_ms=ctx.parse_date(a.since), until_ms=ctx.parse_date(a.until),
                                   limit=limit, cursor=a.cursor)
     except ValueError as e:
         raise A.CliError(A.EXIT_USAGE, "bad_cursor", str(e)) from e
 
     def human_list(rows: list[dict[str, Any]]) -> str:
-        out = [f"{A.hms(r['sent_at_utc_ms'], tz)}  {r['availability']:14} {r['kind'] or '?':9} {(r['declared_size'] or 0) / 1e6:7.1f}MB  "
+        out = [f"{A.hms(r['sent_at_utc_ms'], tz)}  {r['availability']:14} {r['local_state']:11} {r['kind'] or '?':9} {(r['declared_size'] or 0) / 1e6:7.1f}MB  "
                f"{r['chat_label'] or '?'}\n    {r['urn']}" for r in rows]
         if cur:
             out.append(f"-- continue: --cursor {cur}")
@@ -438,7 +445,9 @@ def register_extra(sub: Any) -> None:
     s.add_argument("--top", type=int, default=15, help="How many chats to list.")
     s.set_defaults(fn=cmd_media)
     s = ms.add_parser("list", help="List attachments (newest first).")
-    s.add_argument("--availability", choices=["available", "not_downloaded", "missing", "not_exported", "unknown"])
+    s.add_argument("--availability", choices=["available", "not_downloaded", "missing", "not_exported", "unknown"],
+                   help="What the source app had when last synced.")
+    s.add_argument("--local-state", choices=["restored", "source_file", "absent"], help="Where the bytes are on this machine now.")
     s.add_argument("--source", choices=["whatsapp", "messages"])
     s.add_argument("--chat", metavar="chat-urn")
     s.add_argument("--since")

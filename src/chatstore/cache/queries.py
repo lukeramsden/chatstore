@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+from collections.abc import Callable
 from typing import Any
 
 from . import fts
@@ -324,39 +325,53 @@ def resolve(cache: Cache, urn: str, digest: str | None = None) -> dict[str, Any]
     }
 
 
-# ---- media availability -------------------------------------------------------------------------------
+# ---- media ---------------------------------------------------------------------------------------------
 
 AVAILABILITY_REASONS = {
-    "available": "file present on this machine; sha256 recorded",
+    "available": "the source app had the file when last synced; sha256 recorded",
     "not_downloaded": "the app never downloaded the media (open the chat in the app and download it, then re-sync)",
-    "missing": "the app's database references a file that is no longer on disk (deleted, expired or purged)",
+    "missing": "the app's database referenced a file that was no longer on disk (deleted, expired or purged)",
     "not_exported": "restored from a text-only archive; the exporting machine did not include the file",
     "unknown": "the source gave no usable path or size for this attachment",
 }
 
+_ATT_SQL = """SELECT a.urn AS urn, a.availability AS availability, a.blob_sha256 AS sha, r.record AS record,
+                     m.urn AS message_urn, m.chat_urn AS chat_urn, m.sender_urn AS sender_urn, m.utc_ms AS utc_ms, m.source AS source
+              FROM attachments_idx a JOIN records r ON r.urn=a.urn LEFT JOIN messages_idx m ON m.urn=a.message_urn"""
 
-def media_summary(cache: Cache, *, source: str | None = None, chat_urn: str | None = None) -> list[dict[str, Any]]:
-    """Attachment counts and declared bytes per (source, availability)."""
+
+def _att_where(source: str | None, chat_urn: str | None, availability: str | None = None) -> tuple[list[str], list[Any]]:
     where, params = ["1=1"], list[Any]()
+    if availability:
+        where.append("a.availability=?")
+        params.append(availability)
     if source:
         where.append("m.source=?")
         params.append(source)
     if chat_urn:
         where.append("m.chat_urn=?")
         params.append(chat_urn)
-    rows = cache.conn.execute(
-        f"""SELECT m.source AS source, a.availability AS availability, count(*) AS n,
-                   sum(coalesce(json_extract(r.record,'$.declared_size'),0)) AS bytes,
-                   sum(CASE WHEN a.blob_sha256 IS NOT NULL THEN 1 ELSE 0 END) AS hashed
-            FROM attachments_idx a JOIN records r ON r.urn=a.urn
-            LEFT JOIN messages_idx m ON m.urn=a.message_urn
-            WHERE {' AND '.join(where)} GROUP BY m.source, a.availability ORDER BY m.source, a.availability""", params).fetchall()
-    return [{"source": r["source"], "availability": r["availability"], "count": r["n"], "declared_bytes": r["bytes"],
-             "hashed": r["hashed"], "reason": AVAILABILITY_REASONS.get(r["availability"], "")} for r in rows]
+    return where, params
+
+
+def media_summary(cache: Cache, local_state: Callable[[dict[str, Any]], str], *, source: str | None = None,
+                  chat_urn: str | None = None) -> list[dict[str, Any]]:
+    """Attachment counts and declared bytes per (source, availability-as-observed, local_state-now)."""
+    where, params = _att_where(source, chat_urn)
+    groups: dict[tuple[Any, str, str], dict[str, Any]] = {}
+    for r in cache.conn.execute(f"{_ATT_SQL} WHERE {' AND '.join(where)}", params):
+        rec = json.loads(r["record"])
+        key = (r["source"], r["availability"], local_state(rec))
+        g = groups.setdefault(key, {"source": key[0], "availability": key[1], "local_state": key[2], "count": 0,
+                                    "declared_bytes": 0, "hashed": 0, "reason": AVAILABILITY_REASONS.get(key[1], "")})
+        g["count"] += 1
+        g["declared_bytes"] += rec.get("declared_size") or 0
+        g["hashed"] += 1 if r["sha"] else 0
+    return [groups[k] for k in sorted(groups, key=lambda k: (k[0] or "", k[1], k[2]))]
 
 
 def media_by_chat(cache: Cache, *, source: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
-    """Chats with the most unavailable attachments."""
+    """Chats with the most attachments the source app did not have (as last observed)."""
     where, params = ["a.availability != 'available'"], list[Any]()
     if source:
         where.append("m.source=?")
@@ -376,20 +391,13 @@ def media_by_chat(cache: Cache, *, source: str | None = None, limit: int = 20) -
              "unknown": r["unknown"], "declared_bytes": r["bytes"], "last_message_utc_ms": r["last_ms"]} for r in rows]
 
 
-def media_list(cache: Cache, *, availability: str | None = None, source: str | None = None, chat_urn: str | None = None,
+def media_list(cache: Cache, local_state: Callable[[dict[str, Any]], str], *, availability: str | None = None,
+               local: str | None = None, source: str | None = None, chat_urn: str | None = None,
                since_ms: int | None = None, until_ms: int | None = None, limit: int = 50,
                cursor: str | None = None) -> tuple[list[dict[str, Any]], str | None]:
-    """Attachments, newest first, paginated by (utc_ms, urn)."""
-    where, params = ["1=1"], list[Any]()
-    if availability:
-        where.append("a.availability=?")
-        params.append(availability)
-    if source:
-        where.append("m.source=?")
-        params.append(source)
-    if chat_urn:
-        where.append("m.chat_urn=?")
-        params.append(chat_urn)
+    """Attachments, newest first, paginated by (utc_ms, urn). `local` filters on the derived local_state,
+    which is not indexed, so it is applied while scanning forward from the cursor."""
+    where, params = _att_where(source, chat_urn, availability)
     if since_ms is not None:
         where.append("m.utc_ms>=?")
         params.append(since_ms)
@@ -403,23 +411,28 @@ def media_list(cache: Cache, *, availability: str | None = None, source: str | N
         except ValueError as e:
             raise ValueError("bad cursor") from e
         where.append("(coalesce(m.utc_ms,0) < ? OR (coalesce(m.utc_ms,0) = ? AND a.urn > ?))")
-    rows = cache.conn.execute(
-        f"""SELECT a.urn AS urn, a.availability AS availability, a.blob_sha256 AS sha, r.record AS record,
-                   m.urn AS message_urn, m.chat_urn AS chat_urn, m.sender_urn AS sender_urn, m.utc_ms AS utc_ms, m.source AS source
-            FROM attachments_idx a JOIN records r ON r.urn=a.urn LEFT JOIN messages_idx m ON m.urn=a.message_urn
-            WHERE {' AND '.join(where)} ORDER BY coalesce(m.utc_ms,0) DESC, a.urn ASC LIMIT ?""", [*params, limit + 1]).fetchall()
-    has_next = len(rows) > limit
-    rows = rows[:limit]
-    labels = label_map(cache, [r["chat_urn"] for r in rows] + [r["sender_urn"] for r in rows])
-    out = []
-    for r in rows:
+    out: list[dict[str, Any]] = []
+    last: Any = None
+    has_next = False
+    for r in cache.conn.execute(f"{_ATT_SQL} WHERE {' AND '.join(where)} ORDER BY coalesce(m.utc_ms,0) DESC, a.urn ASC", params):
         rec = json.loads(r["record"])
+        state = local_state(rec)
+        if local and state != local:
+            continue
+        if len(out) == limit:
+            has_next = True
+            break
+        last = r
         out.append({
-            "urn": r["urn"], "message_urn": r["message_urn"], "chat_urn": r["chat_urn"], "chat_label": labels.get(r["chat_urn"]),
-            "sender_urn": r["sender_urn"], "sender_label": labels.get(r["sender_urn"]), "source": r["source"],
-            "sent_at_utc_ms": r["utc_ms"], "availability": r["availability"], "kind": rec.get("kind"),
+            "urn": r["urn"], "message_urn": r["message_urn"], "chat_urn": r["chat_urn"], "chat_label": None,
+            "sender_urn": r["sender_urn"], "sender_label": None, "source": r["source"],
+            "sent_at_utc_ms": r["utc_ms"], "availability": r["availability"], "local_state": state, "kind": rec.get("kind"),
             "mime_type": rec.get("mime_type"), "declared_size": rec.get("declared_size"), "blob_sha256": r["sha"],
             "source_path_hint": rec.get("source_path_hint"), "filename": rec.get("filename"),
         })
-    nxt = f"{rows[-1]['utc_ms'] or 0}|{rows[-1]['urn']}" if has_next and rows else None
+    labels = label_map(cache, [x["chat_urn"] for x in out] + [x["sender_urn"] for x in out])
+    for x in out:
+        x["chat_label"] = labels.get(x["chat_urn"])
+        x["sender_label"] = labels.get(x["sender_urn"])
+    nxt = f"{last['utc_ms'] or 0}|{last['urn']}" if has_next and last is not None else None
     return out, nxt

@@ -91,10 +91,10 @@ def test_dst_boundary_dates(tmp_path: Path, monkeypatch, capsys):
     ctx = Ctx(build_parser().parse_args(["status"]), DataDir(tmp_path / "d"))
     # 2026-03-29 is the spring-forward day in Europe/London: --until is exclusive and lands on the next local midnight
     start = ctx.parse_date("2026-03-29")
-    end = ctx.parse_date("2026-03-29", end=True)
+    end = ctx.parse_date("2026-03-30")
     assert end - start == 23 * 3600 * 1000  # a 23-hour day
     assert ctx.parse_date("2026-03-29T12:00:00+02:00") == ctx.parse_date("2026-03-29T10:00:00Z")
-    assert ctx.parse_date("2026-10-25", end=True) - ctx.parse_date("2026-10-25") == 25 * 3600 * 1000
+    assert ctx.parse_date("2026-10-26") - ctx.parse_date("2026-10-25") == 25 * 3600 * 1000
 
 
 def test_concurrent_readers_during_write(tmp_path: Path, monkeypatch, capsys):

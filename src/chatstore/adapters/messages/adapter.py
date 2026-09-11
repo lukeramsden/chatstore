@@ -259,6 +259,8 @@ class MessagesAdapter:
             stats.notes.append("source reset detected: max message ROWID went backwards; full scan")
             stats.full_scan = True
         stats.checkpoints["max_message_rowid"] = max_rowid
+        # The helper always decodes the whole database; every table is scanned completely.
+        stats.scanned_tables |= {"handle", "chat", "chat_handle_join", "message", "attachment"}
 
         proc = subprocess.Popen([str(helper), str(db_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                 encoding="utf-8", bufsize=1 << 16)
