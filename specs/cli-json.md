@@ -74,6 +74,8 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `purge --entity <urn>|--source <s> --confirm` | `{removed, warning}` |
 | `media status [--source --chat --top N]` | `{summary: [{source, availability, local_state, count, declared_bytes, hashed, reason}], restored_blob_files, chats_with_most_unavailable: [{chat_urn, chat_label, source, unavailable, not_downloaded, missing, not_exported, unknown, declared_bytes, last_message_utc_ms}], reasons, local_states}`. `availability` is what the source app had when last synced (archived verbatim); `local_state` (`restored` = in this data dir's blob store, `source_file` = the app's file exists here, `absent`) is derived from the filesystem now. |
 | `media list [--availability --local-state --source --chat --since --until --limit --cursor]` | `[{urn, message_urn, chat_urn, chat_label, sender_urn, sender_label, source, sent_at_utc_ms, availability, local_state, kind, mime_type, declared_size, blob_sha256, source_path_hint, filename}]` newest first |
+| `helper install [--tag vX.Y.Z]` | `{path, tag, asset, sha256, config_updated, requested_tag}` — downloads the release helper for this chatstore version, verifies against the release `SHA256SUMS`, installs to `<data-dir>/bin`, sets `config.helper_path` (exit 1 `helper_install_failed` on any mismatch) |
+| `helper status` | `{found, path, chatstore_version, install_dir}` |
 
 ## Dates and zones
 

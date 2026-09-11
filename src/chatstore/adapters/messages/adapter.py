@@ -64,6 +64,9 @@ def find_helper(cfg: Config) -> Path | None:
     env = os.environ.get("CHATSTORE_MESSAGES_DECODER")
     if env:
         candidates.append(Path(env).expanduser())
+    # `chatstore helper install` puts the release binary in <data-dir>/bin
+    from ...paths import resolve_data_dir
+    candidates.append(resolve_data_dir(None) / "bin" / HELPER_NAME)
     which = shutil.which(HELPER_NAME)
     if which:
         candidates.append(Path(which))

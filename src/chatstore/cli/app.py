@@ -20,6 +20,7 @@ from ..config import (
     save_config,
     save_identity,
 )
+from ..helper_install import RELEASES_URL
 from ..paths import DataDir, resolve_data_dir
 from .common import (
     ENVELOPE,
@@ -58,7 +59,9 @@ def cmd_doctor(ctx: Ctx) -> Result:
     data = {
         "data_dir": str(dd.root), "initialised": dd.exists(), "python": platform.python_version(),
         "sqlite": sqlite3.sqlite_version, "fts5": fts5_available(), "sources": sources,
-        "helper": {"found": helper is not None, "path": str(helper) if helper else None},
+        "helper": {"found": helper is not None, "path": str(helper) if helper else None,
+                   "install_hint": None if helper else "run `chatstore helper install` (downloads the release binary for this "
+                   f"chatstore version from {RELEASES_URL} and verifies its sha256) or build it with scripts/build-helper.sh"},
         "keychain": platform.system() == "Darwin",
     }
     problems = [p for s in sources for p in s.get("problems", [])]
@@ -71,7 +74,9 @@ def cmd_doctor(ctx: Ctx) -> Result:
     def human(d: dict[str, Any]) -> str:
         lines = [f"data dir: {d['data_dir']} ({'initialised' if d['initialised'] else 'not initialised'})",
                  f"python {d['python']}, sqlite {d['sqlite']}, fts5 {'ok' if d['fts5'] else 'MISSING'}",
-                 f"messages decoder helper: {d['helper']['path'] or 'NOT FOUND (run scripts/build-helper.sh)'}"]
+                 f"messages decoder helper: {d['helper']['path'] or 'NOT FOUND'}"]
+        if d["helper"]["install_hint"]:
+            lines.append(f"          hint: {d['helper']['install_hint']}")
         for s in d["sources"]:
             st = "ok" if s["schema_ok"] else "unreadable" if not s["readable"] else "not found" if not s["path_found"] else "schema problem"
             lines.append(f"{s['source']:9} {st}  schema={s.get('schema_version')}")

@@ -1,0 +1,61 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  helper:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14   # Apple silicon
+            arch: arm64
+          - runner: macos-13   # Intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.95
+      - name: Check the tag matches pyproject.toml
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != pyproject version $v"; exit 1; }
+      - run: scripts/build-helper.sh
+      - name: Sanity-check the binary
+        run: |
+          bin=helpers/messages-decoder/target/release/chatstore-messages-decoder
+          file "$bin"; [ "$(uname -m)" = "${{ matrix.arch }}" ] || [ "$(uname -m)" = "aarch64" ]
+          cp "$bin" "chatstore-messages-decoder-macos-${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-${{ matrix.arch }}
+          path: chatstore-messages-decoder-macos-${{ matrix.arch }}
+          if-no-files-found: error
+  publish:
+    needs: helper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum chatstore-messages-decoder-macos-* > SHA256SUMS && cat SHA256SUMS
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Install the Python package:
+
+              pipx install git+https://github.com/lukeramsden/chatstore@${{ github.ref_name }}
+
+          Then fetch the Apple Messages decoder helper for your Mac (verified against SHA256SUMS below):
+
+              chatstore init && chatstore helper install
+
+          Assets: `chatstore-messages-decoder-macos-arm64` (Apple silicon), `chatstore-messages-decoder-macos-x86_64` (Intel), `SHA256SUMS`.
+          NOTES
+          gh release create "${{ github.ref_name }}" dist/* --title "${{ github.ref_name }}" --notes-file notes.md

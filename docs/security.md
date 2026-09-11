@@ -55,3 +55,14 @@ local cache only; already exported archives still contain the data and the comma
 The skill in `skills/chatstore/SKILL.md` treats message text as untrusted data, cites URNs and
 revision digests instead of pasting whole chats, and requires explicit approval for export,
 import, linking, mapping, and purge.
+
+## Helper binary downloads
+
+`chatstore helper install` fetches `chatstore-messages-decoder-macos-<arch>` from
+`https://github.com/lukeramsden/chatstore/releases/download/v<version>/` over HTTPS, together with
+the release's `SHA256SUMS`. The binary is written only if its SHA-256 matches; a mismatch, missing
+checksum or oversized download (>64 MiB) aborts with nothing installed. The file goes to
+`<data-dir>/bin/` (mode 0700 directory, 0755 file) and `config.helper_path` is pointed at it. The
+checksums are produced by the release workflow from the binaries it built on GitHub-hosted macOS
+runners; if you prefer, build locally with `scripts/build-helper.sh` instead — nothing requires
+the download.

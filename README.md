@@ -11,10 +11,12 @@ Status: all four delivery phases of [PLAN.md](PLAN.md) implemented; the final ac
 
 ## Quick start (macOS)
 
-Install from GitHub (needs Python ≥ 3.11 and, for Apple Messages, a Rust toolchain):
+Install from GitHub (needs Python ≥ 3.11):
 
 ```sh
 pipx install git+https://github.com/lukeramsden/chatstore      # or: pip install git+https://github.com/lukeramsden/chatstore
+chatstore init
+chatstore helper install     # prebuilt Apple Messages decoder from GitHub releases, sha256-verified (no Rust needed)
 ```
 
 Or work from a checkout:

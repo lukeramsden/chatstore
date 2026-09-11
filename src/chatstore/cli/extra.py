@@ -366,9 +366,43 @@ def cmd_media(ctx: Ctx) -> Any:
     return Result(items, page=page(items, limit, cur), human=human_list)
 
 
+# ---- helper -----------------------------------------------------------------------------------------
+
+def cmd_helper(ctx: Ctx) -> Result:
+    from ..adapters.messages.adapter import find_helper
+    from ..config import Config, load_config, save_config
+    from ..helper_install import HelperInstallError, install, package_version, release_tag
+    a = ctx.args
+    if a.helper_command == "status":
+        cfg = load_config(ctx.data_dir) if ctx.data_dir.exists() else Config()
+        found = find_helper(cfg)
+        data = {"found": found is not None, "path": str(found) if found else None, "chatstore_version": package_version(),
+                "install_dir": str(ctx.data_dir.root / "bin")}
+        return Result(data, human=lambda d: f"helper: {d['path'] or 'NOT FOUND (chatstore helper install)'}")
+    ctx.require_init()
+    try:
+        inst = install(ctx.data_dir, tag=a.tag)
+    except HelperInstallError as e:
+        raise CliError(EXIT_FAIL, "helper_install_failed", str(e)) from None
+    cfg = ctx.cfg
+    cfg.helper_path = str(inst.path)
+    save_config(ctx.data_dir, cfg)
+    data = {"path": str(inst.path), "tag": inst.tag, "asset": inst.asset, "sha256": inst.sha256, "config_updated": True,
+            "requested_tag": release_tag(a.tag)}
+    return Result(data, human=lambda d: f"installed {d['asset']} {d['tag']} -> {d['path']} (sha256 {d['sha256'][:12]}…)")
+
+
 # ---- registration -----------------------------------------------------------------------------------
 
 def register_extra(sub: Any) -> None:
+    hp = sub.add_parser("helper", help="Install or inspect the Apple Messages decoder helper binary.")
+    hs = hp.add_subparsers(dest="helper_command", metavar="action")
+    s = hs.add_parser("install", help="Download the prebuilt helper for this chatstore version from GitHub releases, verify sha256, install into <data-dir>/bin.")
+    s.add_argument("--tag", help="Release tag to install (default: v<installed chatstore version>).")
+    s.set_defaults(fn=cmd_helper)
+    s = hs.add_parser("status", help="Show which helper binary would be used.")
+    s.set_defaults(fn=cmd_helper)
+
     ar = sub.add_parser("archive", help="Encrypted archive export / verify / import.")
     ars = ar.add_subparsers(dest="archive_command", metavar="action")
 
