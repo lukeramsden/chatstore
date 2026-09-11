@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final acceptance test (PLAN.md): export both real sources, restore into a clean directory, prove
+"""Final acceptance test (docs/testing.md): export both real sources, restore into a clean directory, prove
 identity, search equivalence, provenance, media hashes, idempotence, error reporting, tamper safety,
 and that the source databases are untouched.
 

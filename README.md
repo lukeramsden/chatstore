@@ -5,9 +5,10 @@ searching it via SQLite FTS5, citing entities through stable URNs, and exporting
 password-encrypted monthly archives that can rebuild the cache on another machine without
 either source app.
 
-Status: all four delivery phases of [PLAN.md](PLAN.md) implemented; the final acceptance test
-(`scripts/acceptance.py`) passes against real local sources. Durable contracts live in
-[specs/](specs/); trade-offs in [DECISIONS.md](DECISIONS.md).
+Status: v0.1.0. The final acceptance test (`scripts/acceptance.py`) passes against real local
+sources. Durable contracts live in [specs/](specs/); the system as built is described in
+[docs/](docs/README.md) (overview, architecture, sources, operations, security, integration,
+decisions, testing, history).
 
 ## Quick start (macOS)
 
@@ -61,7 +62,7 @@ src/chatstore/            Python package
   sync.py                 sync orchestrator; curation.py: links, scopes, conflicts, purge
 helpers/messages-decoder/ Rust helper (pinned imessage_database) -> versioned JSONL
 specs/                    contracts, JSON Schemas, test vectors, source findings
-docs/                     security, integration
+docs/                     final-state documentation (see docs/README.md)
 scripts/                  build-helper.sh, acceptance.py (final acceptance test)
 skills/chatstore/         portable agent skill (CLI client only)
 tests/                    unit / integration / synthetic fixtures (no real data)

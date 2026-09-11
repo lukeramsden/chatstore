@@ -11,7 +11,7 @@ chatstore-<scope8>-catalogue-r0001.zip    scopes, identities, aliases, people, l
 
 `<scope8>` is the first 8 hex chars of the export ID's *export set*, not the account scope,
 so a filename does not reveal which source it belongs to. Filenames reveal month and revision
-number; this leakage is documented and accepted (DECISIONS.md #6).
+number; this leakage is documented and accepted (docs/decisions.md, Archive format).
 
 Explicit ranges (`--since/--until`) produce `chatstore-<scope8>-<startZ>-<endZ>-r0001.zip`
 with ISO basic UTC timestamps. Bucket boundaries are always encoded exactly in the manifest.
