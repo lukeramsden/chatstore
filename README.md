@@ -11,7 +11,16 @@ Status: all four delivery phases of [PLAN.md](PLAN.md) implemented; the final ac
 
 ## Quick start (macOS)
 
+Install from GitHub (needs Python ≥ 3.11 and, for Apple Messages, a Rust toolchain):
+
 ```sh
+pipx install git+https://github.com/lukeramsden/chatstore      # or: pip install git+https://github.com/lukeramsden/chatstore
+```
+
+Or work from a checkout:
+
+```sh
+git clone https://github.com/lukeramsden/chatstore && cd chatstore
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 scripts/build-helper.sh              # Rust helper for Apple Messages bodies (needs cargo; rust-toolchain.toml pins the version)
 .venv/bin/chatstore init             # data dir: ~/Library/Application Support/chatstore (or --data-dir / CHATSTORE_DATA_DIR)
