@@ -71,7 +71,16 @@ CHATSTORE_PASSWORD_FILE=~/.config/chatstore/pw chatstore --json archive export -
 cd ~/Archives/chatstore && git add . && git commit -qm "chatstore $(date -u +%F)"   # your choice; chatstore never runs git
 ```
 
-Only changed buckets produce a new `-r000N` file; unchanged months write nothing.
+Only changed buckets produce a new `-r000N` file; unchanged months write nothing. Renaming a
+chat or linking identities changes only the catalogue. Add `--context minimal` for ~25% smaller
+month archives if you always restore together with the catalogue.
+
+### Missing media
+
+```sh
+chatstore media status                         # per source/availability, with the reason for each state
+chatstore --json media list --availability not_downloaded --chat <chat-urn>
+```
 
 ### Restore elsewhere
 
