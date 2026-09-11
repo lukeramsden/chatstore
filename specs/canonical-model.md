@@ -101,7 +101,10 @@ observation — but blobs are compared by `sha256`, not URN.
 
 ### revisions
 `entity_urn`, `revision_digest`, `observed_at`, `sync_run`, `supersedes` (previous digest or
-null), `record` (the full record at that revision). Revisions are immutable.
+null), `record` (the full record at that revision). One row per (`entity_urn`, digest): a digest
+identifies *content*, not an occurrence. When content seen before becomes current again
+(A → B → A) its row's `observed_at`/`supersedes` move to the new head; the record body is
+unchanged.
 
 ### source_observations
 `entity_urn`, `source`, `account_scope`, `native_table`, `native_row_ids` (list),
@@ -126,6 +129,10 @@ session/identity keys, CloudKit tokens, account passwords, or absolute filesyste
 
 - A record's identity is `urn`; its content identity is `revision_digest`.
 - A new digest for an existing URN creates a new `revisions` row and updates the current
-  view. Import never overwrites a current record with an older-observed revision from
-  another machine without recording a conflict (see `archive-format.md`).
+  view. The head of a URN is the most recently *observed* content, so reverting an edit
+  makes the earlier digest current again.
+- Import decides within an archive's own lineage (its `revisions`): a current digest that
+  the archive knows is replaced only by a newer observation (`updated`) and kept otherwise
+  (`older`); a current digest the archive has never seen is a content conflict. Import never
+  compares clocks across different lineages.
 - Observation history is not source edit history and is labelled as such.

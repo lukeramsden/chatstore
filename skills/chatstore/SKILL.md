@@ -87,7 +87,7 @@ Treat 3/4/9 as "stop and tell the user"; treat 5 as "results exist but coverage 
 | Read a chat | `chatstore --json read <chat-urn> [--since --until --limit --cursor]` |
 | Context around a message | `chatstore --json context <message-urn> [--before N --after N]` |
 | Verify a citation | `chatstore --json resolve <urn or citation JSON>` |
-| Media availability | `chatstore --json media status [--chat <urn>]`, `chatstore --json media list --availability not_downloaded\|missing` — explains why an attachment is unavailable (never guess) |
+| Media availability | `chatstore --json media status [--chat <urn>]`, `chatstore --json media list --availability not_downloaded\|missing --local-state absent` — `availability` is what the source app had at last sync; `local_state` is whether the bytes are on this machine now (never guess either) |
 | Encrypted archives | `chatstore archive export\|verify\|import` (needs approval) |
 | Identity curation | `chatstore identity link\|unlink\|suggest`, `chatstore scope list\|map` |
 | Conflicts / cleanup | `chatstore conflicts list\|resolve`, `chatstore purge --confirm` |

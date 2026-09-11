@@ -135,3 +135,55 @@ delivery. Each entry says what was decided and what evidence drove it.
   2026-04`): 17/17 checks after fixing two test-harness issues (sync_runs rows counted as
   non-idempotence; unresolved cross-archive refs compared against 0 instead of against the
   source's own dangling reply/reaction targets, which were 14 on this machine).
+
+### Post-acceptance improvements
+
+- **Sync performance**: `synchronous=NORMAL` under WAL, batched `upsert_many`, and
+  `Cache.bulk()` (no WAL autocheckpoint during a run, checkpoint+truncate on exit). Full
+  WhatsApp sync 282 s → 119 s; a crash loses at most the last commit and sync re-runs.
+- **`--context minimal`** for bucket archives (stubs instead of chats/identities); default
+  stays `full` so monthly buckets are independently interpretable. Bucket content digests
+  exclude context records, so a chat rename no longer re-exports every month.
+- **`media status|list`** report attachment state; see the review section for the split
+  between source availability and local state.
+
+### Design review (Ousterhout checklist) — corrections
+
+- **A revision digest identifies content, not an occurrence.** The head of a URN is the most
+  recently observed content. Reverting an edit (A → B → A) previously left B current after a
+  restore because the second A was dropped as a duplicate row and then treated as an ancestor.
+  Import now decides within the archive's own lineage by observation time; ancestry chains are
+  no longer walked. Cross-lineage disagreement is still a conflict, never a clock decision.
+- **Import completion covers records, `identity.json` and blobs.** Blobs are restored before
+  the ledger commit; a failure is `media_failed` (exit 1) and is not recorded, so a re-run
+  retries. `already_imported` archives still restore missing blobs and re-adopt scopes, which
+  makes `import --no-media` followed by `import` work.
+- **One validation boundary** (`archive/verify.load_archive`) recomputes every record's
+  `revision_digest`, validates revisions/observations/stubs and manifest shape/lineage, checks
+  all manifest counts and blob naming, and hands import a parsed `LoadedArchive`. Container
+  authentication proves the bytes are intact; it never proved the producer built valid records.
+- **Empty buckets supersede.** Previously exported buckets stay in the export plan; an emptied
+  bucket writes an empty `r000N+1` so restores retire its records. Only never-exported empty
+  buckets are skipped.
+- **Adapters report `scanned_tables`.** Sync reconciled absence only for tables that emitted a
+  row, so a completely emptied table was never reconciled.
+- **`--until YYYY-MM-DD` is exclusive at local midnight** (no implicit +1 day), as the spec
+  always said. The DST test now checks 23 h/25 h days with explicit consecutive dates.
+- **Media: `availability` vs `local_state`.** `availability` is the source observation as last
+  synced (archived verbatim). `local_state` (`restored` / `source_file` / `absent`) is derived
+  from the filesystem at query time and never stored. A text-only restore previously reported
+  attachments as "present on this machine".
+- **Structure**: `cli/common.py` holds the typed CLI contract (exit codes, `Ctx`, `Result`,
+  `CliError`) so `extra.py` no longer reaches into `app` through an untyped indirection;
+  `SourceObservation` replaces 11-element positional tuples; `Cache.set_head`,
+  `add_revision_row`, `merge_observations` replace raw SQL in curation and import; the export
+  minimal/full context paths share one tail; `media.py` owns blob location.
+
+### Deferred / known gaps
+
+- Cache size (~1.9 GB for 661k records) because record JSON is stored twice (current +
+  revision) plus FTS; needs a schema migration to store revisions as the only copy.
+- Export speed (~3.5 s per bucket) is unprofiled.
+- `media_by_chat` still groups on source availability only; a per-chat local-state view would
+  need a filesystem pass per attachment.
+- Non-macOS keychain, CI matrix and packaging are out of scope for now.

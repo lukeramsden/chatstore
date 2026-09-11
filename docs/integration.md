@@ -78,7 +78,7 @@ month archives if you always restore together with the catalogue.
 ### Missing media
 
 ```sh
-chatstore media status                         # per source/availability, with the reason for each state
+chatstore media status                         # per source / availability (as last synced) / local state (now)
 chatstore --json media list --availability not_downloaded --chat <chat-urn>
 ```
 

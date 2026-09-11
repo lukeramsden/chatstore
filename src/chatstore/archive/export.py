@@ -163,14 +163,21 @@ def collect_bucket(cache: Cache, bucket: M.Bucket, *, context: str = "full") -> 
     if context == "minimal":
         plan.stubs += [{"urn": u, "entity": "chats"} for u in sorted(chat_urns)]
         plan.stubs += [{"urn": u, "entity": "identities"} for u in sorted(ident_urns - {""})]
-        plan.records["accounts"] = list(cache.iter_records("accounts"))
-        shas = {a["blob_sha256"] for a in plan.blobs}
-        plan.records["blobs"] = [b for b in cache.iter_records("blobs") if b.get("sha256") in shas]
-        prov = msg_set | set(dep["message_parts"]) | set(dep["attachments"]) | set(dep["events"])
-        _revisions_and_observations(cache, plan, prov)
-        plan.records["sync_runs"] = _records(cache, plan.sync_runs)
-        plan.content_digest = M.content_digest(plan.pairs())
-        return plan
+    else:
+        _full_context(cache, plan, chat_urns, ident_urns)
+    # shared tail: accounts, blob catalogue entries, provenance of the bucketed records, digest
+    plan.records["accounts"] = list(cache.iter_records("accounts"))
+    shas = {a["blob_sha256"] for a in plan.blobs}
+    plan.records["blobs"] = [b for b in cache.iter_records("blobs") if b.get("sha256") in shas]
+    prov = msg_set | set(dep["message_parts"]) | set(dep["attachments"]) | set(dep["events"])
+    _revisions_and_observations(cache, plan, prov)
+    plan.records["sync_runs"] = _records(cache, plan.sync_runs)
+    plan.content_digest = M.content_digest(plan.pairs())
+    return plan
+
+
+def _full_context(cache: Cache, plan: BucketPlan, chat_urns: set[str], ident_urns: set[str]) -> None:
+    """Carry the chats, memberships, identities and aliases the bucket's records point at."""
     memberships: list[str] = []
     for i in range(0, len(chat_urns), 500):
         chunk = sorted(chat_urns)[i:i + 500]
@@ -193,15 +200,6 @@ def collect_bucket(cache: Cache, bucket: M.Bucket, *, context: str = "full") -> 
     plan.records["identities"] = _records(cache, ident_urns)
     plan.records["chat_memberships"] = _records(cache, memberships)
     plan.records["aliases"] = alias_recs
-    plan.records["accounts"] = list(cache.iter_records("accounts"))
-    shas = {a["blob_sha256"] for a in plan.blobs}
-    plan.records["blobs"] = [b for b in cache.iter_records("blobs") if b.get("sha256") in shas]
-    # provenance for the bucketed records (messages, parts, attachments, events)
-    prov = msg_set | set(dep["message_parts"]) | set(dep["attachments"]) | set(dep["events"])
-    _revisions_and_observations(cache, plan, prov)
-    plan.records["sync_runs"] = _records(cache, plan.sync_runs)
-    plan.content_digest = M.content_digest(plan.pairs())
-    return plan
 
 
 def collect_catalogue(cache: Cache) -> BucketPlan:

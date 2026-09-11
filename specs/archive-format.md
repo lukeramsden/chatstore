@@ -130,9 +130,24 @@ member checksum, before any record is read.
 - Two archives for the same bucket and export set whose lineages do not include one another
   are a **branch conflict**. Import stops with exit code 6 and records the conflict; the user
   resolves it with `chatstore conflicts resolve`.
-- Content conflicts (same URN, different digests, neither observation supersedes the other)
-  are recorded in `conflicts` and shown by `chatstore conflicts list`. The current view keeps
-  the previously imported record until resolved. Import order and clocks never pick a winner.
+- Content conflicts (same URN, different digests, and the archive's revision history does not
+  contain the current digest) are recorded in `conflicts` and shown by `chatstore conflicts
+  list`. The current view keeps the previously imported record until resolved. Import order
+  and clocks never pick a winner across lineages; within one lineage the newer observation
+  is the head, so A → B → A restores as A.
+- A bucket that was exported before and is now empty is still exported: an empty `r000N+1`
+  supersedes the old revision and retires its records on restore. Only never-exported empty
+  buckets are `skipped_empty`.
+- Validation is one boundary (`archive/verify.load_archive`): container checksums, manifest
+  shape (`kind`, `bucket`, `revision`, `lineage` ends in `export_id`, `supersedes ⊂ lineage`,
+  `counts`), every `records/*` row (schema, `revision_digest` recomputed from content, revision
+  rows match their `record`, observation shape, stubs), manifest counts against payload, and
+  content-addressed blob names. Import consumes only a validated archive.
+- Import completion means records committed **and** `identity.json` updated **and** every
+  blob in the archive present under `blobs/`. Blobs are restored *before* the ledger commit;
+  if that fails the archive is `media_failed` (exit 1) and is not recorded, so a re-run
+  retries. Re-importing an `already_imported` archive restores blobs still missing (e.g.
+  after `--no-media`) and re-adopts scopes.
 
 ## Attachments
 

@@ -9,36 +9,43 @@ from pathlib import Path
 from typing import Any
 
 from ..config import save_identity
-
-
-def _app() -> Any:
-    from . import app
-    return app
-
+from .common import (
+    EXIT_CONFLICT,
+    EXIT_FAIL,
+    EXIT_INVALID_ARCHIVE,
+    EXIT_NOT_FOUND,
+    EXIT_OK,
+    EXIT_USAGE,
+    SOURCES,
+    CliError,
+    Ctx,
+    Result,
+    adapter_for,
+    hms,
+    page,
+)
 
 # ---- archive ----------------------------------------------------------------------------------------
 
-def _password(ctx: Any, *, confirm: bool = False) -> str:
+def _password(ctx: Ctx, *, confirm: bool = False) -> str:
     from ..archive import password as P
-    A = _app()
     try:
         pw, _origin = P.obtain(ctx.data_dir.root, confirm=confirm, allow_prompt=not ctx.args.json or sys.stdin.isatty())
     except P.PasswordUnavailable as e:
-        raise A.CliError(A.EXIT_USAGE, "no_password", str(e)) from None
+        raise CliError(EXIT_USAGE, "no_password", str(e)) from None
     except OSError as e:
-        raise A.CliError(A.EXIT_USAGE, "no_password", f"cannot read password source: {type(e).__name__}") from None
+        raise CliError(EXIT_USAGE, "no_password", f"cannot read password source: {type(e).__name__}") from None
     return pw
 
 
-def _progress(ctx: Any) -> Any:
+def _progress(ctx: Ctx) -> Any:
     if ctx.args.json or ctx.args.quiet:
         return None
     return lambda msg: print(msg, file=sys.stderr)
 
 
-def cmd_archive_export(ctx: Any) -> Any:
+def cmd_archive_export(ctx: Ctx) -> Result:
     from ..archive import export as E
-    A = _app()
     ctx.require_init()
     a = ctx.args
     since = ctx.parse_date(a.since)
@@ -46,7 +53,7 @@ def cmd_archive_export(ctx: Any) -> Any:
     output = Path(a.output).expanduser() if a.output else ctx.data_dir.exports
     pw = _password(ctx, confirm=True)
     cache = ctx.cache()
-    adapter_versions = {s: A.adapter_for(s).version for s in A.SOURCES}
+    adapter_versions = {s: adapter_for(s).version for s in SOURCES}
     results = []
     plans = []
     if not a.no_catalogue:
@@ -71,7 +78,7 @@ def cmd_archive_export(ctx: Any) -> Any:
     def human(d: Any) -> str:
         lines = [f"{r['kind']:<9} {r['label']:<20} {r['action']:<14} {r.get('path') or ''}" for r in d["archives"]]
         return "\n".join(lines + [f"{written} archive(s) written to {output}"])
-    return A.Result({"output": str(output), "written": written, "archives": results}, warnings=warnings, human=human)
+    return Result({"output": str(output), "written": written, "archives": results}, warnings=warnings, human=human)
 
 
 def _archive_paths(arg: list[str]) -> list[Path]:
@@ -86,19 +93,18 @@ def _archive_paths(arg: list[str]) -> list[Path]:
     return order_paths(out)
 
 
-def cmd_archive_verify(ctx: Any) -> Any:
+def cmd_archive_verify(ctx: Ctx) -> Result:
     from ..archive.verify import verify_archive
-    A = _app()
     paths = _archive_paths(ctx.args.paths)
     if not paths:
-        raise A.CliError(A.EXIT_NOT_FOUND, "not_found", "no archives found")
+        raise CliError(EXIT_NOT_FOUND, "not_found", "no archives found")
     pw = _password(ctx)
     results = []
-    code = A.EXIT_OK
+    code = EXIT_OK
     for p in paths:
         if not p.is_file():
             results.append({"path": str(p), "ok": False, "problems": ["file not found"]})
-            code = A.EXIT_INVALID_ARCHIVE
+            code = EXIT_INVALID_ARCHIVE
             continue
         v = verify_archive(p, pw, validate_schema=not ctx.args.no_schema)
         results.append({"path": v.path, "ok": v.ok, "wrong_password": v.wrong_password, "problems": v.problems,
@@ -107,16 +113,15 @@ def cmd_archive_verify(ctx: Any) -> Any:
                                                                     "supersedes", "created_at", "coverage", "attachment_policy",
                                                                     "media", "counts")} if v.manifest else None})
         if not v.ok:
-            code = A.EXIT_INVALID_ARCHIVE
+            code = EXIT_INVALID_ARCHIVE
 
     def human(d: Any) -> str:
         return "\n".join(f"{'OK ' if r['ok'] else 'BAD'} {Path(r['path']).name}" + ("" if r["ok"] else "  " + "; ".join(r["problems"])) for r in d)
-    return A.Result(results, code, human=human)
+    return Result(results, code, human=human)
 
 
-def cmd_archive_import(ctx: Any) -> Any:
+def cmd_archive_import(ctx: Ctx) -> Result:
     from ..archive.import_ import import_archive
-    A = _app()
     a = ctx.args
     if not ctx.data_dir.exists():
         ctx.data_dir.create()
@@ -125,11 +130,11 @@ def cmd_archive_import(ctx: Any) -> Any:
         save_identity(ctx.data_dir, Identity())
     paths = _archive_paths(a.paths)
     if not paths:
-        raise A.CliError(A.EXIT_NOT_FOUND, "not_found", "no archives found")
+        raise CliError(EXIT_NOT_FOUND, "not_found", "no archives found")
     pw = _password(ctx)
     cache = ctx.cache()
     results = []
-    code = A.EXIT_OK
+    code = EXIT_OK
     prog = _progress(ctx)
     for p in paths:
         if prog:
@@ -138,13 +143,13 @@ def cmd_archive_import(ctx: Any) -> Any:
         d = dict(r.__dict__)
         d["exit_code"] = r.exit_code
         results.append(d)
-        if r.exit_code and (code == A.EXIT_OK or r.exit_code < code):
+        if r.exit_code and (code == EXIT_OK or r.exit_code < code):
             code = r.exit_code
-        if r.exit_code == A.EXIT_CONFLICT and a.stop_on_conflict:
+        if r.exit_code == EXIT_CONFLICT and a.stop_on_conflict:
             break
     conflicts = sum(r["conflicts"] for r in results)
-    if conflicts and code == A.EXIT_OK:
-        code = A.EXIT_CONFLICT
+    if conflicts and code == EXIT_OK:
+        code = EXIT_CONFLICT
     warnings = []
     unresolved = sum(r["unresolved_refs"] for r in results)
     if unresolved:
@@ -158,46 +163,44 @@ def cmd_archive_import(ctx: Any) -> Any:
                          f"conflicts={r['conflicts']} retired={r['retired']} blobs={r['blobs_restored']}"
                          + ("  " + "; ".join(r["problems"]) if r["problems"] else ""))
         return "\n".join(lines)
-    return A.Result(results, code, warnings=warnings, human=human)
+    return Result(results, code, warnings=warnings, human=human)
 
 
-def cmd_archive_password(ctx: Any) -> Any:
+def cmd_archive_password(ctx: Ctx) -> Result:
     from ..archive import password as P
-    A = _app()
     a = ctx.args
     root = ctx.data_dir.root
     if a.action == "suggest":
         pw = P.suggest()
         # deliberately outside the JSON envelope contract: a suggestion is not a secret yet, but keep it off JSON
         if a.json:
-            raise A.CliError(A.EXIT_USAGE, "no_json", "password suggestions are never emitted in JSON; run without --json")
+            raise CliError(EXIT_USAGE, "no_json", "password suggestions are never emitted in JSON; run without --json")
         print(pw)
-        return A.Result(None)
+        return Result(None)
     if a.action == "set":
         if not P.keychain_available():
-            raise A.CliError(A.EXIT_USAGE, "no_keychain", "no OS keychain integration on this platform; use CHATSTORE_PASSWORD_FILE")
+            raise CliError(EXIT_USAGE, "no_keychain", "no OS keychain integration on this platform; use CHATSTORE_PASSWORD_FILE")
         if not sys.stdin.isatty():
-            raise A.CliError(A.EXIT_USAGE, "no_tty", "password set needs an interactive terminal")
+            raise CliError(EXIT_USAGE, "no_tty", "password set needs an interactive terminal")
         import getpass
         pw = getpass.getpass("archive password: ")
         if pw != getpass.getpass("confirm password: ") or not pw:
-            raise A.CliError(A.EXIT_USAGE, "mismatch", "passwords did not match or were empty")
+            raise CliError(EXIT_USAGE, "mismatch", "passwords did not match or were empty")
         ok = P.keychain_set(root, pw)
-        return A.Result({"stored": ok, "service": P.KEYCHAIN_SERVICE, "account": P.keychain_account(root)},
-                        A.EXIT_OK if ok else A.EXIT_FAIL, human=lambda d: "stored in keychain" if d["stored"] else "keychain store failed")
+        return Result({"stored": ok, "service": P.KEYCHAIN_SERVICE, "account": P.keychain_account(root)},
+                        EXIT_OK if ok else EXIT_FAIL, human=lambda d: "stored in keychain" if d["stored"] else "keychain store failed")
     if a.action == "status":
         has_kc = bool(P.keychain_get(root)) if P.keychain_available() else False
         import os
-        return A.Result({"keychain": has_kc, "password_file": bool(os.environ.get("CHATSTORE_PASSWORD_FILE")),
+        return Result({"keychain": has_kc, "password_file": bool(os.environ.get("CHATSTORE_PASSWORD_FILE")),
                          "keychain_available": P.keychain_available()},
                         human=lambda d: f"keychain: {d['keychain']}  password file: {d['password_file']}")
     if a.action == "clear":
-        return A.Result({"cleared": P.keychain_delete(root)}, human=lambda d: "cleared" if d["cleared"] else "nothing to clear")
-    raise A.CliError(A.EXIT_USAGE, "usage", "unknown password action")
+        return Result({"cleared": P.keychain_delete(root)}, human=lambda d: "cleared" if d["cleared"] else "nothing to clear")
+    raise CliError(EXIT_USAGE, "usage", "unknown password action")
 
 
-def cmd_archive_list(ctx: Any) -> Any:
-    A = _app()
+def cmd_archive_list(ctx: Ctx) -> Any:
     ctx.require_init()
     cache = ctx.cache(readonly=True)
     exp = [dict(r) for r in cache.conn.execute("SELECT export_id, export_set, kind, bucket_label, revision, path, created_at FROM exports ORDER BY kind, bucket_label, revision")]
@@ -207,14 +210,13 @@ def cmd_archive_list(ctx: Any) -> Any:
         lines = [f"exported  {e['kind']:<9} {e['bucket_label']:<20} r{e['revision']:04d} {e['path']}" for e in d["exports"]]
         lines += [f"imported  {e['kind']:<9} {e['bucket_label']:<20} r{e['revision']:04d} {e['export_id']}" + (" (superseded)" if e["superseded_by"] else "") for e in d["imports"]]
         return "\n".join(lines) or "no archives"
-    return A.Result({"exports": exp, "imports": imp}, human=human)
+    return Result({"exports": exp, "imports": imp}, human=human)
 
 
 # ---- identity / scope / conflicts / purge -------------------------------------------------------------
 
-def cmd_identity(ctx: Any) -> Any:
+def cmd_identity(ctx: Ctx) -> Any:
     from .. import curation as C
-    A = _app()
     ctx.require_init()
     a = ctx.args
     cache = ctx.cache()
@@ -228,7 +230,7 @@ def cmd_identity(ctx: Any) -> Any:
                 for i in s["identities"]:
                     lines.append(f"    [{i['source']}] {i['urn']}  {', '.join(n for n in i['names'] if n)}" + ("  (linked)" if i["already_linked"] else ""))
             return "\n".join(lines) or "no suggestions"
-        return A.Result(items, human=human)
+        return Result(items, human=human)
     if a.identity_command == "link":
         with cache.write():
             try:
@@ -238,84 +240,80 @@ def cmd_identity(ctx: Any) -> Any:
                     person_urn = C.create_person(cache, a.label)["urn"]
                 links = C.link(cache, person_urn, a.identities)
             except ValueError as e:
-                raise A.CliError(A.EXIT_NOT_FOUND, "not_found", str(e)) from None
-        return A.Result({"person_urn": person_urn, "links": links},
+                raise CliError(EXIT_NOT_FOUND, "not_found", str(e)) from None
+        return Result({"person_urn": person_urn, "links": links},
                         human=lambda d: f"{d['person_urn']}: linked {len(d['links'])} identit{'y' if len(d['links']) == 1 else 'ies'}")
     if a.identity_command == "unlink":
         with cache.write():
             links = C.unlink(cache, a.identity, a.person)
         if not links:
-            raise A.CliError(A.EXIT_NOT_FOUND, "not_found", "no active link for that identity")
-        return A.Result({"rejected": links}, human=lambda d: f"rejected {len(d['rejected'])} link(s)")
-    raise A.CliError(A.EXIT_USAGE, "usage", "identity link|unlink|suggest")
+            raise CliError(EXIT_NOT_FOUND, "not_found", "no active link for that identity")
+        return Result({"rejected": links}, human=lambda d: f"rejected {len(d['rejected'])} link(s)")
+    raise CliError(EXIT_USAGE, "usage", "identity link|unlink|suggest")
 
 
-def cmd_scope(ctx: Any) -> Any:
+def cmd_scope(ctx: Ctx) -> Any:
     from .. import curation as C
-    A = _app()
     ctx.require_init()
     a = ctx.args
     cache = ctx.cache()
     if a.scope_command == "list":
         rows = C.list_scopes(cache, ctx.ident)
-        return A.Result(rows, human=lambda d: "\n".join(
+        return Result(rows, human=lambda d: "\n".join(
             f"{r['source'] or '?':<9} {r['scope']}  {r['records']:>8} records  {r['origin']}" + (f"  -> {r['mapped_to']}" if r.get("mapped_to") else "") for r in d) or "no scopes")
     if a.scope_command == "map":
         try:
             with cache.write():
                 res = C.map_scope(cache, ctx.ident, a.from_scope, a.to_scope)
         except ValueError as e:
-            raise A.CliError(A.EXIT_USAGE, "bad_scope", str(e)) from None
+            raise CliError(EXIT_USAGE, "bad_scope", str(e)) from None
         save_identity(ctx.data_dir, ctx.ident)
-        return A.Result(res, human=lambda d: f"mapped {d['from']} -> {d['to']}: {d['aliases_created']} aliases created")
-    raise A.CliError(A.EXIT_USAGE, "usage", "scope list|map")
+        return Result(res, human=lambda d: f"mapped {d['from']} -> {d['to']}: {d['aliases_created']} aliases created")
+    raise CliError(EXIT_USAGE, "usage", "scope list|map")
 
 
-def cmd_conflicts(ctx: Any) -> Any:
+def cmd_conflicts(ctx: Ctx) -> Any:
     from .. import curation as C
-    A = _app()
     ctx.require_init()
     a = ctx.args
     cache = ctx.cache()
     if a.conflicts_command == "list":
         rows = cache.conflicts(unresolved_only=not a.all)
-        return A.Result(rows, human=lambda d: "\n".join(
+        return Result(rows, human=lambda d: "\n".join(
             f"#{r['id']} {r['kind']:<14} {r['entity_urn'] or ''} {json.dumps(r['detail'])[:100]}" + ("  resolved" if r["resolved_at"] else "") for r in d) or "no conflicts")
     if a.conflicts_command == "resolve":
         try:
             with cache.write():
                 res = C.resolve_conflict(cache, a.id, keep=a.keep, accept=a.accept)
         except KeyError:
-            raise A.CliError(A.EXIT_NOT_FOUND, "not_found", f"no conflict #{a.id}") from None
+            raise CliError(EXIT_NOT_FOUND, "not_found", f"no conflict #{a.id}") from None
         except ValueError as e:
-            raise A.CliError(A.EXIT_USAGE, "bad_resolution", str(e)) from None
-        return A.Result(res, human=lambda d: f"resolved #{d['id']}: {json.dumps(d['resolution'])}")
-    raise A.CliError(A.EXIT_USAGE, "usage", "conflicts list|resolve")
+            raise CliError(EXIT_USAGE, "bad_resolution", str(e)) from None
+        return Result(res, human=lambda d: f"resolved #{d['id']}: {json.dumps(d['resolution'])}")
+    raise CliError(EXIT_USAGE, "usage", "conflicts list|resolve")
 
 
-def cmd_purge(ctx: Any) -> Any:
+def cmd_purge(ctx: Ctx) -> Any:
     from .. import curation as C
-    A = _app()
     ctx.require_init()
     a = ctx.args
     if not a.confirm:
-        raise A.CliError(A.EXIT_USAGE, "confirm_required", "purge is irreversible locally; add --confirm")
+        raise CliError(EXIT_USAGE, "confirm_required", "purge is irreversible locally; add --confirm")
     if bool(a.entity) == bool(a.source):
-        raise A.CliError(A.EXIT_USAGE, "usage", "give exactly one of --entity <urn> or --source <source>")
+        raise CliError(EXIT_USAGE, "usage", "give exactly one of --entity <urn> or --source <source>")
     cache = ctx.cache()
     try:
         with cache.write():
             res = C.purge_entity(cache, a.entity) if a.entity else C.purge_source(cache, a.source, a.scope)
     except KeyError:
-        raise A.CliError(A.EXIT_NOT_FOUND, "not_found", f"unknown entity {a.entity}") from None
+        raise CliError(EXIT_NOT_FOUND, "not_found", f"unknown entity {a.entity}") from None
     warning = "already exported archives still contain the purged records; re-export produces a new revision"
-    return A.Result(res | {"warning": warning}, warnings=[{"code": "archives_unchanged", "message": warning}],
+    return Result(res | {"warning": warning}, warnings=[{"code": "archives_unchanged", "message": warning}],
                     human=lambda d: f"removed {d['removed']} record(s). {warning}")
 
 
-def cmd_media(ctx: Any) -> Any:
+def cmd_media(ctx: Ctx) -> Any:
     from ..cache import queries as Q
-    A = _app()
     ctx.require_init()
     a = ctx.args
     cache = ctx.cache(readonly=True)
@@ -349,23 +347,23 @@ def cmd_media(ctx: Any) -> Any:
             lines += [f"  {k:15} {v}" for k, v in d["local_states"].items()]
             return "\n".join(lines)
 
-        return A.Result(data, human=human)
+        return Result(data, human=human)
     limit = ctx.limit()
     try:
         items, cur = Q.media_list(cache, state, availability=a.availability, local=a.local_state, source=a.source, chat_urn=a.chat,
                                   since_ms=ctx.parse_date(a.since), until_ms=ctx.parse_date(a.until),
                                   limit=limit, cursor=a.cursor)
     except ValueError as e:
-        raise A.CliError(A.EXIT_USAGE, "bad_cursor", str(e)) from e
+        raise CliError(EXIT_USAGE, "bad_cursor", str(e)) from e
 
     def human_list(rows: list[dict[str, Any]]) -> str:
-        out = [f"{A.hms(r['sent_at_utc_ms'], tz)}  {r['availability']:14} {r['local_state']:11} {r['kind'] or '?':9} {(r['declared_size'] or 0) / 1e6:7.1f}MB  "
+        out = [f"{hms(r['sent_at_utc_ms'], tz)}  {r['availability']:14} {r['local_state']:11} {r['kind'] or '?':9} {(r['declared_size'] or 0) / 1e6:7.1f}MB  "
                f"{r['chat_label'] or '?'}\n    {r['urn']}" for r in rows]
         if cur:
             out.append(f"-- continue: --cursor {cur}")
         return "\n".join(out) or "no attachments match"
 
-    return A.Result(items, page=A._page(items, limit, cur), human=human_list)
+    return Result(items, page=page(items, limit, cur), human=human_list)
 
 
 # ---- registration -----------------------------------------------------------------------------------

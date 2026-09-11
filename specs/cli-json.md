@@ -62,9 +62,9 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `read <chat-urn> [--since --until --limit --cursor]` | `[message summaries with text, parts, attachments, events]` |
 | `resolve <urn|citation-json>` | `{urn, status, kind, record, aliases, revisions: [{digest, observed_at}]}` |
 | `context <message-urn> [--before N --after N]` | `{target, before: [...], after: [...]}` |
-| `archive export [--since --until --media text|available-media --context full|minimal --output DIR --force --catalogue-only --no-catalogue]` | `{output, written, archives: [{kind, label, action: written|unchanged|skipped_empty, path, export_id, revision, supersedes, counts, media, coverage}]}` |
+| `archive export [--since --until --media text|available-media --context full|minimal --output DIR --force --catalogue-only --no-catalogue]` | `{output, written, archives: [{kind, label, action: written|unchanged|skipped_empty (never exported and empty), path, export_id, revision, supersedes, counts, media, coverage}]}` |
 | `archive verify <path|dir>... [--no-schema]` | `[{path, ok, wrong_password, problems: [...], counts, schema_errors, manifest}]` (exit 7 if any not ok) |
-| `archive import <path|dir>... [--no-media --stop-on-conflict]` | `[{path, action: imported|already_imported|superseded|branch_conflict|invalid|wrong_password|schema_error, export_id, kind, label, revision, outcomes: {inserted, updated, unchanged, older, conflict}, retired, unresolved_refs, blobs_restored, media_not_restored, conflicts, problems, exit_code}]` (exit 6 on branch/content conflicts, 7 on invalid) |
+| `archive import <path|dir>... [--no-media --stop-on-conflict]` | `[{path, action: imported|already_imported|superseded|media_failed|branch_conflict|invalid|wrong_password|schema_error, export_id, kind, label, revision, outcomes: {inserted, updated, unchanged, older, conflict}, retired, unresolved_refs, blobs_restored, blobs_failed, media_not_restored, conflicts, problems, exit_code}]` (exit 1 if a blob could not be restored — the archive is not recorded, re-run to retry; 6 on branch/content conflicts; 7 on invalid). Re-importing an already imported archive restores blobs that are still missing. |
 | `archive password suggest|set|status|clear` | `suggest` prints to a tty only and refuses `--json`; `set` → `{stored, service, account}`; `status` → `{keychain, password_file, keychain_available}` |
 | `archive list` | `{exports: [...], imports: [...]}` ledgers |
 | `rebuild-index` | `{rows}` |
@@ -72,13 +72,15 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `identity link|unlink|suggest` | identity_links records |
 | `conflicts list|resolve <id> --keep <digest>` | conflicts |
 | `purge --entity <urn>|--source <s> --confirm` | `{removed, warning}` |
-| `media status [--source --chat --top N]` | `{summary: [{source, availability, count, declared_bytes, hashed, reason}], restored_blob_files, chats_with_most_unavailable: [{chat_urn, chat_label, source, unavailable, not_downloaded, missing, not_exported, unknown, declared_bytes, last_message_utc_ms}], reasons}` |
-| `media list [--availability --source --chat --since --until --limit --cursor]` | `[{urn, message_urn, chat_urn, chat_label, sender_urn, sender_label, source, sent_at_utc_ms, availability, kind, mime_type, declared_size, blob_sha256, source_path_hint, filename}]` newest first |
+| `media status [--source --chat --top N]` | `{summary: [{source, availability, local_state, count, declared_bytes, hashed, reason}], restored_blob_files, chats_with_most_unavailable: [{chat_urn, chat_label, source, unavailable, not_downloaded, missing, not_exported, unknown, declared_bytes, last_message_utc_ms}], reasons, local_states}`. `availability` is what the source app had when last synced (archived verbatim); `local_state` (`restored` = in this data dir's blob store, `source_file` = the app's file exists here, `absent`) is derived from the filesystem now. |
+| `media list [--availability --local-state --source --chat --since --until --limit --cursor]` | `[{urn, message_urn, chat_urn, chat_label, sender_urn, sender_label, source, sent_at_utc_ms, availability, local_state, kind, mime_type, declared_size, blob_sha256, source_path_hint, filename}]` newest first |
 
 ## Dates and zones
 
 - `--since/--until` accept `YYYY-MM-DD` (interpreted in `config.timezone`, shown in
-  `freshness.timezone`) or RFC 3339 with offset. `--until` is exclusive.
+  `freshness.timezone`) or RFC 3339 with offset. Both name an instant (a date is local
+  midnight at its start); `--until` is exclusive, so `--since 2026-03-01 --until 2026-04-01`
+  is exactly March.
 - Exports always report exact UTC boundaries.
 
 ## Query semantics
