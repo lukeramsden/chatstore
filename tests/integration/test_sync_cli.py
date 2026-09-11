@@ -158,6 +158,13 @@ def test_messages_sync_and_queries(env, capsys):
     code, e = run(capsys, "read", fam["urn"])
     assert e["data"][0]["reply_to_urn"] is not None
 
+    code, e = run(capsys, "media", "status")
+    assert code == 0 and {(r["availability"], r["count"]) for r in e["data"]["summary"]} == {("available", 1)}
+    assert e["data"]["restored_blob_files"] == 0 and e["data"]["chats_with_most_unavailable"] == []
+    code, e = run(capsys, "media", "list", "--availability", "available")
+    assert code == 0 and len(e["data"]) == 1 and e["data"][0]["blob_sha256"] and e["data"][0]["chat_label"]
+    code, e = run(capsys, "media", "list", "--availability", "missing")
+    assert code == 0 and e["data"] == []
     code, e = run(capsys, "search", "hello", "--has-attachment")
     assert len(e["data"]) == 0
 

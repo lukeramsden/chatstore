@@ -322,3 +322,104 @@ def resolve(cache: Cache, urn: str, digest: str | None = None) -> dict[str, Any]
         "aliases": {"from": aliases_to, "to": aliases_from},
         "revisions": revs, "observations": cache.observations_of(urn),
     }
+
+
+# ---- media availability -------------------------------------------------------------------------------
+
+AVAILABILITY_REASONS = {
+    "available": "file present on this machine; sha256 recorded",
+    "not_downloaded": "the app never downloaded the media (open the chat in the app and download it, then re-sync)",
+    "missing": "the app's database references a file that is no longer on disk (deleted, expired or purged)",
+    "not_exported": "restored from a text-only archive; the exporting machine did not include the file",
+    "unknown": "the source gave no usable path or size for this attachment",
+}
+
+
+def media_summary(cache: Cache, *, source: str | None = None, chat_urn: str | None = None) -> list[dict[str, Any]]:
+    """Attachment counts and declared bytes per (source, availability)."""
+    where, params = ["1=1"], list[Any]()
+    if source:
+        where.append("m.source=?")
+        params.append(source)
+    if chat_urn:
+        where.append("m.chat_urn=?")
+        params.append(chat_urn)
+    rows = cache.conn.execute(
+        f"""SELECT m.source AS source, a.availability AS availability, count(*) AS n,
+                   sum(coalesce(json_extract(r.record,'$.declared_size'),0)) AS bytes,
+                   sum(CASE WHEN a.blob_sha256 IS NOT NULL THEN 1 ELSE 0 END) AS hashed
+            FROM attachments_idx a JOIN records r ON r.urn=a.urn
+            LEFT JOIN messages_idx m ON m.urn=a.message_urn
+            WHERE {' AND '.join(where)} GROUP BY m.source, a.availability ORDER BY m.source, a.availability""", params).fetchall()
+    return [{"source": r["source"], "availability": r["availability"], "count": r["n"], "declared_bytes": r["bytes"],
+             "hashed": r["hashed"], "reason": AVAILABILITY_REASONS.get(r["availability"], "")} for r in rows]
+
+
+def media_by_chat(cache: Cache, *, source: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    """Chats with the most unavailable attachments."""
+    where, params = ["a.availability != 'available'"], list[Any]()
+    if source:
+        where.append("m.source=?")
+        params.append(source)
+    rows = cache.conn.execute(
+        f"""SELECT m.chat_urn AS chat_urn, m.source AS source, count(*) AS n,
+                   sum(CASE WHEN a.availability='not_downloaded' THEN 1 ELSE 0 END) AS not_downloaded,
+                   sum(CASE WHEN a.availability='missing' THEN 1 ELSE 0 END) AS missing,
+                   sum(CASE WHEN a.availability='not_exported' THEN 1 ELSE 0 END) AS not_exported,
+                   sum(CASE WHEN a.availability='unknown' THEN 1 ELSE 0 END) AS unknown,
+                   sum(coalesce(json_extract(r.record,'$.declared_size'),0)) AS bytes, max(m.utc_ms) AS last_ms
+            FROM attachments_idx a JOIN records r ON r.urn=a.urn JOIN messages_idx m ON m.urn=a.message_urn
+            WHERE {' AND '.join(where)} GROUP BY m.chat_urn ORDER BY n DESC, m.chat_urn LIMIT ?""", [*params, limit]).fetchall()
+    labels = label_map(cache, [r["chat_urn"] for r in rows])
+    return [{"chat_urn": r["chat_urn"], "chat_label": labels.get(r["chat_urn"]), "source": r["source"], "unavailable": r["n"],
+             "not_downloaded": r["not_downloaded"], "missing": r["missing"], "not_exported": r["not_exported"],
+             "unknown": r["unknown"], "declared_bytes": r["bytes"], "last_message_utc_ms": r["last_ms"]} for r in rows]
+
+
+def media_list(cache: Cache, *, availability: str | None = None, source: str | None = None, chat_urn: str | None = None,
+               since_ms: int | None = None, until_ms: int | None = None, limit: int = 50,
+               cursor: str | None = None) -> tuple[list[dict[str, Any]], str | None]:
+    """Attachments, newest first, paginated by (utc_ms, urn)."""
+    where, params = ["1=1"], list[Any]()
+    if availability:
+        where.append("a.availability=?")
+        params.append(availability)
+    if source:
+        where.append("m.source=?")
+        params.append(source)
+    if chat_urn:
+        where.append("m.chat_urn=?")
+        params.append(chat_urn)
+    if since_ms is not None:
+        where.append("m.utc_ms>=?")
+        params.append(since_ms)
+    if until_ms is not None:
+        where.append("m.utc_ms<?")
+        params.append(until_ms)
+    if cursor:
+        try:
+            c_ms, c_urn = cursor.split("|", 1)
+            params += [int(c_ms), int(c_ms), c_urn]
+        except ValueError as e:
+            raise ValueError("bad cursor") from e
+        where.append("(coalesce(m.utc_ms,0) < ? OR (coalesce(m.utc_ms,0) = ? AND a.urn > ?))")
+    rows = cache.conn.execute(
+        f"""SELECT a.urn AS urn, a.availability AS availability, a.blob_sha256 AS sha, r.record AS record,
+                   m.urn AS message_urn, m.chat_urn AS chat_urn, m.sender_urn AS sender_urn, m.utc_ms AS utc_ms, m.source AS source
+            FROM attachments_idx a JOIN records r ON r.urn=a.urn LEFT JOIN messages_idx m ON m.urn=a.message_urn
+            WHERE {' AND '.join(where)} ORDER BY coalesce(m.utc_ms,0) DESC, a.urn ASC LIMIT ?""", [*params, limit + 1]).fetchall()
+    has_next = len(rows) > limit
+    rows = rows[:limit]
+    labels = label_map(cache, [r["chat_urn"] for r in rows] + [r["sender_urn"] for r in rows])
+    out = []
+    for r in rows:
+        rec = json.loads(r["record"])
+        out.append({
+            "urn": r["urn"], "message_urn": r["message_urn"], "chat_urn": r["chat_urn"], "chat_label": labels.get(r["chat_urn"]),
+            "sender_urn": r["sender_urn"], "sender_label": labels.get(r["sender_urn"]), "source": r["source"],
+            "sent_at_utc_ms": r["utc_ms"], "availability": r["availability"], "kind": rec.get("kind"),
+            "mime_type": rec.get("mime_type"), "declared_size": rec.get("declared_size"), "blob_sha256": r["sha"],
+            "source_path_hint": rec.get("source_path_hint"), "filename": rec.get("filename"),
+        })
+    nxt = f"{rows[-1]['utc_ms'] or 0}|{rows[-1]['urn']}" if has_next and rows else None
+    return out, nxt

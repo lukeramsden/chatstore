@@ -72,6 +72,8 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `identity link|unlink|suggest` | identity_links records |
 | `conflicts list|resolve <id> --keep <digest>` | conflicts |
 | `purge --entity <urn>|--source <s> --confirm` | `{removed, warning}` |
+| `media status [--source --chat --top N]` | `{summary: [{source, availability, count, declared_bytes, hashed, reason}], restored_blob_files, chats_with_most_unavailable: [{chat_urn, chat_label, source, unavailable, not_downloaded, missing, not_exported, unknown, declared_bytes, last_message_utc_ms}], reasons}` |
+| `media list [--availability --source --chat --since --until --limit --cursor]` | `[{urn, message_urn, chat_urn, chat_label, sender_urn, sender_label, source, sent_at_utc_ms, availability, kind, mime_type, declared_size, blob_sha256, source_path_hint, filename}]` newest first |
 
 ## Dates and zones
 
