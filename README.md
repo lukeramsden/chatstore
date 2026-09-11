@@ -5,10 +5,9 @@ searching it via SQLite FTS5, citing entities through stable URNs, and exporting
 password-encrypted monthly archives that can rebuild the cache on another machine without
 either source app.
 
-Status: v0.1.0. The final acceptance test (`scripts/acceptance.py`) passes against real local
-sources. Durable contracts live in [specs/](specs/); the system as built is described in
-[docs/](docs/README.md) (overview, architecture, sources, operations, security, integration,
-decisions, testing, history).
+Durable contracts live in [specs/](specs/); the system is described in [docs/](docs/README.md)
+(overview, architecture, sources, operations, security, integration, decisions, testing, history).
+The end-to-end acceptance test (`scripts/acceptance.py`) runs against real local sources.
 
 ## Quick start (macOS)
 
@@ -47,7 +46,23 @@ Every command takes `--json` and returns the `chatstore-cli-v1` envelope
 ([specs/cli-json.md](specs/cli-json.md)). Exit codes: 0 ok · 1 failure · 2 usage · 3 permission ·
 4 incompatible · 5 partial · 6 conflict · 7 invalid archive · 8 not found · 9 not initialised.
 
-An agent skill that uses only the CLI is in [skills/chatstore/SKILL.md](skills/chatstore/SKILL.md).
+## Agent skill
+
+An agent skill that uses only the CLI lives in [skills/chatstore/SKILL.md](skills/chatstore/SKILL.md).
+Install it with the [skills CLI](https://skills.sh) for any supported agent (Claude Code, Cursor,
+Codex, Pi, …):
+
+```sh
+npx skills add lukeramsden/chatstore              # interactive: pick agents and scope
+npx skills add lukeramsden/chatstore -g -y        # global install, no prompts
+```
+
+No separate setup is needed: the skill ships with `scripts/install.sh`, which the agent runs on
+first use if `chatstore` is missing. It installs the CLI from GitHub, runs `chatstore init`,
+downloads the verified Apple Messages helper and runs `chatstore doctor`. You will be asked to
+grant Full Disk Access and to approve the first `chatstore sync`. The skill never reads the
+cache or source databases directly; exports, imports, identity links and purges require your
+approval.
 
 ## Layout
 

@@ -10,17 +10,23 @@ SQLite/FTS5 cache on the user's machine and gives every record a stable `urn:uui
 This skill is a **client of the CLI**. Do not query the cache database or the source
 databases directly, and never open `~/Library/Messages/chat.db` or the WhatsApp container yourself.
 
-## Installation (one-time, by the user)
+## Setup (run once, automatically)
+
+Before the first use, check `command -v chatstore`. If it is missing, or `chatstore --json doctor`
+reports exit code 9 (not initialised) or a missing helper, run the bootstrap script that ships
+with this skill:
 
 ```sh
-pipx install chatstore            # or: pip install --user chatstore
-scripts/build-helper.sh           # Rust helper for Apple Messages body decoding (needs cargo)
-chatstore init                    # creates the data dir (default: ~/Library/Application Support/chatstore on macOS)
-chatstore doctor                  # confirms Full Disk Access, schema compatibility, helper
-chatstore sync                    # first sync of both sources (minutes); later syncs are incremental
+sh <skill-dir>/scripts/install.sh     # <skill-dir> is the directory containing this SKILL.md
 ```
 
-If `chatstore` is not on `PATH`, ask the user where it is installed; do not guess machine paths.
+It is idempotent and macOS-only. It installs the CLI from GitHub (`pipx`, falling back to
+`pip --user`), runs `chatstore init` (data dir: `~/Library/Application Support/chatstore`),
+downloads the sha256-verified Apple Messages helper, then runs `chatstore doctor`. Tell the
+user what it did. If `doctor` reports exit code 3, the user must grant Full Disk Access to the
+terminal; do not try to work around it. Then ask before running the first `chatstore sync`
+(minutes; later syncs are incremental).
+
 `CHATSTORE_DATA_DIR` or `--data-dir` selects a non-default data directory.
 
 ## Always use `--json`
