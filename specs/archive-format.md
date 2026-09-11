@@ -106,11 +106,19 @@ member checksum, before any record is read.
   `source_observations` of those records travel with the message's bucket regardless of when
   they were observed.
 - Events without a message target use their own `at`.
-- Each bucket includes the `chats`, `identities`, `aliases`, `chat_memberships` needed to
-  interpret it (full records, marked `"stub": false`). Cross-bucket message references
-  (replies, reaction targets) are URNs plus a `stubs.jsonl` entry `{urn, kind}`.
+- With `manifest.context = "full"` (default) each bucket includes the `chats`, `identities`,
+  `aliases`, `chat_memberships` needed to interpret it. Cross-bucket message references
+  (replies, reaction targets) are URNs plus a `stubs.jsonl` entry `{urn, entity}`.
+- With `manifest.context = "minimal"` (`--context minimal`) chats and identities are shipped
+  only as stubs (`{urn, entity: chats|identities}`); the bucket is ~25% smaller and depends on
+  the catalogue for labels. Import reports unresolved context stubs in `problems`.
 - The catalogue holds scopes, mappings, people, identity_links, and all chats/identities.
-  A full restore imports catalogue + buckets; a bucket alone is still interpretable.
+  A full restore imports catalogue + buckets; a full-context bucket alone is still interpretable.
+- A bucket's `content_digest` covers only its **bucketed** records (messages, parts,
+  attachments, events, blobs) — not the context it carries. Renaming a chat therefore produces
+  a new catalogue revision, not a new revision of every month. The catalogue's digest covers
+  everything it holds. `content_digest` also appends `|media=<policy>` and, when not full,
+  `|context=<mode>` so different policies are distinct revisions.
 
 ## Revisions and lineage
 

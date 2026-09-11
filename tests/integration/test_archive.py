@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import zipfile
 from pathlib import Path
 
@@ -188,3 +189,50 @@ def test_revision_supersedes_and_branch_conflict(world, capsys, tmp_path):
     code, e = run(capsys, "archive", "import", str(out3))
     assert code == 6
     assert all(r["action"] == "branch_conflict" for r in e["data"])
+
+
+def test_minimal_context_and_stable_bucket_digests(world, capsys, tmp_path):
+    _sync(capsys, world)
+    out_full, out_min = tmp_path / "full", tmp_path / "min"
+    code, e = run(capsys, "archive", "export", "-o", str(out_full))
+    assert code == 0
+    # renaming a chat changes the catalogue but not the month buckets
+    c = sqlite3.connect(world["wa"] / "ChatStorage.sqlite")
+    c.execute("UPDATE ZWACHATSESSION SET ZPARTNERNAME='Renamed Group' WHERE ZSESSIONTYPE=1")
+    c.commit()
+    c.close()
+    code, e = run(capsys, "sync", "--source", "whatsapp", "--mode", "full")
+    assert code == 0
+    code, e = run(capsys, "archive", "export", "-o", str(out_full))
+    assert code == 0
+    actions = {r["kind"]: r["action"] for r in e["data"]["archives"]}
+    assert actions["catalogue"] == "written" and actions["bucket"] == "unchanged"
+    # minimal context: buckets carry stubs instead of chats/identities and are smaller
+    code, e = run(capsys, "archive", "export", "-o", str(out_min), "--context", "minimal")
+    assert code == 0
+    written = [r for r in e["data"]["archives"] if r["action"] == "written" and r["kind"] == "bucket"]
+    assert written and all(r["counts"].get("chats", 0) == 0 and r["counts"].get("identities", 0) == 0 and r["counts"]["stubs"] > 0 for r in written)
+    full_size = sum(p.stat().st_size for p in out_full.glob("*-20*-r0001.zip"))
+    min_size = sum(p.stat().st_size for p in out_min.glob("*-20*-r0002.zip"))
+    assert 0 < min_size < full_size
+    # restore: catalogue + minimal buckets give the same current view as the source
+    src_view = _current(world["src"])
+    os.environ["CHATSTORE_DATA_DIR"] = str(world["dst"])
+    catalogue = max(out_full.glob("*-catalogue-*.zip"))  # unchanged by the minimal export, so not rewritten
+    code, e = run(capsys, "archive", "import", str(catalogue), str(out_min))
+    assert code == 0 and all(r["unresolved_refs"] == 0 for r in e["data"]), [(r["label"], r["problems"]) for r in e["data"]]
+    assert _current(world["dst"]) == src_view
+    # a minimal bucket alone imports but says what is missing
+    lone = tmp_path / "lone-data"
+    os.environ["CHATSTORE_DATA_DIR"] = str(lone)
+    bucket_file = next(p for p in out_min.glob("*.zip") if "catalogue" not in p.name)
+    code, e = run(capsys, "archive", "import", str(bucket_file))
+    assert code == 0 and e["data"][0]["unresolved_refs"] > 0 and any("catalogue" in p for p in e["data"][0]["problems"])
+
+
+def _current(dd: Path) -> set[tuple[str, str]]:
+    c = Cache(dd / "cache.sqlite3", readonly=True)
+    try:
+        return set(c.conn.execute("SELECT urn, revision_digest FROM records WHERE kind!='sync_runs'").fetchall())
+    finally:
+        c.close()

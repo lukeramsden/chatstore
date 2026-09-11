@@ -22,6 +22,11 @@ from .container import DEFAULT_LIMITS, TarBuilder
 Progress = Callable[[str], None]
 
 
+# Records a bucket carries only so it can be read on its own; the catalogue is their authority.
+CONTEXT_KINDS = frozenset({"accounts", "identities", "aliases", "chats", "chat_memberships", "sync_runs"})
+CONTEXT_MODES = ("full", "minimal")
+
+
 @dataclass
 class BucketPlan:
     bucket: M.Bucket
@@ -30,11 +35,16 @@ class BucketPlan:
     blobs: list[dict[str, Any]] = field(default_factory=list)  # attachment records with availability=available
     sync_runs: set[str] = field(default_factory=set)
     content_digest: str = ""
+    context: str = "full"
 
     def pairs(self) -> list[tuple[str, str]]:
+        """(urn, digest) pairs that define this archive's content. Buckets exclude context records,
+        so renaming a chat does not create a new revision of every month; the catalogue covers them."""
         out: list[tuple[str, str]] = []
         for k, recs in self.records.items():
             if k in ("revisions", "source_observations"):
+                continue
+            if self.bucket.kind != "catalogue" and k in CONTEXT_KINDS:
                 continue
             out.extend((r["urn"], r["revision_digest"]) for r in recs)
         return out
@@ -87,8 +97,12 @@ def _revisions_and_observations(cache: Cache, plan: BucketPlan, urns: set[str]) 
                 plan.sync_runs.add(r[10])
 
 
-def collect_bucket(cache: Cache, bucket: M.Bucket) -> BucketPlan:
-    plan = BucketPlan(bucket)
+def collect_bucket(cache: Cache, bucket: M.Bucket, *, context: str = "full") -> BucketPlan:
+    """context='full': carry chats/identities/memberships/aliases needed to read the bucket alone.
+    context='minimal': carry only stubs for them (smaller archives; requires the catalogue on restore)."""
+    if context not in CONTEXT_MODES:
+        raise ValueError(f"context must be one of {CONTEXT_MODES}")
+    plan = BucketPlan(bucket, context=context)
     if bucket.kind == "undated":
         msg_urns = [r[0] for r in _rows(cache, "SELECT urn FROM messages_idx WHERE utc_ms IS NULL ORDER BY urn")]
         ev_rows = _rows(cache, "SELECT urn FROM events_idx WHERE at_ms IS NULL AND (target_urn IS NULL OR target_urn NOT IN (SELECT urn FROM messages_idx)) ORDER BY urn")
@@ -145,6 +159,17 @@ def collect_bucket(cache: Cache, bucket: M.Bucket) -> BucketPlan:
             ident_urns.add(u)
         else:
             plan.stubs.append({"urn": u, "entity": r["entity"]})
+    if context == "minimal":
+        plan.stubs += [{"urn": u, "entity": "chats"} for u in sorted(chat_urns)]
+        plan.stubs += [{"urn": u, "entity": "identities"} for u in sorted(ident_urns - {""})]
+        plan.records["accounts"] = list(cache.iter_records("accounts"))
+        shas = {a["blob_sha256"] for a in plan.blobs}
+        plan.records["blobs"] = [b for b in cache.iter_records("blobs") if b.get("sha256") in shas]
+        prov = msg_set | set(dep["message_parts"]) | set(dep["attachments"]) | set(dep["events"])
+        _revisions_and_observations(cache, plan, prov)
+        plan.records["sync_runs"] = _records(cache, plan.sync_runs)
+        plan.content_digest = M.content_digest(plan.pairs())
+        return plan
     memberships: list[str] = []
     for i in range(0, len(chat_urns), 500):
         chunk = sorted(chat_urns)[i:i + 500]
@@ -256,7 +281,7 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
         elif av == "not_downloaded":
             media_counts["not_downloaded"] += 1
     # content digest includes the media policy so text vs media exports are distinct revisions
-    content = plan.content_digest + f"|media={media}"
+    content = plan.content_digest + f"|media={media}" + (f"|context={plan.context}" if plan.context != "full" else "")
     if prev and prev["content_digest"] == content and not force:
         return ExportResult(bucket.kind, bucket.label, "unchanged", export_id=prev["export_id"], revision=prev["revision"])
     revision = (prev["revision"] + 1) if prev else 1
@@ -326,6 +351,7 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
             scope_mappings=list(ident.scope_mappings), observation=observation, coverage=coverage,
             adapter_versions=adapter_versions, counts=counts, attachment_policy=media, media=media_counts,
             payload_digest="", limits=dict(DEFAULT_LIMITS), members=members, content_digest=content)
+        manifest["context"] = plan.context
         # write members first into the TAR (manifest first requires digest; so compute checksums first)
         if progress:
             progress(f"{bucket.label}: writing {sum(counts.values())} records, {len(blob_files)} blobs")

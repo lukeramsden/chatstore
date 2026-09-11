@@ -62,7 +62,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `read <chat-urn> [--since --until --limit --cursor]` | `[message summaries with text, parts, attachments, events]` |
 | `resolve <urn|citation-json>` | `{urn, status, kind, record, aliases, revisions: [{digest, observed_at}]}` |
 | `context <message-urn> [--before N --after N]` | `{target, before: [...], after: [...]}` |
-| `archive export [--since --until --media text|available-media --output DIR --force --catalogue-only --no-catalogue]` | `{output, written, archives: [{kind, label, action: written|unchanged|skipped_empty, path, export_id, revision, supersedes, counts, media, coverage}]}` |
+| `archive export [--since --until --media text|available-media --context full|minimal --output DIR --force --catalogue-only --no-catalogue]` | `{output, written, archives: [{kind, label, action: written|unchanged|skipped_empty, path, export_id, revision, supersedes, counts, media, coverage}]}` |
 | `archive verify <path|dir>... [--no-schema]` | `[{path, ok, wrong_password, problems: [...], counts, schema_errors, manifest}]` (exit 7 if any not ok) |
 | `archive import <path|dir>... [--no-media --stop-on-conflict]` | `[{path, action: imported|already_imported|superseded|branch_conflict|invalid|wrong_password|schema_error, export_id, kind, label, revision, outcomes: {inserted, updated, unchanged, older, conflict}, retired, unresolved_refs, blobs_restored, media_not_restored, conflicts, problems, exit_code}]` (exit 6 on branch/content conflicts, 7 on invalid) |
 | `archive password suggest|set|status|clear` | `suggest` prints to a tty only and refuses `--json`; `set` → `{stored, service, account}`; `status` → `{keychain, password_file, keychain_available}` |

@@ -53,7 +53,7 @@ def cmd_archive_export(ctx: Any) -> Any:
         plans.append(E.collect_catalogue(cache))
     if not a.catalogue_only:
         for b in E.plan_buckets(cache, since, until):
-            plans.append(E.collect_bucket(cache, b))
+            plans.append(E.collect_bucket(cache, b, context=a.context))
     prog = _progress(ctx)
     for plan in plans:
         r = E.write_archive(cache, ctx.data_dir, ctx.cfg, ctx.ident, plan, output=output, password=pw, media=a.media,
@@ -372,6 +372,8 @@ def register_extra(sub: Any) -> None:
     s.add_argument("--since")
     s.add_argument("--until")
     s.add_argument("--media", choices=["text", "available-media"], default="text")
+    s.add_argument("--context", choices=["full", "minimal"], default="full",
+                   help="full: each month carries the chats/identities it needs; minimal: stubs only (smaller, needs the catalogue).")
     s.add_argument("--force", action="store_true", help="Write a new revision even if content is unchanged.")
     s.add_argument("--catalogue-only", action="store_true")
     s.add_argument("--no-catalogue", action="store_true")

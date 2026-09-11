@@ -187,9 +187,15 @@ def import_archive(cache: Cache, dd: DataDir, ident: Identity, path: Path, passw
             cache.conn.executemany("INSERT OR IGNORE INTO bucket_membership(export_id, urn) VALUES (?,?)",
                                    [(m["export_id"], u) for u in member_urns])
             unresolved = 0
+            unresolved_context = 0
             for st in recs.get("stubs", []):
                 if cache.conn.execute("SELECT 1 FROM records WHERE urn=?", (st["urn"],)).fetchone() is None:
                     unresolved += 1
+                    if st.get("entity") in ("chats", "identities"):
+                        unresolved_context += 1
+            if unresolved_context and m.get("context") == "minimal":
+                base.problems.append(f"{unresolved_context} chat/identity reference(s) unresolved: this archive carries "
+                                     "minimal context; import the catalogue archive to label them")
         # 7. blobs (outside the transaction: file copies)
         restored = 0
         if restore_media:
