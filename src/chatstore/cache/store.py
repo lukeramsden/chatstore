@@ -5,6 +5,7 @@ Writers are serialised with BEGIN IMMEDIATE; readers use WAL snapshots.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from collections.abc import Iterable, Iterator
@@ -30,6 +31,11 @@ class Cache:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA busy_timeout=30000")
         self.conn.execute("PRAGMA foreign_keys=ON")
+        if not readonly:
+            # WAL + NORMAL: a crash may lose the last commit but never corrupts; sync simply re-runs.
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            self.conn.execute("PRAGMA cache_size=-65536")
+            self.conn.execute("PRAGMA temp_store=MEMORY")
         self.readonly = readonly
         if not readonly:
             migrate(self.conn)
@@ -52,6 +58,22 @@ class Cache:
         else:
             self.conn.execute("COMMIT")
 
+    @contextmanager
+    def bulk(self) -> Iterator[None]:
+        """Tune for a long run of large write transactions (sync, import): defer WAL checkpoints
+        and use a large page cache; checkpoint and truncate the WAL on exit."""
+        if self.readonly:
+            raise RuntimeError("cache opened read-only")
+        self.conn.execute("PRAGMA wal_autocheckpoint=0")
+        self.conn.execute("PRAGMA cache_size=-524288")
+        try:
+            yield
+        finally:
+            self.conn.execute("PRAGMA wal_autocheckpoint=1000")
+            self.conn.execute("PRAGMA cache_size=-65536")
+            with contextlib.suppress(sqlite3.OperationalError):
+                self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     # ---- writes -------------------------------------------------------------------------
 
     def upsert(
@@ -70,34 +92,59 @@ class Cache:
         `prior_digests` (the importing archive's known history for this URN); otherwise a
         conflict is recorded and the current record kept.
         """
+        cur = self.conn.execute("SELECT revision_digest FROM records WHERE urn=?", (rec["urn"],)).fetchone()
+        return self._upsert(rec, cur["revision_digest"] if cur else None, observed_at, sync_run, prior_digests, origin)
+
+    def current_digests(self, urns: Iterable[str]) -> dict[str, str]:
+        """Current revision digest per URN (missing URNs are absent from the result)."""
+        out: dict[str, str] = {}
+        batch = list(urns)
+        for i in range(0, len(batch), 500):
+            chunk = batch[i:i + 500]
+            q = f"SELECT urn, revision_digest FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
+            out.update((r[0], r[1]) for r in self.conn.execute(q, chunk))
+        return out
+
+    def upsert_many(self, recs: list[dict[str, Any]], *, observed_at: int | None = None,
+                    sync_run: str | None = None, origin: str = "sync") -> dict[str, int]:
+        """Batch form of upsert(): one lookup for the whole batch. Must run inside write()."""
+        digests = self.current_digests(r["urn"] for r in recs)
+        outcomes: dict[str, int] = {}
+        for rec in recs:
+            o = self._upsert(rec, digests.get(rec["urn"]), observed_at, sync_run, None, origin)
+            digests[rec["urn"]] = rec["revision_digest"]
+            outcomes[o] = outcomes.get(o, 0) + 1
+        return outcomes
+
+    def _upsert(self, rec: dict[str, Any], cur_digest: str | None, observed_at: int | None, sync_run: str | None,
+                prior_digests: set[str] | None, origin: str) -> str:
         conn = self.conn
         observed_at = observed_at if observed_at is not None else now_ms()
         digest = rec.get("revision_digest") or revision_digest(rec)
         rec["revision_digest"] = digest
         urn = rec["urn"]
         kind = rec["entity"]
-        cur = conn.execute("SELECT revision_digest, record FROM records WHERE urn=?", (urn,)).fetchone()
         stored = dict(rec)
         stored["observed_at"] = observed_at
         stored["sync_run"] = sync_run
-        if cur is None:
+        if cur_digest is None:
             conn.execute(
                 "INSERT INTO records(urn, kind, source, account_scope, revision_digest, observed_at, sync_run, tombstoned, record) VALUES (?,?,?,?,?,?,?,?,?)",
                 (urn, kind, rec.get("source"), rec.get("account_scope"), digest, observed_at, sync_run,
                  1 if rec.get("tombstone") else 0, _j(stored)),
             )
             self._add_revision(urn, kind, digest, observed_at, sync_run, None, stored)
-            self._index(kind, stored)
+            self._index(kind, stored, new=True)
             return "inserted"
-        if cur["revision_digest"] == digest:
+        if cur_digest == digest:
             conn.execute("UPDATE records SET observed_at=?, sync_run=? WHERE urn=?", (observed_at, sync_run, urn))
             return "unchanged"
         # Differing content.
-        if origin == "import" and self._is_ancestor(urn, cur["revision_digest"], digest):
+        if origin == "import" and self._is_ancestor(urn, cur_digest, digest):
             return "older"  # we already moved past this revision
-        if origin == "import" and cur["revision_digest"] not in (prior_digests or set()):
+        if origin == "import" and cur_digest not in (prior_digests or set()):
             self.add_conflict("content", urn, {
-                "current_digest": cur["revision_digest"], "incoming_digest": digest,
+                "current_digest": cur_digest, "incoming_digest": digest,
                 "incoming_observed_at": observed_at, "incoming_sync_run": sync_run,
             })
             # keep the incoming content as a non-current revision for inspection
@@ -107,7 +154,7 @@ class Cache:
             "UPDATE records SET revision_digest=?, observed_at=?, sync_run=?, tombstoned=?, record=?, source=?, account_scope=? WHERE urn=?",
             (digest, observed_at, sync_run, 1 if rec.get("tombstone") else 0, _j(stored), rec.get("source"), rec.get("account_scope"), urn),
         )
-        self._add_revision(urn, kind, digest, observed_at, sync_run, cur["revision_digest"], stored)
+        self._add_revision(urn, kind, digest, observed_at, sync_run, cur_digest, stored)
         self._index(kind, stored)
         return "updated"
 
@@ -132,22 +179,22 @@ class Cache:
         if kind == "messages" and cur.rowcount == 1 and cur.lastrowid is not None:
             fts.add_revision_text(self.conn, cur.lastrowid, stored.get("text"))
 
-    def _index(self, kind: str, r: dict[str, Any]) -> None:
+    def _index(self, kind: str, r: dict[str, Any], *, new: bool = False) -> None:
         c = self.conn
         urn = r["urn"]
         if kind == "messages":
             sent = r.get("sent_at") or r.get("received_at") or {}
-            c.execute(
+            rowid = c.execute(
                 """INSERT INTO messages_idx(urn, chat_urn, sender_urn, utc_ms, kind, transport, source, account_scope, has_attachments, is_from_me)
                    VALUES (?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(urn) DO UPDATE SET chat_urn=excluded.chat_urn, sender_urn=excluded.sender_urn, utc_ms=excluded.utc_ms,
                      kind=excluded.kind, transport=excluded.transport, source=excluded.source, account_scope=excluded.account_scope,
-                     has_attachments=excluded.has_attachments, is_from_me=excluded.is_from_me""",
+                     has_attachments=excluded.has_attachments, is_from_me=excluded.is_from_me
+                   RETURNING id""",
                 (urn, r.get("chat_urn"), r.get("sender_urn"), sent.get("utc_ms"), r["kind"], r["transport"],
                  r["source"], r["account_scope"], 1 if r.get("has_attachments") else 0, 1 if r.get("is_from_me") else 0),
-            )
-            rowid = c.execute("SELECT id FROM messages_idx WHERE urn=?", (urn,)).fetchone()[0]
-            fts.set_message_text(c, rowid, None if r.get("tombstone") else r.get("text"))
+            ).fetchone()[0]
+            fts.set_message_text(c, rowid, None if r.get("tombstone") else r.get("text"), fresh=new)
         elif kind == "events":
             at = r.get("at") or {}
             c.execute("INSERT OR REPLACE INTO events_idx(urn, target_urn, kind, at_ms, actor_urn) VALUES (?,?,?,?,?)",
@@ -167,6 +214,19 @@ class Cache:
         elif kind == "aliases":
             c.execute("INSERT OR REPLACE INTO aliases_idx(urn, old_urn, new_urn) VALUES (?,?,?)",
                       (urn, r["old_urn"], r["new_urn"]))
+
+    _OBSERVE_SQL = """INSERT INTO source_observations(entity_urn, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(entity_urn, source, account_scope, native_table) DO UPDATE SET
+                 native_row_ids=excluded.native_row_ids, fingerprint=excluded.fingerprint,
+                 adapter_version=excluded.adapter_version, observed_at=excluded.observed_at,
+                 sync_run=excluded.sync_run, present=excluded.present"""
+
+    def observe_many(self, rows: list[tuple[Any, ...]]) -> None:
+        """rows: (entity_urn, source, scope, native_table, native_row_ids, native_key, fingerprint,
+        adapter_version, observed_at, sync_run, minted). Must run inside write()."""
+        self.conn.executemany(self._OBSERVE_SQL, [
+            (r[0], r[1], r[2], r[3], _j(r[4]), r[5], 1 if r[10] else 0, r[6], r[7], r[8], r[9], "present") for r in rows])
 
     def observe(self, entity_urn: str, source: str, account_scope: str, native_table: str,
                 native_row_ids: list[Any], native_key: str | None, fingerprint: str,

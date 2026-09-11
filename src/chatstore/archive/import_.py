@@ -116,7 +116,7 @@ def import_archive(cache: Cache, dd: DataDir, ident: Identity, path: Path, passw
             if name.startswith("records/"):
                 recs[name.removeprefix("records/").removesuffix(".jsonl")] = _iter_jsonl(data)
         outcomes: dict[str, int] = {}
-        with cache.write():
+        with cache.bulk(), cache.write():
             # 1. revisions first so supersedes chains exist for upsert()'s ancestry check
             prior: dict[str, set[str]] = {}
             for rv in recs.get("revisions", []):

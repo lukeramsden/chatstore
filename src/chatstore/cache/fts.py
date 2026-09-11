@@ -33,8 +33,9 @@ def rebuild(conn: sqlite3.Connection) -> int:
     return int(n)
 
 
-def set_message_text(conn: sqlite3.Connection, message_rowid: int, text: str | None) -> None:
-    conn.execute("DELETE FROM messages_fts WHERE rowid=?", (message_rowid,))
+def set_message_text(conn: sqlite3.Connection, message_rowid: int, text: str | None, *, fresh: bool = False) -> None:
+    if not fresh:
+        conn.execute("DELETE FROM messages_fts WHERE rowid=?", (message_rowid,))
     if text:
         conn.execute("INSERT INTO messages_fts(rowid, text) VALUES (?, ?)", (message_rowid, text))
 

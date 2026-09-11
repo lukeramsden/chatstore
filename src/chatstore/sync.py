@@ -14,7 +14,7 @@ from .canonical.records import now_ms, record, restamp
 from .config import Config, Identity
 from .paths import DataDir
 
-BATCH = 2000
+BATCH = 5000
 
 
 @dataclass
@@ -86,22 +86,24 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
             if not batch:
                 return
             with cache.write():
+                cache.upsert_many([e.record for e in batch], observed_at=started, sync_run=run_urn)
+                obs = []
                 for e in batch:
-                    rec = e.record
-                    cache.upsert(rec, observed_at=started, sync_run=run_urn)
                     if e.observation:
                         o = e.observation
                         seen_tables.add(o.native_table)
-                        cache.observe(rec["urn"], adapter.source, scope, o.native_table, o.native_row_ids, o.native_key,
-                                      o.fingerprint, adapter.version, started, run_urn, minted=o.minted)
+                        obs.append((e.record["urn"], adapter.source, scope, o.native_table, o.native_row_ids, o.native_key,
+                                    o.fingerprint, adapter.version, started, run_urn, o.minted))
+                cache.observe_many(obs)
             batch.clear()
 
-        for n, emit in enumerate(adapter.extract(snap, scope, cfg, stats, checkpoints, full=full), start=1):
-            batch.append(emit)
-            if len(batch) >= BATCH:
-                flush()
-                say(f"imported {n} records")
-        flush()
+        with cache.bulk():
+            for n, emit in enumerate(adapter.extract(snap, scope, cfg, stats, checkpoints, full=full), start=1):
+                batch.append(emit)
+                if len(batch) >= BATCH:
+                    flush()
+                    say(f"imported {n} records")
+            flush()
         if stats.full_scan and mode == "incremental":
             run["mode"] = mode = "full_reconcile"
         if full or mode in ("initial", "full_reconcile"):
