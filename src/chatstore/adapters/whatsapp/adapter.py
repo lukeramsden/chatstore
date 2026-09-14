@@ -198,7 +198,11 @@ class WhatsAppAdapter:
             stats.bump("chat_memberships")
 
         # --- identities (all JIDs seen anywhere) -------------------------------------------
+        # Alias pairs come from LID.sqlite / ContactsV2.sqlite; the phone side often never appears
+        # in ChatStorage, so include both sides here or the alias target would dangle (issue #3).
+        alias_pairs = self._alias_pairs(snap)
         all_jids = set(names) | member_jids | {j for j, _ in chat_by_pk.values()}
+        all_jids |= {j for pair in alias_pairs for j in pair}
         for r in conn.execute("SELECT DISTINCT ZFROMJID FROM ZWAMESSAGE WHERE ZFROMJID IS NOT NULL"):
             all_jids.add(U.whatsapp_jid(r[0]))
         for r in conn.execute("SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZTOJID IS NOT NULL"):
@@ -212,7 +216,7 @@ class WhatsAppAdapter:
         stats.bump("identities", len(all_jids) + 1)
 
         # --- aliases: LID <-> phone evidence ----------------------------------------------
-        yield from self._aliases(snap, scope, stats, urn)
+        yield from self._aliases(alias_pairs, scope, stats, urn)
 
         # --- messages ---------------------------------------------------------------------
         yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full)
@@ -231,7 +235,8 @@ class WhatsAppAdapter:
             stats.bump("events")
         conn.close()
 
-    def _aliases(self, snap: Snapshot, scope: str, stats: ExtractStats, urn: Any) -> Iterator[Emit]:
+    def _alias_pairs(self, snap: Snapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
+        """(lid_jid, phone_jid) -> evidence, from LID.sqlite and ContactsV2.sqlite."""
         pairs: dict[tuple[str, str], list[dict[str, Any]]] = {}
         if "LID" in snap.files:
             c = sqlite3.connect(snap.files["LID"].snapshot_path)
@@ -251,6 +256,10 @@ class WhatsAppAdapter:
                         pairs.setdefault((U.whatsapp_jid(lid), U.whatsapp_jid(wa)), []).append({"type": "address_book", "detail": "ContactsV2.sqlite/ZWAADDRESSBOOKCONTACT"})
             finally:
                 c.close()
+        return pairs
+
+    def _aliases(self, pairs: dict[tuple[str, str], list[dict[str, Any]]], scope: str, stats: ExtractStats,
+                 urn: Any) -> Iterator[Emit]:
         # Detect ambiguity: one LID mapping to multiple phones.
         by_lid: dict[str, set[str]] = {}
         for lid, phone in pairs:

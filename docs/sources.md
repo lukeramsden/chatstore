@@ -40,7 +40,9 @@ Interpretation rules, each backed by the validation in source-findings:
   messages had duplicate rows; none differed in date, sender or direction.
 - **Chat identity** is the chat JID; **identity** is the participant JID. LID (`@lid`) ↔ phone
   (`@s.whatsapp.net`) evidence becomes `aliases` records (~9.7k on the test machine). Identity input
-  never changes because an alias later resolves a sender differently.
+  never changes because an alias later resolves a sender differently. Both sides of every alias
+  pair get an `identities` record, even when the phone JID never appears in `ChatStorage.sqlite`,
+  so alias targets always resolve.
 - **Memberships**: group chats take members from `ZWAGROUPMEMBER`. Direct, status and broadcast
   chats have no rows there, so the adapter synthesises two memberships per chat: the chat's own JID
   (the counterpart, evidence `chat_session_jid`) and the `me` identity (evidence `chat_session_me`).

@@ -80,3 +80,20 @@ def test_issue_2_messages_chat_without_display_name_is_not_labelled_with_raw_key
     assert e["data"][0]["chat_label"] == direct["label"]
     code, e = run(capsys, "read", direct["urn"])
     assert code == 0 and e["data"] and e["data"][0]["chat_label"] == direct["label"]
+
+
+def test_issue_3_whatsapp_lid_alias_target_identity_exists(wa_env, capsys):
+    """#3: the phone-JID side of a LID->phone alias must resolve even when that JID only appears
+    in LID.sqlite / ContactsV2.sqlite and never in ChatStorage.sqlite."""
+    code, e = run(capsys, "chats", "--source", "whatsapp")
+    bob = next(c for c in e["data"] if c["label"] == "Bob Lid")
+    lid_urn = next(p["urn"] for p in bob["participants"] if p["label"] != "me")
+    code, e = run(capsys, "resolve", lid_urn)
+    assert code == 0 and e["data"]["record"]["kind"] == "jid_lid"
+    targets = e["data"]["aliases"]["to"]
+    assert len(targets) == 1
+    code, e = run(capsys, "resolve", targets[0])
+    assert code == 0, e
+    assert e["data"]["status"] == "current"
+    assert e["data"]["record"]["address"] == "15550002222@s.whatsapp.net"
+    assert e["data"]["record"]["kind"] == "jid_phone"
