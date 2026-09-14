@@ -52,6 +52,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 
 | Command | `data` |
 | --- | --- |
+| `version` | `{version, envelope, python, sqlite, platform}` |
 | `doctor` | `{data_dir, python, sqlite, fts5, sources: [{source, path_found, readable, schema_ok, schema_version, permission_hint, wal_present}], helper: {found, version}, keychain: bool}` |
 | `init` | `{data_dir, created: bool, scopes: [{source, scope}]}` |
 | `sync --source all|whatsapp|messages [--mode incremental|full]` | `sync_runs` record(s) |

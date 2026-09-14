@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .. import __version__
 from ..config import (
     Config,
     Identity,
@@ -87,6 +88,12 @@ def cmd_doctor(ctx: Ctx) -> Result:
         return "\n".join(lines)
 
     return Result(data, code, human=human, warnings=[{"code": "source_problem", "message": p} for p in problems])
+
+
+def cmd_version(ctx: Ctx) -> Result:
+    data = {"version": __version__, "envelope": ENVELOPE, "python": platform.python_version(),
+            "sqlite": sqlite3.sqlite_version, "platform": platform.platform()}
+    return Result(data, human=lambda d: f"chatstore {d['version']} (envelope {d['envelope']}, python {d['python']}, sqlite {d['sqlite']})")
 
 
 def cmd_init(ctx: Ctx) -> Result:
@@ -378,8 +385,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--data-dir", help="Override the data directory (also CHATSTORE_DATA_DIR).")
     p.add_argument("--json", action="store_true", help="Emit the chatstore-cli-v1 JSON envelope.")
     p.add_argument("--quiet", action="store_true", help="Suppress progress output on stderr.")
+    p.add_argument("--version", action="version", version=f"chatstore {__version__}")
     sub = p.add_subparsers(dest="command", metavar="command")
 
+    sub.add_parser("version", help="Show the chatstore version.").set_defaults(fn=cmd_version)
     sub.add_parser("doctor", help="Check sources, permissions, helper and SQLite features.").set_defaults(fn=cmd_doctor)
     s = sub.add_parser("init", help="Create the data directory, config and account scopes.")
     s.add_argument("--timezone")
@@ -475,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
     command = " ".join(str(v) for k, v in vars(args).items() if k == "command" or k.endswith("_command") and v)
     try:
         res = args.fn(ctx)
-        fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init") and ctx.data_dir.exists() else None
+        fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init", "version") and ctx.data_dir.exists() else None
         return emit(args, command, res, fresh)
     except CliError as e:
         return emit(args, command, Result(None, e.code, errors=[{"code": e.err_code, "message": e.message}]), None)
