@@ -9,7 +9,7 @@ Requirements: macOS for ingestion (archive verify/import also runs on Linux/Wind
 SQLite with FTS5 (stock macOS Python has it; `doctor` checks).
 
 ```sh
-pipx install git+https://github.com/lukeramsden/chatstore@v1.1.0   # or pip install …
+pipx install git+https://github.com/lukeramsden/chatstore@v1.1.1   # or pip install …
 chatstore init
 chatstore helper install          # Apple Messages decoder, prebuilt, sha256-verified
 chatstore doctor

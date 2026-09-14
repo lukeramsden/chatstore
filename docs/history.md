@@ -93,6 +93,13 @@ failed first (`tests/integration/test_issue_regressions.py`), one commit per iss
 
 Existing caches need one `sync` per source to pick up the new WhatsApp records.
 
+## v1.1.1 — owner identity (2026-09-14)
+
+- #7 The WhatsApp owner's real phone/LID JIDs were `is_me: false`, so the owner appeared as a third
+  party in groups and in the "message yourself" chat. Owner JIDs are now detected from incoming
+  `ZTOJID`, closed over LID↔phone pairs, and flagged `is_me` (`b927be7`). One `sync` updates an
+  existing cache.
+
 ## Plan corrections worth remembering
 
 | Plan assumption | What evidence showed |

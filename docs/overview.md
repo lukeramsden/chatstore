@@ -12,7 +12,7 @@ that CLI, not a second implementation.
 
 ## Status
 
-Released as `v1.0.0` (current: `v1.1.0`); the contracts in `specs/` are frozen. All four delivery phases described in [history.md](history.md) are
+Released as `v1.0.0` (current: `v1.1.1`); the contracts in `specs/` are frozen. All four delivery phases described in [history.md](history.md) are
 implemented; the final acceptance test (`scripts/acceptance.py`, 17 checks) passes against real
 local sources, and a full export → restore round trip of ~662k records yields an identical current
 view. Known gaps are listed in [decisions.md](decisions.md#deferred--known-gaps).
