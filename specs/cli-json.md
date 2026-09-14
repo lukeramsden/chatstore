@@ -58,7 +58,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `sync --source all|whatsapp|messages [--mode incremental|full]` | `sync_runs` record(s) |
 | `status` | `{data_dir, scopes, sync_runs_latest, counts, coverage}` |
 | `search <query> [--since --until --source --chat --sender --person --transport --has-attachment --advanced --history]` | `[{urn, revision_digest, chat_urn, chat_label, sender_urn, sender_label, sent_at, transport, kind, snippet, provenance: {source, scope}}]` |
-| `chats [--source --since]` | `[{urn, kind, label, service, message_count, last_message_at, participants}]` |
+| `chats [--source --since --label --participant]` | `[{urn, kind, label, service, message_count, last_message_at, participants}]`. `--label` is a case-insensitive substring over the chat label and participant labels; `--participant` is an identity or person URN (a person's linked identities and all aliases are followed). |
 | `people` | `[{urn, label, identities: [{urn, address, kind, link_state}]}]` |
 | `read <chat-urn> [--since --until --limit --cursor --order asc\|desc]` | `[message summaries with text, parts, attachments, events]`. Oldest first by default; `--order desc` returns newest first (so `--limit N` is the last N) and `next_cursor` continues towards older messages. |
 | `resolve <urn|citation-json>` | `{urn, status, kind, record, aliases, revisions: [{digest, observed_at}]}` |

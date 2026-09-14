@@ -118,3 +118,29 @@ def test_issue_4_read_order_desc_returns_newest_first_with_cursor(wa_env, capsys
     assert code == 0
     assert [m["urn"] for m in d2["data"]] == all_urns[::-1][2:]
     assert d2["page"]["next_cursor"] is None
+
+
+def test_issue_5_chats_label_and_participant_filters(wa_env, capsys):
+    """#5: `chats --label` matches chat and participant labels case-insensitively;
+    `chats --participant` accepts an identity URN and follows aliases."""
+    code, e = run(capsys, "chats", "--source", "whatsapp")
+    assert code == 0 and len(e["data"]) == 3
+    group = next(c for c in e["data"] if c["chat_kind"] == "group")
+    bob = next(c for c in e["data"] if c["label"] == "Bob Lid")
+
+    code, e = run(capsys, "chats", "--label", "test grOUP")
+    assert code == 0 and [c["urn"] for c in e["data"]] == [group["urn"]]
+    # participant label match: Bob is the counterpart of his own chat and a member of the group
+    code, e = run(capsys, "chats", "--label", "BOB LID")
+    assert code == 0 and {c["urn"] for c in e["data"]} == {bob["urn"], group["urn"]}
+    code, e = run(capsys, "chats", "--label", "no such chat")
+    assert code == 0 and e["data"] == [] and e["page"]["next_cursor"] is None
+
+    bob_lid_urn = next(p["urn"] for p in bob["participants"] if p["label"] != "me")
+    code, e = run(capsys, "chats", "--participant", bob_lid_urn)
+    assert code == 0 and {c["urn"] for c in e["data"]} == {bob["urn"], group["urn"]}
+    # the phone-side alias of Bob's LID finds the same chats
+    _, r = run(capsys, "resolve", bob_lid_urn)
+    phone_urn = r["data"]["aliases"]["to"][0]
+    code, e = run(capsys, "chats", "--participant", phone_urn)
+    assert code == 0 and {c["urn"] for c in e["data"]} == {bob["urn"], group["urn"]}

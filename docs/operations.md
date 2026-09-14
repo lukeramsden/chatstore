@@ -77,7 +77,7 @@ chatstore status
 ```sh
 chatstore search "see you tomorrow" --since 2025-01-01 --until 2025-02-01 [--chat urn] [--sender urn] [--person urn]
                  [--kind message,reaction|all] [--has-attachment] [--history] [--advanced] [--limit N] [--cursor C]
-chatstore chats | chatstore people
+chatstore chats [--label substring] [--participant urn] | chatstore people
 chatstore read <chat-urn> [--since … --until …] [--order asc|desc] [--limit N] [--cursor C]
 chatstore context <message-urn> --before 5 --after 5
 chatstore resolve <urn | '{"urn":…,"revision_digest":…}'>

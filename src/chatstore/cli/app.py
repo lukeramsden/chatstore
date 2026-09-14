@@ -241,11 +241,13 @@ def cmd_search(ctx: Ctx) -> Result:
 
 
 def cmd_chats(ctx: Ctx) -> Result:
-    from ..cache.queries import list_chats
+    from ..cache.queries import expand_participant, list_chats
     cache = ctx.cache(readonly=True)
     limit = ctx.limit()
+    participants = expand_participant(cache, ctx.args.participant) if ctx.args.participant else None
     try:
-        items, cur = list_chats(cache, source=ctx.args.source, since_ms=ctx.parse_date(ctx.args.since), limit=limit, cursor=ctx.args.cursor)
+        items, cur = list_chats(cache, source=ctx.args.source, since_ms=ctx.parse_date(ctx.args.since), limit=limit,
+                                cursor=ctx.args.cursor, label=ctx.args.label, participant_urns=participants)
     except ValueError as e:
         raise CliError(EXIT_USAGE, "bad_cursor", str(e)) from e
     tz = ctx.tz()
@@ -425,6 +427,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("chats", help="List chats.")
     s.add_argument("--source", choices=SOURCES)
     s.add_argument("--since")
+    s.add_argument("--label", help="Case-insensitive substring of the chat label or any participant label.")
+    s.add_argument("--participant", help="Identity or person URN; matches chats they are a member of (aliases followed).")
     s.add_argument("--limit", type=int)
     s.add_argument("--cursor")
     s.set_defaults(fn=cmd_chats)

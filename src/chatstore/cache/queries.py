@@ -277,12 +277,33 @@ def context(cache: Cache, message_urn: str, before: int, after: int, max_chars: 
     return {"target": msgs[nb] if len(msgs) > nb else None, "before": msgs[:nb], "after": msgs[nb + 1:]}
 
 
-def list_chats(cache: Cache, *, source: str | None, since_ms: int | None, limit: int, cursor: str | None) -> tuple[list[dict[str, Any]], str | None]:
+def expand_participant(cache: Cache, urn: str) -> list[str]:
+    """Identity URNs to match memberships against: a person's linked identities or the identity
+    itself, each widened through aliases in both directions."""
+    rec = cache.get(urn)
+    base = cache.identities_of_person(urn) if rec and rec.get("entity") == "people" else [urn]
+    out: set[str] = set()
+    for u in base:
+        out.add(u)
+        out.update(cache.aliases_from(u))
+        out.update(cache.aliases_to(u))
+    return sorted(out)
+
+
+def list_chats(cache: Cache, *, source: str | None, since_ms: int | None, limit: int, cursor: str | None,
+               label: str | None = None, participant_urns: list[str] | None = None) -> tuple[list[dict[str, Any]], str | None]:
+    """List chats newest-activity first. `label` is a case-insensitive substring over the chat label
+    and its participants' labels; `participant_urns` keeps chats with a membership for any of them."""
     args: list[Any] = []
     where = "r.kind='chats'"
     if source:
         where += " AND r.source=?"
         args.append(source)
+    if participant_urns is not None:
+        if not participant_urns:
+            return [], None
+        where += f" AND r.urn IN (SELECT chat_urn FROM memberships_idx WHERE identity_urn IN ({','.join('?' * len(participant_urns))}))"
+        args.extend(participant_urns)
     having = ""
     if since_ms is not None:
         having = " HAVING max(m.utc_ms) >= ?"
@@ -303,8 +324,21 @@ def list_chats(cache: Cache, *, source: str | None, since_ms: int | None, limit:
                 return lm is None and r["urn"] > curn
             return lm is None or lm < cms or (lm == cms and r["urn"] > curn)
         rows = [r for r in rows if after(r)]
-    more = len(rows) > limit
+    if label:
+        # Labels are only known after hydration, so filter across all candidate rows before paging.
+        needle = label.casefold()
+        hydrated = _hydrate_chats(cache, rows)
+        rows = [r for r, h in zip(rows, hydrated)
+                if needle in (h["label"] or "").casefold()
+                or any(needle in (p["label"] or "").casefold() for p in h["participants"])]
+    has_next = len(rows) > limit
     rows = rows[:limit]
+    out = _hydrate_chats(cache, rows)
+    next_cursor = encode_cursor(rows[-1]["last_ms"], rows[-1]["urn"]) if has_next and rows else None
+    return out, next_cursor
+
+
+def _hydrate_chats(cache: Cache, rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     members: dict[str, list[str]] = {}
     for r in rows:
         members[r["urn"]] = [x[0] for x in cache.conn.execute("SELECT identity_urn FROM memberships_idx WHERE chat_urn=? LIMIT 50", (r["urn"],))]
@@ -318,8 +352,7 @@ def list_chats(cache: Cache, *, source: str | None, since_ms: int | None, limit:
             "participants": [{"urn": u, "label": labels.get(u)} for u in members[rec["urn"]]],
             "provenance": {"source": rec.get("source"), "account_scope": rec.get("account_scope")},
         })
-    next_cursor = encode_cursor(rows[-1]["last_ms"], rows[-1]["urn"]) if more and rows else None
-    return out, next_cursor
+    return out
 
 
 def list_people(cache: Cache, *, limit: int, cursor: str | None) -> tuple[list[dict[str, Any]], str | None]:
