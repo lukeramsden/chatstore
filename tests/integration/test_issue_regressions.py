@@ -167,3 +167,43 @@ def test_issue_6_message_without_chat_session_error_has_sample(tmp_path: Path, m
     assert isinstance(sample, str) and sample
     assert "ZWAMESSAGE" in sample and "42" in sample and "700000300" in sample
     assert "secret orphan text" not in sample and "15550001111" not in sample
+
+
+def test_issue_7_whatsapp_owner_jids_are_is_me(tmp_path: Path, monkeypatch, capsys):
+    """#7: the owner's real phone JID (incoming ZTOJID) and its LID (via ZWAZACCOUNT) are is_me,
+    so the owner is labelled `me` in groups and the "message yourself" chat has no third party."""
+    wa = build_whatsapp(tmp_path / "wa")
+    me_phone, me_lid = "15550009999@s.whatsapp.net", "111222333@lid"
+    c = sqlite3.connect(wa / "ChatStorage.sqlite")
+    c.execute("INSERT INTO ZWACHATSESSION VALUES (4,1,1,0,0,0,0,NULL,?, 'Owner Name', 700000300)", (me_lid,))
+    c.execute("INSERT INTO ZWAMESSAGE VALUES (?,1,1,?,?,?,?,?,?,?,0,0,?,NULL,?,?,?,?,?,NULL,?,?,?)",
+              (50, 0, 0, 1, 0, 8, 0, 50, 4, None, None, 700000300, None, None, "3EB0SELF0001", "note to self", me_lid))
+    c.commit()
+    c.close()
+    monkeypatch.setenv("CHATSTORE_DATA_DIR", str(tmp_path / "data"))
+    assert run(capsys, "init", "--whatsapp-path", wa, "--timezone", "UTC")[0] == 0
+    assert run(capsys, "sync", "--source", "whatsapp")[0] == 0
+
+    code, e = run(capsys, "chats", "--source", "whatsapp")
+    assert code == 0 and len(e["data"]) == 4
+    group = next(c for c in e["data"] if c["chat_kind"] == "group")
+    me_in_group = [p for p in group["participants"] if p["label"] == "me"]
+    assert len(me_in_group) == 1, group["participants"]
+    _, r = run(capsys, "resolve", me_in_group[0]["urn"])
+    rec = r["data"]["record"]
+    assert rec["kind"] == "jid_lid" and rec["address"] == me_lid and rec["is_me"] is True
+    # the LID's alias target (the phone JID) is is_me too
+    _, r = run(capsys, "resolve", r["data"]["aliases"]["to"][0])
+    rec = r["data"]["record"]
+    assert rec["kind"] == "jid_phone" and rec["address"] == me_phone and rec["is_me"] is True
+
+    # the self-chat: both participants (the chat's own JID and the synthetic `me`) are me; no counterpart
+    self_chat = next(c for c in e["data"] if c["chat_kind"] == "direct" and c["urn"] not in {
+        x["urn"] for x in e["data"] if x["label"] in ("Alice Example", "Bob Lid")})
+    assert all(p["label"] == "me" for p in self_chat["participants"]), self_chat["participants"]
+
+    # other people are unaffected
+    alice = next(c for c in e["data"] if c["label"] == "Alice Example")
+    other = next(p for p in alice["participants"] if p["label"] != "me")
+    _, r = run(capsys, "resolve", other["urn"])
+    assert r["data"]["record"]["is_me"] is False

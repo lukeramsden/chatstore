@@ -46,6 +46,12 @@ Interpretation rules, each backed by the validation in source-findings:
 - **Memberships**: group chats take members from `ZWAGROUPMEMBER`. Direct, status and broadcast
   chats have no rows there, so the adapter synthesises two memberships per chat: the chat's own JID
   (the counterpart, evidence `chat_session_jid`) and the `me` identity (evidence `chat_session_me`).
+- **The owner's own JIDs** are detected from `ZTOJID` on incoming rows (`ZISFROMME = 0`), which is
+  the recipient; the set is closed over LID↔phone alias pairs. Those `identities` records keep their
+  `jid_phone`/`jid_lid` kind but carry `is_me: true`, so the owner labels as `me` in group member
+  lists and the "message yourself" chat has no third-party counterpart. Outgoing messages still
+  point `sender_urn` at the synthetic `me` identity. If no incoming row carries `ZTOJID`, the sync
+  result notes it and only the synthetic `me` is `is_me`.
 - **Timestamps** are Core Data seconds since 2001-01-01 UTC, kept raw with declared unit/epoch.
 - **Message types and group events** are mapped to canonical kinds where understood; everything
   else is preserved verbatim as `unknown:<n>` and counted under `unsupported`. Nothing is guessed.

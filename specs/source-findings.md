@@ -45,6 +45,11 @@ Conclusions:
   `@lid.status`, `@bot`. Group members are mostly `@lid` (27,716 vs 2,513 phone JIDs).
 - `ZWAMEDIAITEM`: 389,348 rows, only 3,775 have a local path (`Media/...` relative to the
   group container). Metadata does not imply bytes exist.
+- Owner detection: `ZFROMJID` is null on every outgoing row, but `ZTOJID` on incoming rows is
+  populated for 2,080 rows with exactly one distinct value, a phone JID. That JID is also the most
+  frequent `ZWAGROUPMEMBER` (273 of 310 groups) and its `ZWAZACCOUNT` LID is the `ZCONTACTJID` of
+  the self-chat and the second most frequent member (256 groups). This is the only in-database
+  signal that names the owner.
 - Alias evidence: `LID.sqlite/ZWAZACCOUNT` maps 9,734 of 13,924 LIDs to a phone number;
   `ContactsV2.sqlite/ZWAADDRESSBOOKCONTACT` maps 433 contacts with both `ZLID` and
   `ZWHATSAPPID`. These are the only accepted sources of LID↔phone aliases.

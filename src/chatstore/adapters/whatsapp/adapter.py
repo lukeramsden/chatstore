@@ -207,10 +207,16 @@ class WhatsAppAdapter:
             all_jids.add(U.whatsapp_jid(r[0]))
         for r in conn.execute("SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZTOJID IS NOT NULL"):
             all_jids.add(U.whatsapp_jid(r[0]))
+        # The owner's real JIDs (phone + LID) appear as group members and as the counterpart of the
+        # "message yourself" chat; flag them is_me so consumers do not treat the owner as a third
+        # party (issue #7). The synthetic `me` identity below stays the sender of outgoing messages.
+        owner_jids = self._owner_jids(conn, alias_pairs, stats)
+        all_jids |= owner_jids
         for jid in sorted(all_jids):
+            is_me = jid in owner_jids
             rec = record("identities", urn("identity", jid), SOURCE, scope, native_key=jid, kind=jid_kind(jid), address=jid,
-                         service="whatsapp", is_me=False, observed_names=names.get(jid, []))
-            yield Emit(rec, Observation("jid", [jid], jid, fingerprint(jid, names.get(jid, []))))
+                         service="whatsapp", is_me=is_me, observed_names=names.get(jid, []))
+            yield Emit(rec, Observation("jid", [jid], jid, fingerprint(jid, names.get(jid, []), is_me)))
         yield Emit(record("identities", me_urn, SOURCE, scope, native_key=me_key, kind="me", address=None, service="whatsapp",
                           is_me=True, observed_names=[]), Observation("me", [], me_key, fingerprint("me")))
         stats.bump("identities", len(all_jids) + 1)
@@ -234,6 +240,35 @@ class WhatsAppAdapter:
             stats.unsupported_bump(f"group_change_type:{r['ZCHANGETYPE']}")
             stats.bump("events")
         conn.close()
+
+    def _owner_jids(self, conn: sqlite3.Connection, alias_pairs: dict[tuple[str, str], list[dict[str, Any]]],
+                    stats: ExtractStats) -> set[str]:
+        """The account owner's own JIDs.
+
+        On incoming rows (ZISFROMME = 0) ZTOJID, when populated, is the recipient, i.e. the owner
+        (validated on real data: exactly one distinct phone JID; it is also the most frequent group
+        member and its LID is the self-chat's ZCONTACTJID). Nothing else in ChatStorage names the
+        owner. The set is closed over LID<->phone alias pairs so both forms are flagged."""
+        owners: set[str] = set()
+        for (jid,) in conn.execute(
+                "SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND ZTOJID IS NOT NULL AND ZTOJID != ''"):
+            j = U.whatsapp_jid(jid)
+            if jid_kind(j) in ("jid_phone", "jid_lid"):
+                owners.add(j)
+        if not owners:
+            stats.notes.append("owner JID not detected: no incoming message carries ZTOJID; only the synthetic `me` identity is is_me")
+            return owners
+        changed = True
+        while changed:
+            changed = False
+            for lid, phone in alias_pairs:
+                if (lid in owners) != (phone in owners):
+                    owners |= {lid, phone}
+                    changed = True
+        phones = sorted(j for j in owners if jid_kind(j) == "jid_phone")
+        if len(phones) > 1:
+            stats.notes.append(f"{len(phones)} distinct owner phone JIDs detected (number change?); all flagged is_me")
+        return owners
 
     def _alias_pairs(self, snap: Snapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
         """(lid_jid, phone_jid) -> evidence, from LID.sqlite and ContactsV2.sqlite."""

@@ -49,7 +49,7 @@ def test_whatsapp_sync_and_queries(env, capsys):
     assert r["status"] == "complete" and r["mode"] == "initial"
     # 8 rows, one history-sync duplicate -> 7 logical messages
     assert r["counts"]["messages"] == 7
-    assert r["counts"]["chats"] == 3 and r["counts"]["attachments"] == 1 and r["counts"]["aliases"] == 1
+    assert r["counts"]["chats"] == 3 and r["counts"]["attachments"] == 1 and r["counts"]["aliases"] == 2  # Bob + owner LID pairs
     assert r["counts"]["unsupported"]["message_type:99"] == 1
 
     code, e = run(capsys, "search", "tomorrow")

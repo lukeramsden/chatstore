@@ -44,6 +44,8 @@ def build_whatsapp(root: Path, *, extra_messages: int = 0) -> Path:
     )
     alice = "15550001111@s.whatsapp.net"
     bob_lid = "987654321@lid"
+    me_phone = "15550009999@s.whatsapp.net"   # the account owner (issue #7): incoming ZTOJID, group member, LID pair
+    me_lid = "111222333@lid"
     group = "15550001111-1600000000@g.us"
     c.execute("INSERT INTO ZWACHATSESSION VALUES (1,1,1,0,0,0,0,NULL,?, 'Alice Example', 700000000)", (alice,))
     c.execute("INSERT INTO ZWACHATSESSION VALUES (2,1,1,0,0,0,1,1,?, 'Test Group', 700000100)", (group,))
@@ -51,10 +53,11 @@ def build_whatsapp(root: Path, *, extra_messages: int = 0) -> Path:
     c.execute("INSERT INTO ZWAGROUPINFO VALUES (1, 2, 690000000, ?, ?)", (alice, alice))
     c.execute("INSERT INTO ZWAGROUPMEMBER VALUES (1,1,1,2,?, 'Alice Example')", (alice,))
     c.execute("INSERT INTO ZWAGROUPMEMBER VALUES (2,1,0,2,?, NULL)", (bob_lid,))
+    c.execute("INSERT INTO ZWAGROUPMEMBER VALUES (3,1,0,2,?, NULL)", (me_lid,))
     c.execute("INSERT INTO ZWAPROFILEPUSHNAME VALUES (1, ?, 'alice~')", (alice,))
     rows = [
         # pk, flags, gevt, fromme, err, status, type, sort, chat, media, parent, date, sent, fromjid, stanza, text, tojid
-        (1, 0, 0, 0, 0, 0, 0, 1, 1, None, None, 700000000, None, alice, "3EB0AAAA0001", "hello from alice", None),
+        (1, 0, 0, 0, 0, 0, 0, 1, 1, None, None, 700000000, None, alice, "3EB0AAAA0001", "hello from alice", me_phone),
         (2, 0, 0, 1, 0, 8, 0, 2, 1, None, None, 700000010, 700000011, None, "3EB0AAAA0002", "hi alice, see you tomorrow", alice),
         # history-sync duplicate of pk 2 with negative sort
         (3, 0, 0, 1, 0, 8, 0, -5, 1, None, None, 700000010, 700000011, None, "3EB0AAAA0002", "hi alice, see you tomorrow", alice),
@@ -76,6 +79,7 @@ def build_whatsapp(root: Path, *, extra_messages: int = 0) -> Path:
     lid = sqlite3.connect(root / "LID.sqlite")
     lid.executescript("CREATE TABLE ZWAZACCOUNT (Z_PK INTEGER PRIMARY KEY, ZIDENTIFIER VARCHAR, ZPHONENUMBER VARCHAR);")
     lid.execute("INSERT INTO ZWAZACCOUNT VALUES (1, ?, '+1 555 000 2222')", (bob_lid,))
+    lid.execute("INSERT INTO ZWAZACCOUNT VALUES (2, ?, '+1 555 000 9999')", (me_lid,))
     lid.commit()
     lid.close()
     return root
