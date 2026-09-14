@@ -68,7 +68,9 @@ chatstore status
 - `--mode full` reconciles every observation, marking rows no longer in the source
   `absent_from_source`. A detected source reset does this automatically.
 - Exit 5 = `partial`: at least one record failed extraction; the `sync_runs` row (`status --json`)
-  lists errors and unsupported kinds. Fix or accept, but do not treat the cache as complete.
+  lists errors and unsupported kinds; each error's `sample` points at the first affected source
+  row (table, row id, timestamp, type) so you can inspect it. Fix or accept, but do not treat the
+  cache as complete.
 - Sync never touches the network; sources are opened read-only. You can leave the apps running;
   snapshots are consistent.
 

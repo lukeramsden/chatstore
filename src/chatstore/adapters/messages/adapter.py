@@ -208,7 +208,7 @@ class MessagesAdapter:
         # --- memberships --------------------------------------------------------------
         for r in conn.execute("SELECT chat_id, handle_id FROM chat_handle_join"):
             if r["chat_id"] not in chat_key_by_rowid or r["handle_id"] not in handle_key:
-                stats.error("dangling_chat_handle_join")
+                stats.error("dangling_chat_handle_join", f"chat_handle_join chat_id={r['chat_id']} handle_id={r['handle_id']}")
                 continue
             key = U.composite_key("membership", chat_key_by_rowid[r["chat_id"]], handle_key[r["handle_id"]])
             rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=chat_urn_by_rowid[r["chat_id"]],
@@ -317,7 +317,7 @@ class MessagesAdapter:
         else:
             sender = None
             if o.get("handle_id"):
-                stats.error("unknown_handle_id")
+                stats.error("unknown_handle_id", f"message ROWID={o['rowid']} handle_id={o['handle_id']} date={o.get('date')}")
         transport = TRANSPORT.get(o.get("service") or "", "unknown")
         variant = o["variant"]
         kind = "message"

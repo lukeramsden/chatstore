@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -144,3 +145,25 @@ def test_issue_5_chats_label_and_participant_filters(wa_env, capsys):
     phone_urn = r["data"]["aliases"]["to"][0]
     code, e = run(capsys, "chats", "--participant", phone_urn)
     assert code == 0 and {c["urn"] for c in e["data"]} == {bob["urn"], group["urn"]}
+
+
+def test_issue_6_message_without_chat_session_error_has_sample(tmp_path: Path, monkeypatch, capsys):
+    """#6: adapter errors must carry a non-sensitive pointer in `sample` (table, row id, timestamp,
+    type) so a partial sync can be diagnosed. The sample must not include message text or JIDs."""
+    wa = build_whatsapp(tmp_path / "wa")
+    c = sqlite3.connect(wa / "ChatStorage.sqlite")
+    c.execute("INSERT INTO ZWAMESSAGE VALUES (?,1,1,?,?,?,?,?,?,?,0,0,?,NULL,?,?,?,?,?,NULL,?,?,?)",
+              (42, 0, 0, 0, 0, 0, 0, 40, None, None, None, 700000300, None, "15550001111@s.whatsapp.net",
+               "3EB0ORPHAN01", "secret orphan text", None))
+    c.commit()
+    c.close()
+    monkeypatch.setenv("CHATSTORE_DATA_DIR", str(tmp_path / "data"))
+    assert run(capsys, "init", "--whatsapp-path", wa, "--timezone", "UTC")[0] == 0
+    code, e = run(capsys, "sync", "--source", "whatsapp")
+    assert code == 5 and e["data"][0]["status"] == "partial"
+    err = next(x for x in e["data"][0]["errors"] if x["code"] == "message_without_chat_session")
+    assert err["count"] == 1
+    sample = err["sample"]
+    assert isinstance(sample, str) and sample
+    assert "ZWAMESSAGE" in sample and "42" in sample and "700000300" in sample
+    assert "secret orphan text" not in sample and "15550001111" not in sample

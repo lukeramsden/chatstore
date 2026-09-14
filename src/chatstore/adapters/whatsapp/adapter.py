@@ -185,7 +185,7 @@ class WhatsAppAdapter:
                 stats.bump("chat_memberships")
         for r in conn.execute("SELECT Z_PK, ZCHATSESSION, ZMEMBERJID, ZISACTIVE, ZISADMIN FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
             if r["ZCHATSESSION"] not in chat_by_pk:
-                stats.error("membership_without_chat")
+                stats.error("membership_without_chat", f"ZWAGROUPMEMBER Z_PK={r['Z_PK']} ZCHATSESSION={r['ZCHATSESSION']}")
                 continue
             chat_jid, c_urn = chat_by_pk[r["ZCHATSESSION"]]
             mj = U.whatsapp_jid(r["ZMEMBERJID"])
@@ -305,14 +305,18 @@ class WhatsAppAdapter:
                 f"SELECT * FROM ZWAMESSAGE WHERE Z_PK IN ({ph}) ORDER BY ZSORT DESC, Z_PK DESC LIMIT 1", pks
             ).fetchone()
             if rep["ZCHATSESSION"] is None or rep["ZCHATSESSION"] not in chat_by_pk:
-                stats.error("message_without_chat_session")
+                # Pointer only: no text, no JIDs (issue #6).
+                stats.error("message_without_chat_session",
+                            f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZCHATSESSION={rep['ZCHATSESSION']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} "
+                            f"ZMESSAGETYPE={rep['ZMESSAGETYPE']} ZISFROMME={rep['ZISFROMME']} rows={len(pks)}")
                 stats.unsupported_bump("message_without_chat_session")
                 continue
             chat_jid, c_urn = chat_by_pk[rep["ZCHATSESSION"]]
             is_me = bool(rep["ZISFROMME"])
             from_jid = rep["ZFROMJID"]
             if not is_me and not from_jid:
-                stats.error("incoming_without_sender")
+                stats.error("incoming_without_sender",
+                            f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} ZMESSAGETYPE={rep['ZMESSAGETYPE']}")
                 continue
             try:
                 m_key = U.whatsapp_message_key(chat_jid, from_jid, is_me, rep["ZSTANZAID"])
@@ -349,7 +353,7 @@ class WhatsAppAdapter:
                 if rel:
                     if rel.startswith("/") or ".." in rel.split("/"):
                         availability = "unknown"
-                        stats.error("unsafe_media_path")
+                        stats.error("unsafe_media_path", f"ZWAMEDIAITEM Z_PK={media['Z_PK']} ZMESSAGE={rep['Z_PK']}")
                     else:
                         p = media_root / rel
                         if p.is_file() and not p.is_symlink():

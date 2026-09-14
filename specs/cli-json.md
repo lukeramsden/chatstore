@@ -55,7 +55,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `version` | `{version, envelope, python, sqlite, platform}` |
 | `doctor` | `{data_dir, python, sqlite, fts5, sources: [{source, path_found, readable, schema_ok, schema_version, permission_hint, wal_present}], helper: {found, version}, keychain: bool}` |
 | `init` | `{data_dir, created: bool, scopes: [{source, scope}]}` |
-| `sync --source all|whatsapp|messages [--mode incremental|full]` | `sync_runs` record(s) |
+| `sync --source all|whatsapp|messages [--mode incremental|full]` | `sync_runs` record(s). `errors[]` is `{code, count, sample}` where `sample` is a non-sensitive pointer to the first affected row (native table, row id, timestamp, type code — never text or addresses). Any adapter error other than `ambiguous_lid_phone_pair` marks the run `partial` (exit 5); the cache still contains every record that did extract. |
 | `status` | `{data_dir, scopes, sync_runs_latest, counts, coverage}` |
 | `search <query> [--since --until --source --chat --sender --person --transport --has-attachment --advanced --history]` | `[{urn, revision_digest, chat_urn, chat_label, sender_urn, sender_label, sent_at, transport, kind, snippet, provenance: {source, scope}}]` |
 | `chats [--source --since --label --participant]` | `[{urn, kind, label, service, message_count, last_message_at, participants}]`. `--label` is a case-insensitive substring over the chat label and participant labels; `--participant` is an identity or person URN (a person's linked identities and all aliases are followed). |
