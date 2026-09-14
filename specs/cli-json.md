@@ -60,7 +60,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `search <query> [--since --until --source --chat --sender --person --transport --has-attachment --advanced --history]` | `[{urn, revision_digest, chat_urn, chat_label, sender_urn, sender_label, sent_at, transport, kind, snippet, provenance: {source, scope}}]` |
 | `chats [--source --since]` | `[{urn, kind, label, service, message_count, last_message_at, participants}]` |
 | `people` | `[{urn, label, identities: [{urn, address, kind, link_state}]}]` |
-| `read <chat-urn> [--since --until --limit --cursor]` | `[message summaries with text, parts, attachments, events]` |
+| `read <chat-urn> [--since --until --limit --cursor --order asc\|desc]` | `[message summaries with text, parts, attachments, events]`. Oldest first by default; `--order desc` returns newest first (so `--limit N` is the last N) and `next_cursor` continues towards older messages. |
 | `resolve <urn|citation-json>` | `{urn, status, kind, record, aliases, revisions: [{digest, observed_at}]}` |
 | `context <message-urn> [--before N --after N]` | `{target, before: [...], after: [...]}` |
 | `archive export [--since --until --media text|available-media --context full|minimal --output DIR --force --catalogue-only --no-catalogue]` | `{output, written, archives: [{kind, label, action: written|unchanged|skipped_empty (never exported and empty), path, export_id, revision, supersedes, counts, media, coverage}]}` |

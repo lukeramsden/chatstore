@@ -305,7 +305,7 @@ def cmd_read(ctx: Ctx) -> Result:
         raise CliError(EXIT_NOT_FOUND, "not_found", f"chat {ctx.args.chat_urn} not found (try `chatstore resolve`)")
     try:
         msgs, cur, truncated = read_chat(cache, ctx.args.chat_urn, _filters(ctx), limit=limit, cursor=ctx.args.cursor,
-                                         max_chars=ctx.args.max_chars or ctx.cfg.max_chars)
+                                         max_chars=ctx.args.max_chars or ctx.cfg.max_chars, order=ctx.args.order)
     except ValueError as e:
         raise CliError(EXIT_USAGE, "bad_cursor", str(e)) from e
     tz = ctx.tz()
@@ -432,10 +432,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int)
     s.add_argument("--cursor")
     s.set_defaults(fn=cmd_people)
-    s = sub.add_parser("read", help="Read a chat chronologically.")
+    s = sub.add_parser("read", help="Read a chat. Oldest first by default; --order desc for the newest N.")
     s.add_argument("chat_urn")
     common_filters(s, chat=False)
     s.add_argument("--max-chars", type=int)
+    s.add_argument("--order", choices=["asc", "desc"], default="asc",
+                   help="asc = oldest first (default). desc = newest first, so --limit N gives the last N.")
     s.set_defaults(fn=cmd_read)
     s = sub.add_parser("resolve", help="Resolve a URN or citation JSON.")
     s.add_argument("ref")

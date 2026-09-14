@@ -78,7 +78,7 @@ chatstore status
 chatstore search "see you tomorrow" --since 2025-01-01 --until 2025-02-01 [--chat urn] [--sender urn] [--person urn]
                  [--kind message,reaction|all] [--has-attachment] [--history] [--advanced] [--limit N] [--cursor C]
 chatstore chats | chatstore people
-chatstore read <chat-urn> [--since … --until …]
+chatstore read <chat-urn> [--since … --until …] [--order asc|desc] [--limit N] [--cursor C]
 chatstore context <message-urn> --before 5 --after 5
 chatstore resolve <urn | '{"urn":…,"revision_digest":…}'>
 ```
@@ -86,6 +86,8 @@ chatstore resolve <urn | '{"urn":…,"revision_digest":…}'>
 - Date-only arguments are interpreted in `config.timezone`; `--until` is **exclusive** at local
   midnight of that day. Full timestamps accept offsets.
 - Queries are literal terms unless `--advanced` (raw FTS5 syntax).
+- `read` pages **oldest first** by default, so `--limit N` is the first N after `--since`. Use
+  `--order desc` to get the newest N (newest first); the cursor keeps walking backwards.
 - Default search covers current content of `message` kinds; `--history` adds superseded revisions;
   `--kind all` includes reactions and system events.
 - Every result carries `urn`, `revision_digest`, timestamps, sender label and provenance; cite with

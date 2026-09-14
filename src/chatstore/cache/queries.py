@@ -187,16 +187,23 @@ def label_of(r: dict[str, Any]) -> str | None:
 
 
 def read_chat(cache: Cache, chat_urn: str, flt: Filters, *, limit: int, cursor: str | None = None,
-              max_chars: int) -> tuple[list[dict[str, Any]], str | None, bool]:
+              max_chars: int, order: str = "asc") -> tuple[list[dict[str, Any]], str | None, bool]:
+    """Page a chat. `order` is `asc` (oldest first, default) or `desc` (newest first); the cursor
+    continues in the same direction."""
+    if order not in ("asc", "desc"):
+        raise ValueError(f"order must be asc or desc, not {order!r}")
     flt.chat_urn = chat_urn
     where, args = flt.sql("m")
     cur = decode_cursor(cursor)
     cursor_sql = ""
     if cur:
-        cursor_sql = " AND (m.utc_ms > ? OR (m.utc_ms = ? AND m.urn > ?))"
+        op = ">" if order == "asc" else "<"
+        cursor_sql = f" AND (m.utc_ms {op} ? OR (m.utc_ms = ? AND m.urn {op} ?))"
         args += [cur[0], cur[0], cur[1]]
+    direction = "" if order == "asc" else " DESC"
     rows = cache.conn.execute(
-        f"SELECT m.urn, m.utc_ms FROM messages_idx m WHERE {where}{cursor_sql} ORDER BY m.utc_ms, m.urn LIMIT ?",
+        f"SELECT m.urn, m.utc_ms FROM messages_idx m WHERE {where}{cursor_sql} "
+        f"ORDER BY m.utc_ms{direction}, m.urn{direction} LIMIT ?",
         [*args, limit + 1]).fetchall()
     more = len(rows) > limit
     rows = rows[:limit]

@@ -97,3 +97,24 @@ def test_issue_3_whatsapp_lid_alias_target_identity_exists(wa_env, capsys):
     assert e["data"]["status"] == "current"
     assert e["data"]["record"]["address"] == "15550002222@s.whatsapp.net"
     assert e["data"]["record"]["kind"] == "jid_phone"
+
+
+def test_issue_4_read_order_desc_returns_newest_first_with_cursor(wa_env, capsys):
+    """#4: `read --order desc --limit N` returns the newest N (newest first) and the cursor walks
+    backwards; the default remains oldest-first."""
+    code, e = run(capsys, "chats", "--source", "whatsapp")
+    chat = next(c for c in e["data"] if c["label"] == "Alice Example")
+    code, asc = run(capsys, "read", chat["urn"], "--limit", "50")
+    assert code == 0 and asc["data"] and asc["page"]["next_cursor"] is None
+    all_urns = [m["urn"] for m in asc["data"]]
+    assert len(all_urns) == 3
+    assert all_urns[-1] is not None
+
+    code, d1 = run(capsys, "read", chat["urn"], "--order", "desc", "--limit", "2")
+    assert code == 0, d1
+    assert [m["urn"] for m in d1["data"]] == all_urns[::-1][:2]
+    assert d1["page"]["next_cursor"]
+    code, d2 = run(capsys, "read", chat["urn"], "--order", "desc", "--limit", "2", "--cursor", d1["page"]["next_cursor"])
+    assert code == 0
+    assert [m["urn"] for m in d2["data"]] == all_urns[::-1][2:]
+    assert d2["page"]["next_cursor"] is None
