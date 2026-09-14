@@ -86,6 +86,13 @@ Every command with `--json` prints exactly one JSON object on stdout:
   is exactly March.
 - Exports always report exact UTC boundaries.
 
+## Labels
+
+- Identity label: first observed name, else the address; `me` for the own identity.
+- Chat label (`chats[].label`, `chat_label` on search/read/media results): `observed_name`; else,
+  when the chat has exactly one non-me participant, that participant's label; else the bare handle
+  parsed from a composite native key (`["guid","SMS;-;+1555…"]` → `+1555…`); else `native_key`.
+
 ## Query semantics
 
 - Default: the query is a literal phrase (FTS5 quoted string with quotes escaped). Multiple

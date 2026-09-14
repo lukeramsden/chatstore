@@ -124,16 +124,58 @@ def _page(cache: Cache, rows: list[sqlite3.Row], limit: int, history: bool) -> t
 
 
 def label_map(cache: Cache, urns: list[str | None]) -> dict[str, str | None]:
+    """Labels for identities, people and chats. Unnamed chats fall back to their counterpart
+    identity's label, then to the bare handle in their native key (issue #2)."""
     recs = cache.get_many([u for u in urns if u])
     out: dict[str, str | None] = {}
+    unnamed: list[str] = []
     for u, r in recs.items():
         out[u] = label_of(r)
+        if r.get("entity") == "chats" and not r.get("observed_name"):
+            unnamed.append(u)
+    for u, counterpart in _counterpart_labels(cache, unnamed).items():
+        out[u] = counterpart
     return out
+
+
+def _counterpart_labels(cache: Cache, chat_urns: list[str]) -> dict[str, str]:
+    """For each chat with exactly one non-me participant, that participant's label."""
+    if not chat_urns:
+        return {}
+    members: dict[str, list[str]] = {}
+    for i in range(0, len(chat_urns), 500):
+        chunk = chat_urns[i:i + 500]
+        q = f"SELECT chat_urn, identity_urn FROM memberships_idx WHERE chat_urn IN ({','.join('?' * len(chunk))})"
+        for r in cache.conn.execute(q, chunk):
+            members.setdefault(r[0], []).append(r[1])
+    idents = cache.get_many([u for lst in members.values() for u in lst])
+    out: dict[str, str] = {}
+    for chat_urn, lst in members.items():
+        others = [idents[u] for u in lst if u in idents and not idents[u].get("is_me")]
+        if len(others) == 1:
+            label = label_of(others[0])
+            if label:
+                out[chat_urn] = label
+    return out
+
+
+def _handle_from_native_key(native_key: str | None) -> str | None:
+    """Bare handle from a composite chat key such as ["guid","SMS;-;+1555"] -> "+1555"."""
+    if not native_key or not native_key.startswith("["):
+        return native_key
+    try:
+        parts = json.loads(native_key)
+    except ValueError:
+        return native_key
+    if not (isinstance(parts, list) and len(parts) == 2 and all(isinstance(p, str) for p in parts)):
+        return native_key
+    ident = parts[1]
+    return ident.rsplit(";", 1)[-1] or native_key
 
 
 def label_of(r: dict[str, Any]) -> str | None:
     if r.get("entity") == "chats":
-        return r.get("observed_name") or r.get("native_key")
+        return r.get("observed_name") or _handle_from_native_key(r.get("native_key"))
     if r.get("entity") == "identities":
         if r.get("is_me"):
             return "me"
@@ -259,12 +301,12 @@ def list_chats(cache: Cache, *, source: str | None, since_ms: int | None, limit:
     members: dict[str, list[str]] = {}
     for r in rows:
         members[r["urn"]] = [x[0] for x in cache.conn.execute("SELECT identity_urn FROM memberships_idx WHERE chat_urn=? LIMIT 50", (r["urn"],))]
-    labels = label_map(cache, [u for lst in members.values() for u in lst])
+    labels = label_map(cache, [u for lst in members.values() for u in lst] + [r["urn"] for r in rows])
     out = []
     for r in rows:
         rec = json.loads(r["record"])
         out.append({
-            "urn": rec["urn"], "chat_kind": rec.get("kind"), "label": label_of(rec), "service": rec.get("service"),
+            "urn": rec["urn"], "chat_kind": rec.get("kind"), "label": labels.get(rec["urn"]), "service": rec.get("service"),
             "assignment": rec.get("assignment"), "message_count": r["n"], "last_message_utc_ms": r["last_ms"],
             "participants": [{"urn": u, "label": labels.get(u)} for u in members[rec["urn"]]],
             "provenance": {"source": rec.get("source"), "account_scope": rec.get("account_scope")},
