@@ -77,6 +77,22 @@ export tail, `media.py`. Details in [decisions.md](decisions.md).
 - Release workflow building the helper for arm64 and x86_64 with `SHA256SUMS`;
   `chatstore helper install|status`; `doctor` points at it. Version 0.1.0 tagged.
 
+## v1.1.0 — first round of field-reported issues (2026-09-14)
+
+Six issues filed from agent use against a real cache, each fixed with a regression test that
+failed first (`tests/integration/test_issue_regressions.py`), one commit per issue:
+
+- #1 WhatsApp direct/status/broadcast chats had `participants: []`; the adapter now synthesises
+  counterpart + `me` memberships (`05d0fea`).
+- #2 Unnamed Messages chats were labelled with the raw composite key; labels now fall back to the
+  single counterpart's label, then the bare handle (`168d2ad`).
+- #3 LID→phone alias targets could be dangling; both sides of every pair get an identity (`2cb7196`).
+- #4 `read --order asc|desc` so `--limit N` can mean the newest N (`cdae34f`).
+- #5 `chats --label` and `chats --participant` filters (`a11505f`).
+- #6 Every adapter error carries a non-sensitive `sample` pointer (`6b890a1`).
+
+Existing caches need one `sync` per source to pick up the new WhatsApp records.
+
 ## Plan corrections worth remembering
 
 | Plan assumption | What evidence showed |
