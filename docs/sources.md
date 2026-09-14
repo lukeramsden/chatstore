@@ -41,6 +41,9 @@ Interpretation rules, each backed by the validation in source-findings:
 - **Chat identity** is the chat JID; **identity** is the participant JID. LID (`@lid`) ↔ phone
   (`@s.whatsapp.net`) evidence becomes `aliases` records (~9.7k on the test machine). Identity input
   never changes because an alias later resolves a sender differently.
+- **Memberships**: group chats take members from `ZWAGROUPMEMBER`. Direct, status and broadcast
+  chats have no rows there, so the adapter synthesises two memberships per chat: the chat's own JID
+  (the counterpart, evidence `chat_session_jid`) and the `me` identity (evidence `chat_session_me`).
 - **Timestamps** are Core Data seconds since 2001-01-01 UTC, kept raw with declared unit/epoch.
 - **Message types and group events** are mapped to canonical kinds where understood; everything
   else is preserved verbatim as `unknown:<n>` and counted under `unsupported`. Nothing is guessed.

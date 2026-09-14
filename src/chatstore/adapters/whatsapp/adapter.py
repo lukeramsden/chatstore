@@ -147,16 +147,19 @@ class WhatsAppAdapter:
 
         # --- chats ---------------------------------------------------------------------
         chat_by_pk: dict[int, tuple[str, str]] = {}  # pk -> (jid, urn)
+        chat_kinds: dict[int, str] = {}
         group_info = {r["ZCHATSESSION"]: r for r in conn.execute(
             "SELECT ZCHATSESSION, ZCREATIONDATE, ZCREATORJID, ZOWNERJID FROM ZWAGROUPINFO WHERE ZCHATSESSION IS NOT NULL")}
         for r in conn.execute("SELECT * FROM ZWACHATSESSION"):
             jid = U.whatsapp_jid(r["ZCONTACTJID"])
             c_urn = urn("chat", jid)
             chat_by_pk[r["Z_PK"]] = (jid, c_urn)
+            kind = chat_kind(jid, r["ZSESSIONTYPE"])
+            chat_kinds[r["Z_PK"]] = kind
             gi = group_info.get(r["Z_PK"])
-            if chat_kind(jid, r["ZSESSIONTYPE"]) == "direct":
+            if kind == "direct":
                 add_name(jid, r["ZPARTNERNAME"], "chat_partner_name")
-            rec = record("chats", c_urn, SOURCE, scope, native_key=jid, kind=chat_kind(jid, r["ZSESSIONTYPE"]),
+            rec = record("chats", c_urn, SOURCE, scope, native_key=jid, kind=kind,
                          observed_name=r["ZPARTNERNAME"], service="whatsapp", assignment="source",
                          is_archived=bool(r["ZARCHIVED"]) if r["ZARCHIVED"] is not None else None,
                          created_at=timestamp(gi["ZCREATIONDATE"], "s", EPOCH_2001) if gi and gi["ZCREATIONDATE"] is not None else None)
@@ -165,7 +168,21 @@ class WhatsAppAdapter:
             stats.bump("chats")
 
         # --- memberships -----------------------------------------------------------------
+        # Non-group chats have no ZWAGROUPMEMBER rows. Synthesise the counterpart (the chat's own
+        # JID) and `me` so callers can find the other party without reading messages (issue #1).
         member_jids: set[str] = set()
+        for pk, (chat_jid, c_urn) in chat_by_pk.items():
+            if chat_kinds[pk] == "group":
+                continue
+            for member_key, identity_urn, evidence in (
+                (chat_jid, urn("identity", chat_jid), "chat_session_jid"),
+                (me_key, me_urn, "chat_session_me"),
+            ):
+                key = U.composite_key("membership", chat_jid, member_key)
+                rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=c_urn, identity_urn=identity_urn,
+                             role="member", state="active", first_seen=None, last_seen=None, evidence=[{"type": evidence}])
+                yield Emit(rec, Observation("ZWACHATSESSION", [pk], key, fingerprint(chat_jid, member_key, evidence)))
+                stats.bump("chat_memberships")
         for r in conn.execute("SELECT Z_PK, ZCHATSESSION, ZMEMBERJID, ZISACTIVE, ZISADMIN FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
             if r["ZCHATSESSION"] not in chat_by_pk:
                 stats.error("membership_without_chat")
