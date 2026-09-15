@@ -29,6 +29,7 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
     run_urn = uuid.uuid4().urn
     started = now_ms()
     stats = ExtractStats()
+    written: dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0}
     mode = "initial"
     prior = cache.get_checkpoint(adapter.source, scope, "adapter")
     if prior is not None:
@@ -42,7 +43,10 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
     def save_run(status: str) -> None:
         run["status"] = status
         run["finished_at"] = now_ms()
-        run["counts"] = dict(stats.counts) | {"unsupported": dict(stats.unsupported)}
+        # `written` is measured at the cache and means the same for every adapter: how many emitted
+        # records were new, changed, or identical to what was already stored. The other keys are the
+        # adapter's own tallies of what it emitted (which may be a full re-read on incremental runs).
+        run["counts"] = dict(stats.counts) | {"unsupported": dict(stats.unsupported), "written": dict(written)}
         run["errors"] = list(stats.errors)
         run["coverage"] = cache.coverage(adapter.source, scope) | {"notes": list(stats.notes)}
         run["checkpoints"] = dict(stats.checkpoints) or None
@@ -77,8 +81,14 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
 
     partial = False
     try:
-        say("extracting")
         checkpoints = None if full else prior
+        if mode == "initial":
+            say("initial sync: no checkpoint, reading the whole source")
+        elif full:
+            say("full reconcile: re-reading the whole source and marking missing rows absent")
+        else:
+            say(f"incremental sync from checkpoint {_describe_checkpoint(prior)}")
+        say("extracting")
         batch: list[Emit] = []
         seen_tables: set[str] = set()
 
@@ -86,7 +96,9 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
             if not batch:
                 return
             with cache.write():
-                cache.upsert_many([e.record for e in batch], observed_at=started, sync_run=run_urn)
+                outcomes = cache.upsert_many([e.record for e in batch], observed_at=started, sync_run=run_urn)
+                for k, v in outcomes.items():
+                    written[k] = written.get(k, 0) + v
                 obs = []
                 for e in batch:
                     if e.observation:
@@ -102,10 +114,12 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
                 batch.append(emit)
                 if len(batch) >= BATCH:
                     flush()
-                    say(f"imported {n} records")
+                    say(f"processed {n} source records ({_fmt_written(written)})")
             flush()
         if stats.full_scan and mode == "incremental":
             run["mode"] = mode = "full_reconcile"
+            say("source reset detected; this run became a full reconcile")
+        say(f"extracted {_fmt_written(written)}")
         if full or mode in ("initial", "full_reconcile"):
             with cache.write():
                 for t in seen_tables | stats.scanned_tables:
@@ -128,6 +142,18 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
 
     save_run("partial" if partial else "complete")
     return SyncOutcome(run, 5 if partial else 0)
+
+
+def _fmt_written(w: dict[str, int]) -> str:
+    return f"new={w.get('inserted', 0)} updated={w.get('updated', 0)} unchanged={w.get('unchanged', 0)}"
+
+
+def _describe_checkpoint(cp: dict[str, Any] | None) -> str:
+    """Short, non-sensitive summary of an adapter checkpoint (scalar values only)."""
+    if not cp:
+        return "(empty)"
+    parts = [f"{k}={v}" for k, v in sorted(cp.items()) if isinstance(v, (int, str, float))]
+    return " ".join(parts) or "(opaque)"
 
 
 def finalize(rec: dict[str, Any]) -> dict[str, Any]:

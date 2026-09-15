@@ -139,6 +139,7 @@ def cmd_sync(ctx: Ctx) -> Result:
     sources = SOURCES if ctx.args.source == "all" else [ctx.args.source]
     runs, code = [], EXIT_OK
     quiet = ctx.args.json or ctx.args.quiet
+    tty = sys.stderr.isatty()
     for s in sources:
         ad = adapter_for(s)
         ident = ctx.ident
@@ -146,6 +147,9 @@ def cmd_sync(ctx: Ctx) -> Result:
             ident.ensure_scope(s)
             save_identity(ctx.data_dir, ident)
         def progress(msg: str, _s: str = s) -> None:
+            # Per-batch counters are noise in logs; only show them on an interactive terminal.
+            if msg.startswith("processed ") and not tty:
+                return
             print(f"[{_s}] {msg}", file=sys.stderr)
 
         out = run_sync(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
@@ -158,8 +162,11 @@ def cmd_sync(ctx: Ctx) -> Result:
     def human(rs: list[dict[str, Any]]) -> str:
         lines = []
         for r in rs:
-            c = {k: v for k, v in r["counts"].items() if k != "unsupported"}
-            lines.append(f"{r['source']}: {r['status']} ({r['mode']}) counts={c}")
+            c = {k: v for k, v in r["counts"].items() if k not in ("unsupported", "written")}
+            w = r["counts"].get("written") or {}
+            lines.append(f"{r['source']}: {r['status']} ({r['mode']}) new={w.get('inserted', 0)} "
+                         f"updated={w.get('updated', 0)} unchanged={w.get('unchanged', 0)}")
+            lines.append(f"  emitted by adapter: {c}")
             if r["counts"].get("unsupported"):
                 lines.append(f"  unsupported: {r['counts']['unsupported']}")
             for e in r["errors"]:
