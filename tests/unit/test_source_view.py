@@ -261,3 +261,32 @@ def test_non_wal_source_requires_reconciliation(tmp_path):
         writer.close()
 
 
+def test_backup_page_locations_stay_bound_to_pinned_view(source, tmp_path):
+    from chatstore.adapters.pages import SQLitePages
+
+    path, writer = source
+    image = tmp_path / 'pinned.sqlite'
+    with WalSource(path) as source_view:
+        with source_view.view() as pinned:
+            cursor = pinned.cursor
+            table_root = pinned.connection.execute("SELECT rootpage FROM sqlite_schema WHERE name='message'").fetchone()[0]
+            old_text = pinned.connection.execute('SELECT text FROM message WHERE id=1').fetchone()[0]
+            writer.execute('UPDATE message SET text=? WHERE id=1', ('y' * len(old_text),))
+            writer.commit()
+            copy = sqlite3.connect(image)
+            try:
+                pinned.connection.backup(copy)
+            finally:
+                copy.close()
+        with SQLitePages(image) as pages:
+            locations = list(pages.rows(table_root))
+            leaf = next(row.page for row in locations if row.row_id == 1)
+            assert len(locations) == 1000
+        copy = sqlite3.connect(image)
+        try:
+            assert copy.execute('SELECT text FROM message WHERE id=1').fetchone()[0] == old_text
+        finally:
+            copy.close()
+        with source_view.view(cursor) as following:
+            assert leaf in following.changes.pages
+            assert following.connection.execute('SELECT text FROM message WHERE id=1').fetchone()[0] != old_text
