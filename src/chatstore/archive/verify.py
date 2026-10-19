@@ -7,14 +7,16 @@ parsed and trusted. Import consumes only that; `verify_archive()` reports the sa
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from ..canonical.schemas import validate_record
 from ..identity.urn import ID_VERSION, revision_digest
@@ -24,7 +26,7 @@ from .manifest import ARCHIVE_FORMAT
 
 MANIFEST_REQUIRED = ("archive_format", "export_id", "export_set", "created_at", "kind", "revision", "supersedes",
                      "lineage", "counts", "payload_digest", "members")
-KINDS = ("catalogue", "bucket", "undated", "range")
+KINDS = ("catalogue", "bucket", "undated", "range", "delta")
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 BLOB_RE = re.compile(r"^blobs/sha256/([0-9a-f]{2})/([0-9a-f]{64})$")
 NON_ENTITY_MEMBERS = ("revisions", "source_observations", "stubs")
@@ -40,6 +42,7 @@ class VerifyResult:
     wrong_password: bool = False
     counts: dict[str, int] = field(default_factory=dict)
     schema_errors: int = 0
+    receipt: dict[str, Any] | None = None
 
 
 @dataclass
@@ -51,6 +54,8 @@ class LoadedArchive:
     counts: dict[str, int]
     blob_members: list[str]
     tar_path: Path
+    ciphertext_sha256: str = ""
+    ciphertext_bytes: int = 0
 
     @property
     def label(self) -> str:
@@ -78,7 +83,7 @@ def _tmpdir(staging: Path | None) -> Path:
     return d
 
 
-def decrypt_and_validate(path: Path, password: str, work: Path, *, load_blobs: bool = False) -> tuple[Payload, Path]:
+def decrypt_and_validate(path: Path | BinaryIO, password: str, work: Path, *, load_blobs: bool = False) -> tuple[Payload, Path]:
     """Decrypt to work/payload.tar, validate structure + checksums. Raises InvalidArchive/WrongPassword."""
     tar_path = work / "payload.tar"
     digest = container.read_payload_to_file(path, password, tar_path)
@@ -93,7 +98,18 @@ def check_manifest(m: dict[str, Any]) -> list[str]:
             problems.append(f"manifest: missing {k!r}")
     if problems:
         return problems
-    if m["archive_format"] != ARCHIVE_FORMAT:
+    for k in ('export_id', 'export_set'):
+        if not isinstance(m[k], str) or not m[k].startswith('urn:uuid:'):
+            problems.append(f'manifest: {k} must be a UUID URN')
+    scopes = m.get('account_scopes', [])
+    if not isinstance(scopes, list) or any(not isinstance(sc, dict) or not isinstance(sc.get('scope'), str)
+            or sc.get('source') not in ('whatsapp', 'messages') for sc in scopes):
+        problems.append('manifest: account_scopes must contain source/scope objects')
+    mappings = m.get('scope_mappings', [])
+    if not isinstance(mappings, list) or any(not isinstance(mp, dict) or any(not isinstance(mp.get(k), str)
+            for k in ('from', 'to')) for mp in mappings):
+        problems.append('manifest: scope_mappings must contain from/to objects')
+    if m["archive_format"] not in (ARCHIVE_FORMAT, "chatstore-changefeed-v1"):
         problems.append(f"manifest: unsupported archive_format {m['archive_format']!r}")
     if m.get("id_version") and m["id_version"] != ID_VERSION:
         problems.append(f"manifest: unsupported id_version {m['id_version']!r}")
@@ -120,6 +136,27 @@ def check_manifest(m: dict[str, Any]) -> list[str]:
         problems.append("manifest: created_at must be an integer (UTC ms)")
     if m.get("context") not in (None, "full", "minimal"):
         problems.append(f"manifest: unknown context {m['context']!r}")
+    if m['kind'] == 'delta' or m['archive_format'] == 'chatstore-changefeed-v1':
+        f = m.get('feed')
+        if m['kind'] != 'delta' or m['archive_format'] != 'chatstore-changefeed-v1':
+            problems.append('manifest: delta requires chatstore-changefeed-v1')
+        if not isinstance(f, dict):
+            problems.append('manifest: missing feed')
+        else:
+            if any(not isinstance(f.get(k), str) or not f[k] for k in ('stream', 'producer')):
+                problems.append('manifest: feed needs stream and producer identifiers')
+            if (type(f.get('after')) is not int or type(f.get('through')) is not int
+                    or not 0 <= f['after'] < f['through'] <= 2**63 - 1):
+                problems.append('manifest: feed needs 0 <= after < through')
+            if f.get('after') == 0:
+                if f.get('parent') is not None or f.get('parent_sha256') is not None:
+                    problems.append('manifest: baseline must not have a parent')
+            elif not isinstance(f.get('parent'), str) or not SHA_RE.fullmatch(str(f.get('parent_sha256', ''))):
+                problems.append('manifest: delta needs parent id and ciphertext hash')
+            if m.get('requires') != ([f['parent']] if f.get('parent') else []):
+                problems.append('manifest: requires must name the exact parent')
+        if m.get('supersedes') or m.get('revision') != 1:
+            problems.append('manifest: changefeed objects are immutable and never supersede history')
     return problems
 
 
@@ -132,6 +169,9 @@ def _check_row(entity: str, rec: dict[str, Any], validate_schema: bool) -> str |
     """Return a problem string for one parsed row, or None."""
     if not isinstance(rec, dict):
         return "row is not an object"
+    if entity == "changes":
+        from .incremental import validate_event
+        return validate_event(rec)
     if entity == "stubs":
         if not isinstance(rec.get("urn"), str) or not isinstance(rec.get("entity"), str):
             return "stub needs urn and entity"
@@ -170,6 +210,10 @@ def _check_observation(rec: dict[str, Any]) -> str | None:
             return f"observation field {k!r} missing or not {t.__name__}"
     if rec["present"] not in PRESENT_STATES:
         return f"observation present={rec['present']!r} unknown"
+    if rec.get('native_key') is not None and not isinstance(rec['native_key'], str):
+        return 'observation native_key must be a string or null'
+    if rec.get('sync_run') is not None and not isinstance(rec['sync_run'], str):
+        return 'observation sync_run must be a string or null'
     if not rec["entity_urn"].startswith("urn:uuid:"):
         return "observation entity_urn is not a URN"
     return None
@@ -215,6 +259,17 @@ def _check_and_parse(payload: Payload, validate_schema: bool) -> tuple[dict[str,
         have = len(payload.blob_members) if k == "blob_files" else counts.get(k, 0)
         if have != v:
             problems.append(f"manifest count for {k} is {v} but payload has {have}")
+    if m.get('kind') == 'delta':
+        if set(parsed) != {'changes'}:
+            problems.append('changefeed payload must contain only changes and blobs')
+        events = parsed.get('changes', [])
+        feed = m['feed']
+        if (not events or events[0]['seq'] != feed['after'] + 1
+                or events[-1]['seq'] != feed['through']
+                or any(b['seq'] != a['seq'] + 1 for a, b in pairwise(events))):
+            problems.append('changefeed sequences are not contiguous or do not match manifest')
+    elif 'changes' in parsed:
+        problems.append('changes require a changefeed manifest')
     for name in payload.blob_members:
         mt = BLOB_RE.match(name)
         if not mt or mt.group(2)[:2] != mt.group(1):
@@ -228,14 +283,22 @@ def _check_and_parse(payload: Payload, validate_schema: bool) -> tuple[dict[str,
 
 def load_archive(path: Path, password: str, work: Path, *, validate_schema: bool = True) -> LoadedArchive:
     """Decrypt and fully validate. Raises WrongPassword, SchemaError (content) or InvalidArchive (container)."""
-    payload, tar_path = decrypt_and_validate(path, password, work)
+    # Hash and decrypt the same open file, even if its pathname is atomically replaced.
+    with path.open('rb') as ciphertext:
+        before = os.fstat(ciphertext.fileno())
+        digest = 'sha256:' + hashlib.file_digest(ciphertext, 'sha256').hexdigest()
+        ciphertext.seek(0)
+        payload, tar_path = decrypt_and_validate(ciphertext, password, work)
+        after = os.fstat(ciphertext.fileno())
+        if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            raise InvalidArchive('ciphertext changed during verification')
     problems = check_manifest(payload.manifest)
     if problems:
         raise SchemaError(problems, {}, 0)
     counts, problems, schema_errors, parsed = _check_and_parse(payload, validate_schema)
     if problems:
         raise SchemaError(problems, counts, schema_errors)
-    return LoadedArchive(payload.manifest, parsed, counts, list(payload.blob_members), tar_path)
+    return LoadedArchive(payload.manifest, parsed, counts, list(payload.blob_members), tar_path, digest, before.st_size)
 
 
 def verify_archive(path: Path, password: str, *, staging: Path | None = None, validate_schema: bool = True) -> VerifyResult:
@@ -249,6 +312,16 @@ def verify_archive(path: Path, password: str, *, staging: Path | None = None, va
             return VerifyResult(str(path), False, manifest=None, problems=e.problems, counts=e.counts, schema_errors=e.schema_errors)
         except InvalidArchive as e:
             return VerifyResult(str(path), False, problems=[str(e)])
-        return VerifyResult(str(path), True, manifest=loaded.manifest, counts=loaded.counts)
+        return VerifyResult(str(path), True, manifest=loaded.manifest, counts=loaded.counts,
+                            receipt=verification_receipt(loaded, validate_schema=validate_schema))
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def verification_receipt(loaded: LoadedArchive, *, validate_schema: bool = True) -> dict[str, Any]:
+    return {'schema': 'chatstore-verified-export-v1', 'export_id': loaded.manifest['export_id'],
+            'ciphertext_sha256': loaded.ciphertext_sha256, 'ciphertext_bytes': loaded.ciphertext_bytes,
+            'payload_digest': loaded.manifest['payload_digest'], 'feed': loaded.manifest.get('feed'),
+            'checks': ['aes_authentication', 'member_checksums', 'revision_digests', 'manifest_shape'] +
+                      (['feed_shape'] if loaded.manifest.get('kind') == 'delta' else []) +
+                      (['canonical_schema'] if validate_schema else [])}

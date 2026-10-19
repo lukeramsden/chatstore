@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -184,10 +185,31 @@ def _apply_records(cache: Cache, ar: LoadedArchive, result: ImportResult) -> Non
     result.conflicts = outcomes.get("conflict", 0)
 
 
+def _known_ciphertext(cache: Cache, dd: DataDir, ident: Identity, path: Path, restore_media: bool) -> ImportResult | None:
+    row = cache.conn.execute("""SELECT i.manifest,v.ciphertext_sha256 FROM import_paths p
+        JOIN imports i ON i.export_id=p.export_id JOIN verified_imports v ON v.export_id=i.export_id
+        WHERE p.path=?""", (str(path.resolve()),)).fetchone()
+    if row is None:
+        return None
+    m = json.loads(row['manifest'])
+    if restore_media and m['counts'].get('blob_files', 0):
+        return None  # A retry must still restore carried blobs that were subsequently lost.
+    with path.open('rb') as ciphertext:
+        digest = 'sha256:' + hashlib.file_digest(ciphertext, 'sha256').hexdigest()
+    if digest != row['ciphertext_sha256']:
+        return None
+    _adopt_manifest(dd, ident, m)
+    return ImportResult(str(path), 'already_imported', export_id=m['export_id'], kind=m['kind'],
+                        label=m['kind'], revision=m['revision'], counts=m['counts'])
+
+
 def import_archive(cache: Cache, dd: DataDir, ident: Identity, path: Path, password: str, *,
                    staging: Path | None = None, restore_media: bool = True) -> ImportResult:
     """Import one archive. Completion means: records committed, identity.json updated, and every blob
     the archive carries present under blobs/. Re-running on an imported archive restores missing blobs."""
+    known = _known_ciphertext(cache, dd, ident, path, restore_media)
+    if known is not None:
+        return known
     work = Path(tempfile.mkdtemp(prefix="chatstore-import-", dir=str(staging) if staging else None))
     os.chmod(work, 0o700)
     try:
@@ -202,6 +224,48 @@ def import_archive(cache: Cache, dd: DataDir, ident: Identity, path: Path, passw
         m = ar.manifest
         result = ImportResult(str(path), "imported", export_id=m["export_id"], kind=m["kind"], label=ar.label,
                               revision=m["revision"], counts=ar.counts)
+        if m['kind'] == 'delta':
+            from .incremental import apply_events
+            digest = ar.ciphertext_sha256
+            feed = m['feed']
+            # Parent validation and replay share one writer transaction, including retries.
+            with cache.write():
+                head = cache.conn.execute('SELECT * FROM feed_imports WHERE stream_id=?', (feed['stream'],)).fetchone()
+                already = cache.conn.execute('SELECT manifest FROM imports WHERE export_id=?', (m['export_id'],)).fetchone()
+                if already:
+                    known = cache.conn.execute('SELECT ciphertext_sha256 FROM verified_imports WHERE export_id=?', (m['export_id'],)).fetchone()
+                    if json.loads(already[0]) != m or known is None or known[0] != digest:
+                        result.action = 'invalid'
+                        result.problems.append('export id reused with different metadata')
+                        return result
+                    result.action = 'already_imported'
+                elif ((head is None and feed['after'] != 0) or (head is not None and (
+                        head['sequence'] != feed['after'] or head['export_id'] != feed['parent']
+                        or head['ciphertext_sha256'] != feed['parent_sha256'] or head['feed_id'] != feed['producer']))):
+                    result.action = 'branch_conflict'
+                    result.problems.append('missing or divergent changefeed parent; import the exact preceding objects first')
+                    return result
+                else:
+                    if restore_media:
+                        _restore_blobs(dd, ar, result)
+                        if result.blobs_failed:
+                            result.action = 'media_failed'
+                            return result
+                    result.outcomes = apply_events(cache, m, ar.records['changes'])
+                    result.conflicts = result.outcomes.get('conflict', 0)
+                    cache.conn.execute("""INSERT INTO imports(export_id,export_set,kind,bucket_label,revision,
+                        lineage,imported_at,manifest) VALUES (?,?,'delta',?,1,?,?,?)""",
+                        (m['export_id'], m['export_set'], ar.label, json.dumps(m['lineage']), now_ms(), _j(m)))
+                    cache.conn.execute('INSERT INTO verified_imports VALUES (?,?)', (m['export_id'], digest))
+                    cache.conn.execute('INSERT OR REPLACE INTO feed_imports VALUES (?,?,?,?,?)',
+                        (feed['stream'], feed['producer'], feed['through'], m['export_id'], digest))
+                cache.conn.execute('INSERT OR REPLACE INTO import_paths VALUES (?,?)', (str(path.resolve()), m['export_id']))
+            _adopt_manifest(dd, ident, m)
+            if result.action == 'already_imported' and restore_media:
+                _restore_blobs(dd, ar, result)
+                if result.blobs_failed:
+                    result.action = 'media_failed'
+            return result
         decision, notes = _lineage_check(cache, m)
         if decision == "already_imported":
             result.action = decision
@@ -233,5 +297,7 @@ def import_archive(cache: Cache, dd: DataDir, ident: Identity, path: Path, passw
         _adopt_manifest(dd, ident, m)
         result.media_not_restored = _count_not_restored(dd, ar)
         return result
+    except InvalidArchive as e:
+        return ImportResult(str(path), "invalid", problems=[str(e)])
     finally:
         shutil.rmtree(work, ignore_errors=True)

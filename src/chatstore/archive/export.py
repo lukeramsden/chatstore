@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -63,6 +64,7 @@ class ExportResult:
     counts: dict[str, int] = field(default_factory=dict)
     media: dict[str, int] = field(default_factory=dict)
     coverage: dict[str, Any] = field(default_factory=dict)
+    receipt: dict[str, Any] | None = None
 
 
 # ---- collection -----------------------------------------------------------------------------------
@@ -89,13 +91,14 @@ def _revisions_and_observations(cache: Cache, plan: BucketPlan, urns: set[str]) 
             if r[4]:
                 plan.sync_runs.add(r[4])
         for r in cache.conn.execute(
-                f"SELECT entity_urn, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present FROM source_observations WHERE entity_urn IN ({ph}) ORDER BY entity_urn, native_table", chunk):
-            plan.records["source_observations"].append({
+                f"SELECT entity_urn, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present, rowid FROM source_observations WHERE entity_urn IN ({ph}) ORDER BY entity_urn, native_table", chunk):
+            observation = cache.observation_freshness(r[12], {
                 "entity_urn": r[0], "source": r[1], "account_scope": r[2], "native_table": r[3],
                 "native_row_ids": json.loads(r[4]), "native_key": r[5], "minted": bool(r[6]), "fingerprint": r[7],
                 "adapter_version": r[8], "observed_at": r[9], "sync_run": r[10], "present": r[11]})
-            if r[10]:
-                plan.sync_runs.add(r[10])
+            plan.records["source_observations"].append(observation)
+            if observation["sync_run"]:
+                plan.sync_runs.add(observation["sync_run"])
 
 
 def collect_bucket(cache: Cache, bucket: M.Bucket, *, context: str = "full") -> BucketPlan:
@@ -355,14 +358,9 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
         # write members first into the TAR (manifest first requires digest; so compute checksums first)
         if progress:
             progress(f"{bucket.label}: writing {sum(counts.values())} records, {len(blob_files)} blobs")
-        # Two-pass: build the body TAR to obtain checksums, then the final TAR with manifest first.
-        body = TarBuilder(staging / "body.tar")
-        for name, data in record_bytes.items():
-            body.add_bytes(name, data)
-        for name, p, sha, size in blob_files:
-            body.add_file(name, p, expected_sha256=sha, expected_size=size)
-        body.finish()
-        checksums = dict(body.checksums)
+        checksums = {name: 'sha256:' + hashlib.sha256(data).hexdigest()
+                     for name, data in record_bytes.items()}
+        checksums.update((name, 'sha256:' + sha) for name, _, sha, _ in blob_files)
         manifest["payload_digest"] = "sha256:" + container.members_digest(checksums)
         tb.add_bytes("manifest.json", M.manifest_bytes(manifest))
         tb.add_bytes("checksums.json", json.dumps(checksums, sort_keys=True, indent=1).encode())
@@ -370,8 +368,7 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
             tb.add_bytes(name, data)
         for name, p, sha, size in blob_files:
             tb.add_file(name, p, expected_sha256=sha, expected_size=size)
-        tb.finish()
-        (staging / "body.tar").unlink()
+        tb.finish(hash_file=False)
         if tar_path.stat().st_size > DEFAULT_LIMITS["max_total_bytes"]:
             raise RuntimeError(f"{bucket.label}: payload exceeds the {DEFAULT_LIMITS['max_total_bytes']} byte limit; "
                                "use --media text or a narrower --since/--until range")
@@ -392,6 +389,6 @@ def write_archive(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, plan:
                 (export_id, export_set, bucket.kind, bucket.label, bucket.start_utc_ms, bucket.end_utc_ms, revision, content,
                  json.dumps(lineage), str(dst), created))
         return ExportResult(bucket.kind, bucket.label, "written", path=str(dst), export_id=export_id, revision=revision,
-                            supersedes=supersedes, counts=counts, media=media_counts, coverage=coverage)
+                            supersedes=supersedes, counts=counts, media=media_counts, coverage=coverage, receipt=v.receipt)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
