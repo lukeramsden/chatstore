@@ -153,7 +153,7 @@ def build_messages(root: Path, *, extra_messages: int = 0) -> Path:
          "AAAAAAAA-0000-4000-8000-000000000001"),
     ]
     for i in range(extra_messages):
-        msgs.append((100 + i, f"AAAAAAAA-0000-4000-8000-0000000{i:05d}", f"extra message {i}", 1, "iMessage", ns(700001000 + i), 0, 0, None, 0, None, None))
+        msgs.append((100 + i, f"BBBBBBBB-0000-4000-8000-{i:012d}", f"extra message {i}", 1, "iMessage", ns(700001000 + i), 0, 0, None, 0, None, None))
     for m in msgs:
         c.execute(
             """INSERT INTO message (ROWID, guid, text, handle_id, service, date, date_read, date_delivered, is_from_me, is_read, item_type,

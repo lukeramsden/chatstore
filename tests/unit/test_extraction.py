@@ -121,3 +121,69 @@ def test_policy_signature_is_stable_when_schema_validators_warm_up(monkeypatch):
     assert schemas.validate_record(dict(msg(1, 'valid source message', None, None, 1), observed_at=100, sync_run=None)) is None
     assert schemas._VALIDATORS
     assert code_signature(adapter, config) == before
+
+
+
+def test_policy_signature_covers_declared_decoder_and_routing_modules(monkeypatch):
+    from chatstore.adapters.messages import dependencies
+    from chatstore.adapters.messages.adapter import MessagesAdapter
+    from chatstore.cache.extraction import code_signature
+    from chatstore.config import Config
+
+    adapter, config = MessagesAdapter(), Config()
+    before = code_signature(adapter, config)
+    monkeypatch.setattr(dependencies, 'CK_IDENTIFIER', 'changed inference policy')
+    assert code_signature(adapter, config) != before
+
+
+def test_policy_covers_function_defaults_and_wrapped_generator_body(monkeypatch):
+    from contextlib import contextmanager
+
+    from chatstore.adapters.messages import decoder
+    from chatstore.adapters.messages.adapter import MessagesAdapter
+    from chatstore.cache.extraction import code_signature
+    from chatstore.config import Config
+
+    @contextmanager
+    def wrapped(value=1):
+        yield value
+
+    monkeypatch.setattr(decoder, 'policy_probe', wrapped, raising=False)
+    adapter, config = MessagesAdapter(), Config()
+    before = code_signature(adapter, config)
+    wrapped.__wrapped__.__defaults__ = (2,)
+    defaults_changed = code_signature(adapter, config)
+    assert defaults_changed != before
+
+    def replacement(value=2):
+        yield value + 1
+
+    monkeypatch.setattr(wrapped.__wrapped__, '__code__', replacement.__code__)
+    assert code_signature(adapter, config) != defaults_changed
+
+
+def test_policy_covers_properties_and_rejects_decorator_cycles(monkeypatch):
+    import pytest
+
+    from chatstore.adapters.messages import decoder
+    from chatstore.adapters.messages.adapter import MessagesAdapter
+    from chatstore.cache.extraction import code_signature
+    from chatstore.config import Config
+
+    class Probe:
+        @property
+        def value(self):
+            return 1
+
+    Probe.__module__ = decoder.__name__
+    monkeypatch.setattr(decoder, 'PolicyProbe', Probe, raising=False)
+    adapter, config = MessagesAdapter(), Config()
+    before = code_signature(adapter, config)
+    monkeypatch.setattr(Probe, 'value', property(lambda self: 2))
+    assert code_signature(adapter, config) != before
+    def cyclic():
+        pass
+    cyclic.__wrapped__ = cyclic
+    monkeypatch.setattr(decoder, 'policy_probe', cyclic, raising=False)
+    with pytest.raises(RuntimeError, match='cyclic'):
+        code_signature(adapter, config)
