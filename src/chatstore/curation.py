@@ -239,6 +239,9 @@ def purge_urns(cache: Cache, urns: list[str]) -> int:
         cache.conn.execute(f"DELETE FROM bucket_membership WHERE urn IN ({ph})", chunk)
         for t in ("messages_idx", "events_idx", "attachments_idx", "parts_idx", "memberships_idx", "links_idx", "aliases_idx"):
             cache.conn.execute(f"DELETE FROM {t} WHERE urn IN ({ph})", chunk)
+        from .cache.freshness import forget
+        keys = [r[0] for r in cache.conn.execute(f"SELECT id FROM entity_keys WHERE urn IN ({ph})", chunk)]
+        forget(cache.conn, 'record', keys)
         n += cache.conn.execute(f"DELETE FROM records WHERE urn IN ({ph})", chunk).rowcount
     return n
 

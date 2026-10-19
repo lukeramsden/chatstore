@@ -111,6 +111,8 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
 
         with cache.bulk():
             for n, emit in enumerate(adapter.extract(snap, scope, cfg, stats, checkpoints, full=full), start=1):
+                if not isinstance(emit, Emit):
+                    raise IncompatibleSource('grouped extraction requires the incremental collector')
                 batch.append(emit)
                 if len(batch) >= BATCH:
                     flush()
