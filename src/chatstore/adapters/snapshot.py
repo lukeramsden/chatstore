@@ -10,6 +10,7 @@ import os
 import shutil
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,7 @@ class SnapshotFile:
 class Snapshot:
     directory: Path
     files: dict[str, SnapshotFile] = field(default_factory=dict)
+    attachment_probe: Callable[[dict[str, Any]], tuple[str, str | None, int | None, str | None]] | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {"files": [f.manifest() for f in self.files.values()]}

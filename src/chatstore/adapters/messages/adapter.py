@@ -367,22 +367,7 @@ class MessagesAdapter:
             if a["rowid"] is not None:
                 used_att.add(a["rowid"])
             fn = a.get("filename")
-            availability, sha, size, hint = "unknown", None, a.get("total_bytes"), None
-            if a.get("_purged"):
-                availability = "missing"
-            elif fn:
-                p = Path(fn).expanduser()
-                try:
-                    hint = str(p.relative_to(root))
-                except ValueError:
-                    hint = os.path.basename(fn)
-                if p.is_file() and not p.is_symlink():
-                    availability = "available"
-                    sha, size = _sha256(p)
-                else:
-                    availability = "missing" if fn.startswith(("~", "/")) else "unknown"
-            else:
-                availability = "not_downloaded"
+            availability, sha, size, hint = _probe_attachment(a, root)
             rec = record("attachments", a_urn, SOURCE, scope, native_key=a_key, message_urn=m_urn, part_index=part_index,
                          filename=os.path.basename(a.get("transfer_name") or fn or "") or None, mime_type=a.get("mime_type"),
                          uti=a.get("uti"), declared_size=size, availability=availability, blob_sha256=sha,
@@ -480,6 +465,23 @@ class MessagesAdapter:
                               target_native=ev["payload"].get("target_native"), actor_urn=sender,
                               at=timestamp(ev.get("at_raw", o["date"]), "ns", EPOCH_2001), payload=ev["payload"], carrier_message_urn=m_urn))
             stats.bump("events")
+
+
+def _probe_attachment(a: dict[str, Any], root: Path) -> tuple[str, str | None, int | None, str | None]:
+    fn, size = a.get('filename'), a.get('total_bytes')
+    if a.get('_purged'):
+        return 'missing', None, size, None
+    if not fn:
+        return 'not_downloaded', None, size, None
+    path = Path(fn).expanduser()
+    try:
+        hint = str(path.relative_to(root))
+    except ValueError:
+        hint = os.path.basename(fn)
+    if path.is_file() and not path.is_symlink():
+        sha, size = _sha256(path)
+        return 'available', sha, size, hint
+    return ('missing' if fn.startswith(('~', '/')) else 'unknown'), None, size, hint
 
 
 def _sha256(p: Path) -> tuple[str, int]:
