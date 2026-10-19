@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import platform
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -135,6 +137,7 @@ def _local_tz_name() -> str:
 
 
 def cmd_sync(ctx: Ctx) -> Result:
+    from ..native_collector import collect_native
     from ..sync import run_sync
     sources = SOURCES if ctx.args.source == "all" else [ctx.args.source]
     runs, code = [], EXIT_OK
@@ -152,8 +155,10 @@ def cmd_sync(ctx: Ctx) -> Result:
                 return
             print(f"[{_s}] {msg}", file=sys.stderr)
 
-        out = run_sync(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
-                       progress=None if quiet else progress)
+        out = collect_native(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"))
+        if out is None:
+            out = run_sync(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
+                           session=ctx._sync_sessions.get(s), progress=None if quiet else progress)
         runs.append({"source": s, **out.run})
         code = max(code, out.exit_code) if out.exit_code != EXIT_OK else code
     warnings = [{"code": f"sync_{r['status']}", "message": f"{r['source']}: {r['status']} ({', '.join(e['code'] for e in r['errors'])})"}
@@ -162,11 +167,15 @@ def cmd_sync(ctx: Ctx) -> Result:
     def human(rs: list[dict[str, Any]]) -> str:
         lines = []
         for r in rs:
-            c = {k: v for k, v in r["counts"].items() if k not in ("unsupported", "written")}
+            c = {k: v for k, v in r["counts"].items() if k not in ("unsupported", "written", "canonical_units_rebuilt", "canonical_units_reused", "monitored_coverage_reused")}
             w = r["counts"].get("written") or {}
             lines.append(f"{r['source']}: {r['status']} ({r['mode']}) new={w.get('inserted', 0)} "
                          f"updated={w.get('updated', 0)} unchanged={w.get('unchanged', 0)}")
-            lines.append(f"  emitted by adapter: {c}")
+            label = 'reused captured coverage' if r['counts'].get('monitored_coverage_reused') else 'emitted by adapter'
+            lines.append(f"  {label}: {c}")
+            if 'canonical_units_rebuilt' in r['counts'] or 'canonical_units_reused' in r['counts']:
+                lines.append(f"  canonical groups rebuilt={r['counts'].get('canonical_units_rebuilt', 0)} "
+                             f"reused={r['counts'].get('canonical_units_reused', 0)} (adapter totals include reused coverage)")
             if r["counts"].get("unsupported"):
                 lines.append(f"  unsupported: {r['counts']['unsupported']}")
             for e in r["errors"]:
@@ -389,6 +398,20 @@ def cmd_rebuild_index(ctx: Ctx) -> Result:
 
 # ---- parser -----------------------------------------------------------------------------------
 
+def positive_seconds(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError('must be a finite number greater than zero')
+    return number
+
+
+def positive_count(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError('must be greater than zero')
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="chatstore", description="Local-first search and encrypted archiving of your WhatsApp and Messages history.")
     p.add_argument("--data-dir", help="Override the data directory (also CHATSTORE_DATA_DIR).")
@@ -408,6 +431,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sync", help="Ingest from sources into the cache.")
     s.add_argument("--source", choices=["all", *SOURCES], default="all")
     s.add_argument("--mode", choices=["incremental", "full"], default="incremental")
+    s.add_argument('--watch-interval', type=positive_seconds,
+                   help='Keep source monitors alive and poll every N seconds; emits one result per poll.')
+    s.add_argument('--max-polls', type=positive_count,
+                   help='Stop watch mode after N polls (requires --watch-interval).')
     s.set_defaults(fn=cmd_sync)
     sub.add_parser("status", help="Show sync state, coverage and counts.").set_defaults(fn=cmd_status)
 
@@ -496,9 +523,27 @@ def main(argv: list[str] | None = None) -> int:
     ctx = Ctx(args, DataDir(resolve_data_dir(args.data_dir)))
     command = " ".join(str(v) for k, v in vars(args).items() if k == "command" or k.endswith("_command") and v)
     try:
-        res = args.fn(ctx)
-        fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init", "version") and ctx.data_dir.exists() else None
-        return emit(args, command, res, fresh)
+        interval = getattr(args, 'watch_interval', None)
+        limit = getattr(args, 'max_polls', None)
+        if limit is not None and interval is None:
+            raise CliError(EXIT_USAGE, 'watch_interval_required', '--max-polls requires --watch-interval')
+        if interval is not None:
+            from ..sync_session import SyncSession
+            sources = SOURCES if args.source == 'all' else [args.source]
+            ctx._sync_sessions = {source: SyncSession() for source in sources}
+        polls = 0
+        while True:
+            began = time.monotonic()
+            res = args.fn(ctx)
+            fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init", "version") and ctx.data_dir.exists() else None
+            code = emit(args, command, res, fresh)
+            polls += 1
+            if interval is None or (limit is not None and polls >= limit):
+                return code
+            sys.stdout.flush()
+            time.sleep(max(0, interval - (time.monotonic() - began)))
+            ctx._cfg = None
+            ctx._ident = None
     except CliError as e:
         return emit(args, command, Result(None, e.code, errors=[{"code": e.err_code, "message": e.message}]), None)
     except NotInitialised as e:
@@ -508,5 +553,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:  # noqa: BLE001 - last resort: keep the JSON contract, never leak bodies
         return emit(args, command, Result(None, EXIT_FAIL, errors=[{"code": "internal", "message": f"{type(e).__name__}: {e}"}]), None)
     finally:
+        for session in ctx._sync_sessions.values():
+            session.close()
         if ctx._cache is not None:
             ctx._cache.close()

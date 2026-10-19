@@ -1,0 +1,94 @@
+"""Durable Messages projection dispatch for ordinary collector polls."""
+
+from __future__ import annotations
+
+import hashlib
+import sqlite3
+import sys
+from datetime import UTC, datetime
+
+from .adapters.base import SourceAdapter, check_schema
+from .adapters.messages.adapter import REQUIRED, MessagesAdapter, find_helper
+from .adapters.native_mirror import NativeMirror
+from .adapters.pages import PageUnavailable
+from .adapters.source_view import WalSource
+from .adapters.wal import WalPages, WalUnavailable
+from .cache import Cache
+from .config import Config, Identity
+from .paths import DataDir
+from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
+from .sync import SyncOutcome
+
+
+class MediaCaptureRequired(Exception):
+    """A candidate contains file paths and must use ordinary media capture."""
+
+
+def _validate_text_only(conn: sqlite3.Connection) -> None:
+    # The baseline adapter installs this private index before acknowledgement.
+    if conn.execute("SELECT 1 FROM attachment INDEXED BY cs_route_media_file WHERE filename>'' LIMIT 1").fetchone():
+        raise MediaCaptureRequired
+
+
+def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity,
+                   cache: Cache, *, full: bool = False) -> SyncOutcome | None:
+    """Return None only when ordinary snapshot capture is required.
+
+    A pending point is always handled before opening the source. Errors after
+    prepare never authorize fallback to another capture or advance its cursor.
+    """
+    if type(adapter) is not MessagesAdapter or sys.platform != 'darwin':
+        return None
+    scope = ident.scope_for(adapter.source)
+    namespace = f'{adapter.source}/{scope}'
+    directory = dd.root / 'native'
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    name = hashlib.sha256(namespace.encode()).hexdigest() + '.sqlite3'
+    with _capture_lock(directory / name), NativeMirror(directory / name) as mirror:
+        pending = mirror.pending()
+        if pending is not None:
+            return _run_prepared_sync(adapter, dd, cfg, ident, cache,
+                                      PreparedSync(mirror, pending, 'chat'), full=full)
+        previous = mirror.continuation()
+        if find_helper(cfg) is None:
+            return None
+        policy = policy_signature(adapter, cfg)
+        path = adapter.discover(cfg)['chat']
+        observed_at = datetime.now(UTC).isoformat()
+        # A rejected continuation may still permit a pinned fresh baseline.
+        # No prepared point exists at this stage, so fallback cannot lose one.
+        for continuation in (True, False):
+            after = previous.cursor if continuation and previous and previous.policy_tag == policy else None
+            try:
+                with WalSource(path) as source, source.view(after) as view:
+                    if check_schema(view.connection, REQUIRED):
+                        return None
+                    baseline = previous is None or after is None or previous.schema_version != view.schema_version
+                    # A full source eligibility scan is limited to full baselines.
+                    # Deltas validate the indexed candidate before its commit.
+                    if baseline and view.connection.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
+                        return None
+                    tables = list(REQUIRED)
+                    if view.connection.execute("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='chat_recoverable_message_join'").fetchone():
+                        tables.append('chat_recoverable_message_join')
+                    context = {'collector': 'messages-native-v1'}
+                    if previous is None:
+                        pending = mirror.initialize(view, tables, namespace=namespace, policy_tag=policy,
+                            observed_at=observed_at, context=context)
+                    elif after is None or previous.schema_version != view.schema_version:
+                        pending = mirror.rebase(view, tables, expected_token=previous.token,
+                            namespace=namespace, policy_tag=policy, observed_at=observed_at, context=context)
+                    else:
+                        with WalPages(path.with_name(path.name + '-wal'), view.changes) as pages:
+                            pending = mirror.prepare(view, pages, expected_token=previous.token,
+                                namespace=namespace, policy_tag=policy, observed_at=observed_at, context=context,
+                                validate_rows=_validate_text_only)
+                break
+            except MediaCaptureRequired:
+                return None
+            except (WalUnavailable, PageUnavailable):
+                if not continuation or after is None:
+                    return None
+        assert pending is not None
+        return _run_prepared_sync(adapter, dd, cfg, ident, cache,
+                                  PreparedSync(mirror, pending, 'chat'), full=full)

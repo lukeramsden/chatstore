@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -91,11 +92,11 @@ def test_whatsapp_sync_and_queries(env, capsys):
     lid_chat = next(c for c in e["data"] if c["label"] == "Bob Lid")
     assert lid_chat["chat_kind"] == "direct"
 
-    # second sync is a no-op incremental: no new revisions
+    # No content revisions; sync runs retain their running and completed states.
     code, e = run(capsys, "sync", "--source", "whatsapp")
     assert code == 0 and e["data"][0]["mode"] == "incremental"
     conn = sqlite3.connect(env["data"] / "cache.sqlite3")
-    assert conn.execute("SELECT count(*) FROM (SELECT entity_urn FROM revisions GROUP BY 1 HAVING count(*) > 1)").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM (SELECT entity_urn FROM revisions WHERE entity_kind!='sync_runs' GROUP BY 1 HAVING count(*) > 1)").fetchone()[0] == 0
 
 
 def test_whatsapp_incremental_and_revision(env, capsys):
@@ -195,3 +196,36 @@ def test_missing_source_is_permission_or_not_found(env, capsys, tmp_path):
     code, e = run(capsys, "sync", "--source", "whatsapp")
     assert code == 3 and e["data"][0]["errors"][0]["code"] == "permission"
     assert "not found" in e["data"][0]["errors"][0]["sample"]
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS retained source monitor')
+def test_watch_mode_streams_results_and_captures_old_edit(env, capsys, monkeypatch):
+    assert run(capsys, 'init', '--whatsapp-path', str(env['wa']), '--messages-path', str(env['im']))[0] == 0
+    sleeps = 0
+
+    def between_polls(seconds):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 3:
+            with sqlite3.connect(env['wa'] / 'ChatStorage.sqlite') as writer:
+                writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='old edit between polls' WHERE Z_PK=1")
+
+    monkeypatch.setattr('chatstore.cli.app.time.sleep', between_polls)
+    code = main(['--json', 'sync', '--source', 'whatsapp', '--watch-interval', '900', '--max-polls', '5'])
+    results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert code == 0 and len(results) == 5
+    assert all(r['envelope'] == 'chatstore-cli-v1' and r['ok'] for r in results)
+    assert results[2]['data'][0]['counts']['monitored_coverage_reused'] == 1
+    assert not results[3]['data'][0]['counts'].get('monitored_coverage_reused')
+    assert results[3]['data'][0]['counts']['canonical_units_rebuilt'] == 1
+    assert results[4]['data'][0]['counts']['monitored_coverage_reused'] == 1
+
+
+@pytest.mark.parametrize('options', [
+    ['--watch-interval', '0'], ['--watch-interval', 'nan'], ['--watch-interval', 'inf'],
+    ['--watch-interval', '-1'], ['--max-polls', '0'], ['--max-polls', '1'],
+])
+def test_watch_mode_rejects_invalid_intervals_and_limits(env, capsys, options):
+    code = main(['--json', 'sync', *options])
+    capsys.readouterr()
+    assert code == 2

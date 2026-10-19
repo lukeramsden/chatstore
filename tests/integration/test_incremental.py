@@ -289,6 +289,53 @@ def test_remote_durability_requires_metadata_and_remote_bytes(feed, monkeypatch)
     assert cache.conn.execute('SELECT sequence FROM delivery_checkpoints').fetchone()[0] == delta['sequence']
 
 
+def test_next_poll_captures_old_source_edits_absence_context_and_media(tmp_path):
+    import sqlite3
+
+    from chatstore.adapters.whatsapp.adapter import WhatsAppAdapter
+    from chatstore.sync import run_sync
+    from tests.fixtures.synthetic import build_whatsapp
+    root = build_whatsapp(tmp_path / 'wa')
+    # A checkpoint beyond the old 5,000-row look-back must not hide row 1 mutations.
+    with sqlite3.connect(root / 'ChatStorage.sqlite') as source:
+        source.execute('''INSERT INTO ZWAMESSAGE SELECT 10000,Z_ENT,Z_OPT,ZFLAGS,ZGROUPEVENTTYPE,
+            ZISFROMME,ZMESSAGEERRORSTATUS,ZMESSAGESTATUS,ZMESSAGETYPE,10000,ZSPOTLIGHTSTATUS,ZSTARRED,
+            ZCHATSESSION,ZGROUPMEMBER,ZMEDIAITEM,ZPARENTMESSAGE,ZMESSAGEDATE,ZSENTDATE,ZFROMJID,ZPUSHNAME,
+            'high-checkpoint','newer',ZTOJID FROM ZWAMESSAGE WHERE Z_PK=1''')
+    dd = DataDir(tmp_path / 'data')
+    dd.create()
+    ident, cfg = Identity(), Config(source_paths={'whatsapp': str(root)})
+    ident.ensure_scope('whatsapp')
+    cache = Cache(dd.cache)
+    try:
+        assert run_sync(WhatsAppAdapter(), dd, cfg, ident, cache).exit_code == 0
+        first = I.export_changes(cache, dd, cfg, ident, consumer='linux', output=dd.exports, password='pw')
+        with sqlite3.connect(root / 'ChatStorage.sqlite') as source:
+            source.execute("UPDATE ZWAMESSAGE SET ZTEXT='old edit found on next poll' WHERE Z_PK=1")
+            source.execute('DELETE FROM ZWAMESSAGE WHERE Z_PK=8')
+            source.execute("UPDATE ZWACHATSESSION SET ZPARTNERNAME='Renamed' WHERE Z_PK=1")
+        (root / 'Message' / 'Media' / 'x' / 'pic.jpg').unlink()
+        outcome = run_sync(WhatsAppAdapter(), dd, cfg, ident, cache)
+        assert outcome.exit_code == 0 and outcome.run['mode'] == 'incremental'
+        second = I.export_changes(cache, dd, cfg, ident, consumer='linux', output=dd.exports, password='pw')
+        assert second['receipt']['feed']['parent'] == first['export_id']
+        old = next(m for m in cache.iter_records('messages') if m.get('text') == 'old edit found on next poll')
+        assert len(cache.revisions_of(old['urn'])) == 2
+        absent = next(m for m in cache.iter_records('messages') if m.get('text') == 'direct from lid')
+        assert cache.observations_of(absent['urn'])[0]['present'] == 'absent_from_source'
+        assert next(cache.iter_records('attachments'))['availability'] == 'missing'
+        dst, target, target_ident = restore(tmp_path)
+        try:
+            for batch in (first, second):
+                result = import_archive(dst, target, target_ident, Path(batch['path']), 'pw')
+                assert result.action == 'imported' and result.conflicts == 0, result
+            assert dst.get(old['urn'])['text'] == 'old edit found on next poll'
+            assert dst.observations_of(absent['urn'])[0]['present'] == 'absent_from_source'
+            assert dst.get(old['chat_urn'])['observed_name'] == 'Renamed'
+        finally:
+            dst.close()
+    finally:
+        cache.close()
 
 
 def test_legacy_cache_migration_retains_observations_and_nonreused_ids(tmp_path):
@@ -427,6 +474,38 @@ def test_divergent_clone_cannot_reuse_producer_sequence(feed, tmp_path):
         clone.close()
 
 
+def test_interrupted_sync_keeps_captured_batch_and_running_provenance(tmp_path):
+    from types import SimpleNamespace
+
+    from chatstore.adapters.base import Diagnosis, Emit
+    from chatstore.sync import BATCH, run_sync
+    class InterruptedAdapter:
+        source = 'whatsapp'
+        version = 'test'
+        def diagnose(self, cfg):
+            return Diagnosis('whatsapp', '', True, True, True)
+        def snapshot(self, cfg, staging):
+            return SimpleNamespace(manifest=dict, cleanup=lambda: None)
+        def extract(self, snapshot, scope, cfg, stats, checkpoints, *, full):
+            for n in range(BATCH):
+                yield Emit(msg(n, 'captured batch', None, None, n))
+            raise KeyboardInterrupt
+    dd = DataDir(tmp_path / 'interrupted')
+    dd.create()
+    cache, ident = Cache(dd.cache), Identity()
+    ident.ensure_scope('whatsapp')
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            run_sync(InterruptedAdapter(), dd, Config(), ident, cache)
+        assert cache.counts()['messages'] == BATCH
+        run = cache.latest_sync_runs()[0]
+        assert run['status'] == 'running' and run['finished_at'] is None
+        assert cache.get_checkpoint('whatsapp', ident.scope_for('whatsapp'), 'adapter') is None
+        captured = next(cache.iter_records('messages'))
+        assert captured['sync_run'] == run['urn']
+        assert cache.get(captured['sync_run']) is not None
+    finally:
+        cache.close()
 
 
 def test_record_sightings_preserve_import_order_without_touching_content(feed, tmp_path):
