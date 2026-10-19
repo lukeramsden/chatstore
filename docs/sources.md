@@ -64,9 +64,13 @@ Interpretation rules, each backed by the validation in source-findings:
   no `ZCHATSESSION` marks the run `partial` — one exists on the test machine.
 - Credentials, session secrets and media encryption keys are never emitted.
 
-Incremental sync processes logical groups with any `Z_PK` above the checkpoint plus a 5,000-row
-look-back window for status changes. A checkpoint moving backwards is reported as a source reset
-and forces a full reconcile.
+Every poll reconciles all logical groups: a row-ID window cannot detect older edits, backfills,
+absence or media changes. The `Z_PK` checkpoint remains useful for reporting source resets, but
+does not limit preservation coverage. Archive export is incremental through the transactional
+changefeed; native source scanning remains a performance limitation. Unchanged native message
+groups reuse canonical records through a transactional dependency memo. Fingerprints still
+cover historical rows, context and actual media bytes on every poll; see
+[native extraction reuse](incremental-preservation.md#native-extraction-reuse).
 
 ## Apple Messages
 
@@ -87,7 +91,10 @@ header/footer-framed JSONL (`chatstore-messages-decoder/1`); the adapter fails c
 or exit-code mismatch. It is found via `config.helper_path`, `CHATSTORE_MESSAGES_DECODER`,
 `<data-dir>/bin/`, `PATH`, or a development checkout, and can be installed prebuilt with
 `chatstore helper install` (see [operations.md](operations.md#apple-messages-helper)). Handles,
-chats, joins and chat inference stay in Python SQL.
+chats, joins and chat inference stay in Python SQL. The development helper also supports
+explicit `--rowids-file` selection with capability confirmation; the adapter exposes this
+internally while the collector still uses full extraction. See [selection guarantees and
+remaining integration](incremental-preservation.md#selective-messages-decoding).
 
 Interpretation rules:
 
@@ -123,3 +130,13 @@ read receipts and tapbacks mutate or reference old rows. Decoding the 77k-row te
   stays. Only `purge` deletes.
 - A desktop store is never claimed to hold complete account history; `status` reports time
   coverage per source and the `sync_runs` row lists unsupported kinds and per-record errors.
+
+## Retained monitoring
+
+`sync --watch-interval SECONDS` retains SQLite read connections and file/ancestor vnode watches
+on macOS. Stable monitored captures can re-sight exact prior coverage without native reads.
+Media dependencies are registered before hashing, and a further stable capture establishes
+complete coverage. Interrupted capture, changed source/cache state, monitor restart and watch
+errors force reconciliation. Existing one-shot sync still snapshots and scans each time.
+See [persistent sync lifecycle](incremental-preservation.md#persistent-sync-lifecycle) for the
+JSON stream, limitations and collector integration. Native changed-row selection remains open.

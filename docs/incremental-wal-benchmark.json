@@ -1,0 +1,56 @@
+{
+  "rows": 100000,
+  "scope": "Synthetic WAL parsing only; excludes setup, SQL mutation and source-view coordination. Logical reads, not kernel storage IO. No energy measurement.",
+  "measurements": [
+    {
+      "stage": "initial-wal-validation",
+      "wall_seconds": 0.25208979193121195,
+      "cpu_seconds": 0.25166199999999994,
+      "logical_bytes_read": 11181744,
+      "frames_read": 2714,
+      "changed_pages": 2712,
+      "commits": 2,
+      "wal_bytes": 11181712
+    },
+    {
+      "stage": "no-change",
+      "wall_seconds": 8.104206062853336e-05,
+      "cpu_seconds": 8.20000000000265e-05,
+      "logical_bytes_read": 88,
+      "frames_read": 0,
+      "changed_pages": 0,
+      "commits": 0,
+      "wal_bytes": 11181712
+    },
+    {
+      "stage": "historical-edit",
+      "wall_seconds": 0.00016195804346352816,
+      "cpu_seconds": 0.00016199999999999548,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11185832
+    },
+    {
+      "stage": "new-row",
+      "wall_seconds": 0.0001396250445395708,
+      "cpu_seconds": 0.00014100000000000223,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11189952
+    },
+    {
+      "stage": "historical-delete",
+      "wall_seconds": 0.0001405840739607811,
+      "cpu_seconds": 0.00014100000000000223,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11194072
+    }
+  ]
+}

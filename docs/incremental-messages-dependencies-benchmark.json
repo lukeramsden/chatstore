@@ -1,0 +1,80 @@
+{
+  "messages": 100000,
+  "scope": "Synthetic coordinated WAL validation, atomic native-mirror preparation, automatic old/new dependency routing, and selected Messages adapter extraction. Includes helper launch/SQL/decoding and canonical construction; baseline includes full image/rows/index setup. Excludes canonical cache writes and retained-unit freshness/deletion reconciliation, durable media preparation, archives, source setup/mutation, kernel IO and energy. Acknowledgements use stand-in benchmark receipt IDs, not canonical receipts. Logical byte counts cover WAL only; SQLite/index/WAL-index reads are additional.",
+  "measurements": [
+    {
+      "stage": "baseline-native-preparation-and-full-extraction",
+      "wall_seconds": 7.710719624999911,
+      "parent_cpu_seconds": 7.559585,
+      "helper_cpu_seconds": 0.38390099999999994,
+      "native_rows_changed": 200010,
+      "canonical_records_emitted": 200015
+    },
+    {
+      "stage": "clean",
+      "wall_seconds": 0.013110250001773238,
+      "parent_cpu_seconds": 0.007768000000000441,
+      "helper_cpu_seconds": 0.004552000000000035,
+      "native_rows_changed": 0,
+      "routed_message_rows": 0,
+      "canonical_messages_emitted": 0,
+      "canonical_records_emitted": 11,
+      "wal_logical_bytes_read": 344
+    },
+    {
+      "stage": "old-edit",
+      "wall_seconds": 0.016513749957084656,
+      "parent_cpu_seconds": 0.011703999999999937,
+      "helper_cpu_seconds": 0.004342000000000006,
+      "native_rows_changed": 1,
+      "routed_message_rows": 1,
+      "canonical_messages_emitted": 1,
+      "canonical_records_emitted": 13,
+      "wal_logical_bytes_read": 8640
+    },
+    {
+      "stage": "new-message",
+      "wall_seconds": 0.014315958018414676,
+      "parent_cpu_seconds": 0.009394999999999598,
+      "helper_cpu_seconds": 0.004254000000000001,
+      "native_rows_changed": 1,
+      "routed_message_rows": 1,
+      "canonical_messages_emitted": 1,
+      "canonical_records_emitted": 13,
+      "wal_logical_bytes_read": 12760
+    },
+    {
+      "stage": "chat-title",
+      "wall_seconds": 0.00940320803783834,
+      "parent_cpu_seconds": 0.005103999999999331,
+      "helper_cpu_seconds": 0.0035800000000000345,
+      "native_rows_changed": 1,
+      "routed_message_rows": 0,
+      "canonical_messages_emitted": 0,
+      "canonical_records_emitted": 11,
+      "wal_logical_bytes_read": 8640
+    },
+    {
+      "stage": "attachment-metadata",
+      "wall_seconds": 0.010734499897807837,
+      "parent_cpu_seconds": 0.006151999999998381,
+      "helper_cpu_seconds": 0.004243999999999984,
+      "native_rows_changed": 1,
+      "routed_message_rows": 1,
+      "canonical_messages_emitted": 1,
+      "canonical_records_emitted": 15,
+      "wal_logical_bytes_read": 8640
+    },
+    {
+      "stage": "old-delete",
+      "wall_seconds": 0.014447208028286695,
+      "parent_cpu_seconds": 0.010132999999999726,
+      "helper_cpu_seconds": 0.003684999999999987,
+      "native_rows_changed": 1,
+      "routed_message_rows": 1,
+      "canonical_messages_emitted": 0,
+      "canonical_records_emitted": 11,
+      "wal_logical_bytes_read": 12760
+    }
+  ]
+}

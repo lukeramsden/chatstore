@@ -1,0 +1,220 @@
+{
+  "workload": "synthetic WhatsApp, 100000 extra messages; warm policy-signature cache",
+  "limitations": [
+    "Single run; parent process counters only; no energy measurement",
+    "Measured before cache close was included in stage timing",
+    "Native source history still scanned"
+  ],
+  "result": {
+    "stage": "sync-poll",
+    "wall_seconds": 6.715335000073537,
+    "cpu_seconds": 5.108757,
+    "peak_rss_bytes": 133267456,
+    "archive_bytes": 0,
+    "archive_count": 0,
+    "archives": [],
+    "energy_joules": null,
+    "io": {
+      "storage_read_bytes": 323997696,
+      "storage_written_bytes": 16408576,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0
+    },
+    "sync_counts": {
+      "chats": 3,
+      "chat_memberships": 7,
+      "identities": 7,
+      "aliases": 2,
+      "messages": 100008,
+      "canonical_units_reused": 100008,
+      "attachments": 1,
+      "events": 2,
+      "unsupported": {
+        "group_event_type:15": 1,
+        "message_type:99": 1,
+        "group_change_type:5": 1
+      },
+      "written": {
+        "inserted": 0,
+        "updated": 0,
+        "unchanged": 200037
+      }
+    }
+  },
+  "messages_indexed_synthetic": {
+    "source": "messages",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]",
+    "extra_messages": 100000,
+    "workdir": "/var/folders/pk/7ss2x4n53j30ns2jkgt1gczc0000gn/T/chatstore-bench-hdkfmfuc",
+    "sync_only": true,
+    "measurements": [
+      {
+        "stage": "sync-initial",
+        "wall_seconds": 51.19286487507634,
+        "cpu_seconds": 38.536379,
+        "parent_cpu_seconds": 38.138571,
+        "child_cpu_seconds": 0.39780799999999994,
+        "peak_rss_bytes": 156286976,
+        "child_peak_rss_bytes": 47792128,
+        "combined_peak_rss_upper_bound_bytes": 204079104,
+        "child_input_block_operations": 0,
+        "child_output_block_operations": 0,
+        "io_scope": "parent_process",
+        "archive_bytes": 0,
+        "archive_count": 0,
+        "energy_joules": null,
+        "io": {
+          "storage_read_bytes": 2351452160,
+          "storage_written_bytes": 6404812800,
+          "package_idle_wakeups": 13,
+          "interrupt_wakeups": 2016
+        },
+        "sync_counts": {
+          "identities": 5,
+          "chats": 3,
+          "chat_memberships": 4,
+          "stub_chats": 1,
+          "messages_inferred_chat": 2,
+          "messages": 100007,
+          "canonical_units_rebuilt": 100007,
+          "attachments": 1,
+          "events": 1,
+          "unsupported": {
+            "parser:empty": 1
+          },
+          "written": {
+            "inserted": 200029,
+            "updated": 0,
+            "unchanged": 0
+          }
+        }
+      },
+      {
+        "stage": "sync-poll",
+        "wall_seconds": 6.143003416946158,
+        "cpu_seconds": 4.329733,
+        "parent_cpu_seconds": 3.94943,
+        "child_cpu_seconds": 0.38030299999999995,
+        "peak_rss_bytes": 149553152,
+        "child_peak_rss_bytes": 47808512,
+        "combined_peak_rss_upper_bound_bytes": 197361664,
+        "child_input_block_operations": 0,
+        "child_output_block_operations": 0,
+        "io_scope": "parent_process",
+        "archive_bytes": 0,
+        "archive_count": 0,
+        "energy_joules": null,
+        "io": {
+          "storage_read_bytes": 148725760,
+          "storage_written_bytes": 28573696,
+          "package_idle_wakeups": 0,
+          "interrupt_wakeups": 2
+        },
+        "sync_counts": {
+          "identities": 5,
+          "chats": 3,
+          "chat_memberships": 4,
+          "stub_chats": 1,
+          "messages_inferred_chat": 2,
+          "messages": 100007,
+          "canonical_units_reused": 100007,
+          "attachments": 1,
+          "events": 1,
+          "unsupported": {
+            "parser:empty": 1
+          },
+          "written": {
+            "inserted": 0,
+            "updated": 0,
+            "unchanged": 200029
+          }
+        }
+      },
+      {
+        "stage": "sync-new-message",
+        "wall_seconds": 4.247819332988001,
+        "cpu_seconds": 4.3959220000000006,
+        "parent_cpu_seconds": 4.0044830000000005,
+        "child_cpu_seconds": 0.391439,
+        "peak_rss_bytes": 147505152,
+        "child_peak_rss_bytes": 47841280,
+        "combined_peak_rss_upper_bound_bytes": 195346432,
+        "child_input_block_operations": 0,
+        "child_output_block_operations": 0,
+        "io_scope": "parent_process",
+        "archive_bytes": 0,
+        "archive_count": 0,
+        "energy_joules": null,
+        "io": {
+          "storage_read_bytes": 802816,
+          "storage_written_bytes": 29540352,
+          "package_idle_wakeups": 0,
+          "interrupt_wakeups": 1
+        },
+        "sync_counts": {
+          "identities": 5,
+          "chats": 3,
+          "chat_memberships": 4,
+          "stub_chats": 1,
+          "messages_inferred_chat": 2,
+          "messages": 100008,
+          "canonical_units_reused": 100007,
+          "canonical_units_rebuilt": 1,
+          "attachments": 1,
+          "events": 1,
+          "unsupported": {
+            "parser:empty": 1
+          },
+          "written": {
+            "inserted": 2,
+            "updated": 0,
+            "unchanged": 200029
+          }
+        }
+      },
+      {
+        "stage": "sync-old-edit",
+        "wall_seconds": 5.535807125037536,
+        "cpu_seconds": 4.792178,
+        "parent_cpu_seconds": 4.382433,
+        "child_cpu_seconds": 0.40974499999999997,
+        "peak_rss_bytes": 140951552,
+        "child_peak_rss_bytes": 47775744,
+        "combined_peak_rss_upper_bound_bytes": 188727296,
+        "child_input_block_operations": 0,
+        "child_output_block_operations": 0,
+        "io_scope": "parent_process",
+        "archive_bytes": 0,
+        "archive_count": 0,
+        "energy_joules": null,
+        "io": {
+          "storage_read_bytes": 188563456,
+          "storage_written_bytes": 29155328,
+          "package_idle_wakeups": 0,
+          "interrupt_wakeups": 3
+        },
+        "sync_counts": {
+          "identities": 5,
+          "chats": 3,
+          "chat_memberships": 4,
+          "stub_chats": 1,
+          "messages_inferred_chat": 2,
+          "messages": 100008,
+          "canonical_units_reused": 100007,
+          "canonical_units_rebuilt": 1,
+          "attachments": 1,
+          "events": 1,
+          "unsupported": {
+            "parser:empty": 1
+          },
+          "written": {
+            "inserted": 0,
+            "updated": 2,
+            "unchanged": 200029
+          }
+        }
+      }
+    ]
+  }
+}

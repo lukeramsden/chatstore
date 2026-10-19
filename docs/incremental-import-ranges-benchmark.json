@@ -1,0 +1,43 @@
+{
+  "keys": 100000,
+  "scope": "in-memory synthetic record-key translation only; excludes archive IO and capture",
+  "energy_joules": null,
+  "measurements": [
+    {
+      "stage": "legacy-clean",
+      "wall_seconds": 0.16554345795884728,
+      "cpu_seconds": 0.10908899999999999,
+      "output_intervals": 1
+    },
+    {
+      "stage": "initialize-projection",
+      "wall_seconds": 0.13030012499075383,
+      "cpu_seconds": 0.126865,
+      "output_intervals": 1
+    },
+    {
+      "stage": "interval-clean",
+      "wall_seconds": 6.699992809444666e-05,
+      "cpu_seconds": 6.800000000017903e-05,
+      "output_intervals": 1
+    },
+    {
+      "stage": "interval-one-divergent-head",
+      "wall_seconds": 0.0002769159618765116,
+      "cpu_seconds": 0.00018699999999993722,
+      "output_intervals": 2
+    },
+    {
+      "stage": "legacy-one-divergent-head",
+      "wall_seconds": 0.12628612504340708,
+      "cpu_seconds": 0.10102100000000003,
+      "output_intervals": 2
+    },
+    {
+      "stage": "interval-head-restored",
+      "wall_seconds": 0.0010385001078248024,
+      "cpu_seconds": 0.00023900000000010024,
+      "output_intervals": 1
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+Intermediate cProfile run used to locate the remaining native reconstruction cost.
+Profiler timing includes instrumentation overhead; see incremental-sync-benchmark.json for unprofiled counters.
+
+Sun Oct 18 16:02:07 2026    /tmp/chatstore-sync-sightings.prof
+
+         25108071 function calls (25105932 primitive calls) in 21.601 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1558 to 22 due to restriction <22>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    163/1    0.007    0.000   21.643   21.643 {built-in method builtins.exec}
+        1    0.000    0.000   21.643   21.643 benchmark_incremental.py:1(<module>)
+        1    0.000    0.000   21.519   21.519 benchmark_incremental.py:128(main)
+        1    0.000    0.000   21.514   21.514 benchmark_incremental.py:58(stage)
+        1    0.129    0.129   21.508   21.508 sync.py:26(run_sync)
+   200038    0.126    0.000   12.521    0.000 adapter.py:114(extract)
+   200018    2.388    0.000   12.316    0.000 adapter.py:312(_messages)
+       41    0.103    0.003    7.040    0.172 sync.py:98(flush)
+   900275    0.807    0.000    4.269    0.000 __init__.py:185(dumps)
+       41    0.179    0.004    3.850    0.094 store.py:141(upsert_many)
+   300055    0.081    0.000    3.589    0.000 adapter.py:129(urn)
+   300055    0.128    0.000    3.507    0.000 urn.py:52(derive_urn)
+   900275    0.650    0.000    3.299    0.000 encoder.py:185(encode)
+       41    2.100    0.051    2.987    0.073 store.py:283(observe_many)
+   302080    2.905    0.000    2.905    0.000 {method 'execute' of 'sqlite3.Connection' objects}
+   200039    0.143    0.000    2.885    0.000 records.py:45(record)
+   300055    0.331    0.000    2.871    0.000 urn.py:41(derive_uuid)
+       43    0.023    0.001    2.848    0.066 store.py:125(current_heads)
+   200039    0.476    0.000    2.742    0.000 urn.py:74(revision_digest)
+      617    0.049    0.000    2.694    0.004 {method 'update' of 'dict' objects}
+   200441    2.645    0.000    2.645    0.000 store.py:138(<genexpr>)
+   900275    2.365    0.000    2.365    0.000 encoder.py:207(iterencode)
+
+

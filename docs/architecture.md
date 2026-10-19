@@ -105,7 +105,7 @@ Two rules make the revision model coherent:
 2. Snapshot the database(s) with the SQLite backup API into `snapshots/` (captures committed WAL
    data; the source is opened `mode=ro`; lock waits are bounded).
 3. Extract canonical records in batches of 5,000 within `Cache.bulk()` (WAL autocheckpoint off,
-   `synchronous=NORMAL`, checkpoint+truncate on exit).
+   `synchronous=FULL`, a 64 MiB page-cache limit, checkpoint+truncate on exit).
 4. `upsert_many` compares fingerprints: `unchanged`, `updated` (new revision), `created`.
    `observe_many` records native keys.
 5. Reconcile: for `initial`, `--mode full`, or an adapter-detected source reset (max row id went
@@ -114,11 +114,16 @@ Two rules make the revision model coherent:
 6. Write a `sync_runs` row with mode, counts, coverage, unsupported kinds, errors and status.
    Any per-record error makes the run `partial` (exit 5). A partial sync is never called complete.
 
-Incremental strategy differs per source: WhatsApp uses a `Z_PK` checkpoint plus a 5,000-row
-look-back for status changes; Messages re-decodes every row each run and relies on fingerprint
-comparison because edits, receipts and tapbacks mutate old rows (~10 s for 77k rows).
+Both adapters reconcile source history each poll, since historical edits, receipts, tapbacks and
+media changes cannot safely be detected by a maximum row ID. The transactional preservation
+journal makes cache-to-archive work incremental; native snapshot/decode work remains a separate
+performance limitation. See [incremental preservation](incremental-preservation.md).
 
 ## Archives
+
+For bounded immutable changefeed batches, verified receipts and independent export/delivery/import
+checkpoints, see [incremental preservation](incremental-preservation.md). The monthly format below
+remains available for explicit snapshot exports.
 
 **Export** (`archive export`): plan buckets = UTC months present in `messages_idx` ∪ months
 previously exported (so an emptied month writes an empty superseding revision); for each bucket
@@ -157,3 +162,23 @@ All commands accept `--json` and emit the `chatstore-cli-v1` envelope
 3 permission, 4 incompatible, 5 partial, 6 conflict, 7 invalid archive, 8 not found,
 9 not initialised. Search and read never sync, export or touch the network. Passwords never appear
 in argv, environment values, logs or JSON.
+
+Native extraction reuse stores fingerprints and entity/observation ranges in `native_units`,
+with dependency membership in `native_unit_members`. Semantic cache mutations invalidate
+dependent units. Capture and memo publication share a transaction; pending reuse is revalidated
+under the writer lock before stamping exact freshness ranges. Full reconciliation rebuilds
+this projection. This skips canonical reconstruction, while native snapshot/input scans remain.
+
+Imported sightings translate through `import_key_ranges`, a compact affine producer/local-ID
+projection. Reverse-mapping indexes and semantic-change triggers queue individual dirty keys;
+import replay revalidates and splits/merges those points under the same transaction as its
+checkpoint. Clean sightings read only overlapping intervals. The projection is rebuildable
+from imported mappings and canonical heads/evidence; it is not an archive authority.
+
+`SyncSession` retains a process-local source monitor, exact captured sighting ranges and summary
+counts. Transactional semantic `source_projection_epochs` invalidate reuse after cache edits/purges
+within each source/account scope.
+Stable watch-mode polls re-sight those ranges and journal a complete run without source snapshots
+or adapter extraction. Capture-local rows and latest sighting ranges build summaries through
+indexes; retained canonical JSON is not scanned. Monitor sessions and summaries are discarded
+on restart; adapter checkpoints do not authorize skips by themselves.

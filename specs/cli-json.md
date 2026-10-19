@@ -2,7 +2,13 @@
 
 ## Envelope
 
-Every command with `--json` prints exactly one JSON object on stdout:
+Every one-shot command with `--json` prints exactly one JSON object on stdout.
+`sync --watch-interval SECONDS` is a streaming exception: it emits and flushes one
+complete envelope per poll as newline-delimited JSON, until interrupted or `--max-polls N`
+is reached. Each envelope describes that poll, including its own exit code and errors.
+The bounded watch invocation exits with the final poll's code; interrupted watch mode exits 130.
+
+Envelope:
 
 ```json
 {
@@ -100,3 +106,17 @@ Every command with `--json` prints exactly one JSON object on stdout:
 - `--advanced`: raw FTS5 syntax, syntax errors → exit 2 with a message.
 - Reactions and system events are excluded unless `--kind` includes them.
 - `--history` also searches retained revisions (flagged `revision_superseded` in results).
+
+## Monitored sync
+
+`sync --watch-interval 900` preserves a 15-minute source polling cadence while keeping
+process-local source monitors alive. Intervals are positive finite seconds; `--max-polls`
+is a positive integer and requires watch mode. Configuration and identity are reloaded
+between polls. `--mode full` always bypasses monitored reuse.
+
+A reused run has `snapshot: null`, `counts.monitored_coverage_reused: 1`, unchanged adapter
+checkpoints and an explicit coverage note. Its type counts describe reused captured coverage,
+not freshly emitted adapter records. It journals exact record/observation sighting ranges.
+Unsupported monitoring, lost sessions, semantic cache edits and changed dependencies cause
+ordinary capture. The first capture discovers media dependencies; a further stable capture
+establishes complete watch coverage. No persisted cursor authorizes source skips after restart.

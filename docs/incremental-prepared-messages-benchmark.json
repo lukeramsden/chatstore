@@ -1,0 +1,93 @@
+{
+  "messages": 100000,
+  "scope": "Synthetic text-only Messages source with coordinated WAL validation, atomic native preparation, automatic routing, selected adapter extraction, canonical cache batches, durable coverage/epoch tracking, retained-unit sightings, targeted absence, canonical receipt/checkpoints and mirror acknowledgement. Baseline includes full image/native rows/index setup. File-backed media, WhatsApp, archive/encryption/import/delivery, source setup/mutation, kernel IO and energy excluded. WAL logical bytes exclude SQLite/index/WAL-index reads. CPU splits parent and helper processes.",
+  "measurements": [
+    {
+      "stage": "baseline-native-and-canonical-capture",
+      "wall_seconds": 120.02088795905001,
+      "parent_cpu_seconds": 67.15177200000001,
+      "helper_cpu_seconds": 0.42941399999999996,
+      "native_rows_changed": 200008,
+      "canonical_written": {
+        "inserted": 200012,
+        "updated": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "stage": "clean",
+      "wall_seconds": 0.05396679206751287,
+      "parent_cpu_seconds": 0.035685000000000855,
+      "helper_cpu_seconds": 0.00574999999999995,
+      "native_rows_changed": 0,
+      "canonical_messages_emitted": 0,
+      "canonical_written": {
+        "inserted": 0,
+        "updated": 0,
+        "unchanged": 11
+      },
+      "absent_withdrawn": 0,
+      "wal_logical_bytes_read": 344
+    },
+    {
+      "stage": "old-edit",
+      "wall_seconds": 0.07509095896966755,
+      "parent_cpu_seconds": 0.04609700000000316,
+      "helper_cpu_seconds": 0.005220000000000044,
+      "native_rows_changed": 1,
+      "canonical_messages_emitted": 1,
+      "canonical_written": {
+        "inserted": 0,
+        "updated": 2,
+        "unchanged": 11
+      },
+      "absent_withdrawn": 0,
+      "wal_logical_bytes_read": 8640
+    },
+    {
+      "stage": "new-message",
+      "wall_seconds": 0.059820541995577514,
+      "parent_cpu_seconds": 0.04148499999999444,
+      "helper_cpu_seconds": 0.004688000000000053,
+      "native_rows_changed": 1,
+      "canonical_messages_emitted": 1,
+      "canonical_written": {
+        "inserted": 2,
+        "updated": 0,
+        "unchanged": 11
+      },
+      "absent_withdrawn": 0,
+      "wal_logical_bytes_read": 12760
+    },
+    {
+      "stage": "chat-title",
+      "wall_seconds": 0.04230562492739409,
+      "parent_cpu_seconds": 0.03421400000000574,
+      "helper_cpu_seconds": 0.0044309999999999905,
+      "native_rows_changed": 1,
+      "canonical_messages_emitted": 0,
+      "canonical_written": {
+        "inserted": 0,
+        "updated": 1,
+        "unchanged": 10
+      },
+      "absent_withdrawn": 0,
+      "wal_logical_bytes_read": 8640
+    },
+    {
+      "stage": "old-delete",
+      "wall_seconds": 0.052966417046263814,
+      "parent_cpu_seconds": 0.041971000000003755,
+      "helper_cpu_seconds": 0.004956000000000016,
+      "native_rows_changed": 1,
+      "canonical_messages_emitted": 0,
+      "canonical_written": {
+        "inserted": 0,
+        "updated": 0,
+        "unchanged": 11
+      },
+      "absent_withdrawn": 1,
+      "wal_logical_bytes_read": 12760
+    }
+  ]
+}
