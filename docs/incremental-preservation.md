@@ -1096,10 +1096,32 @@ Frozen alias payload and point binding now use separate private tables. An uncha
 advances the small point-reference row while preserving the original payload and its evidence
 point. The reader verifies that reference and the current native token together. This avoids
 rereading source alias rows or copying a large retained payload merely to bind it to a new point.
-It does not skip canonical alias-header materialization from the retained payload.
+Skipping canonical alias-header materialization additionally requires the clean prepared
+coverage proof below.
 
 A collector test verifies one source-row collection for baseline plus clean continuation,
 recapture after a LID update, an unchanged original payload point during reuse, and forced
 recapture after the monitor is closed. These are monitored unchanged-source savings. A changed
 large auxiliary database still requires a full relevant-row read; durable auxiliary page deltas
 and fully incremental header emission remain open acceptance work.
+
+## Clean prepared WhatsApp coverage reuse
+
+The collector binds the retained alias evidence point into each prepared descriptor. When
+there are no native row changes and that evidence point matches the completed parent capture,
+the canonical controller can retain all previous source coverage. It verifies the current
+alias-state reference and requires the exact prior canonical coverage point and epoch. File
+paths still enforce the media gate. Missing evidence, source changes, full reconciliation or
+canonical drift disable this path.
+
+An eligible clean run skips adapter extraction and alias payload JSON materialization. It
+preserves adapter checkpoints and re-sights the exact retained record/observation intervals,
+then commits coverage, receipt and checkpoints atomically. JSON counts include
+`prepared_coverage_reused: 1`; emitted-record write counts are zero because coverage refreshes
+do not emit canonical bodies. This path requires a retained auxiliary monitor; standalone
+captures currently recapture auxiliary rows and cannot use the same evidence reference.
+
+Tests count adapter and alias-reader calls, verify unchanged adapter checkpoints and observation
+freshness, and prove source-title changes still extract while canonical edits force full
+reconciliation. Header materialization for changed captures and incremental auxiliary deltas
+remain open. These tests do not replace the representative end-to-end performance/energy audit.
