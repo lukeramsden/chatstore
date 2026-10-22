@@ -83,6 +83,7 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
         try:
             receipt: dict[str, Any] | None
             if dst.exists():
+                encoded.clear()
                 # Recovery after durable publication and before SQLite cursor commit.
                 from .verify import load_archive, verification_receipt
                 loaded = load_archive(dst, password, work)
@@ -95,6 +96,7 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
                     raise RuntimeError(f'existing batch failed recovery validation: {dst}')
             else:
                 data = b''.join(encoded)
+                encoded.clear()
                 export_id = uuid.uuid4().urn
                 m = M.build_manifest(
                     export_id=export_id, export_set=export_set, created_at=now_ms(),
@@ -110,6 +112,7 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
                 tar = container.TarBuilder(work / 'payload.tar')
                 try:
                     tar.add_bytes('records/changes.jsonl', data)
+                    del data
                     # Only attachment events in this batch can introduce media. Historical bytes
                     # already shipped remain in their original immutable archive.
                     blobs: dict[str, dict[str, Any]] = {}
