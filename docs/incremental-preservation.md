@@ -5,11 +5,24 @@ batches form a baseline; subsequent batches contain changes and compact freshnes
 Monthly exports remain available without `--consumer`. The changefeed format requires this
 version of chatstore on both machines.
 
+Keep a collector process running across 15-minute polls to retain source and file
+monitoring. It emits one flushed JSON envelope per poll:
+
 ```sh
-chatstore --json --quiet sync --source whatsapp
-chatstore --json --quiet sync --source messages
+chatstore --json --quiet sync --watch-interval 900
+```
+
+After a successful poll, have the existing wrapper run the export in a separate
+process and drain its pending batches:
+
+```sh
 chatstore --json --quiet archive export --consumer linux --media text --output /private/batches
 ```
+
+The exporter shares the canonical writer lock and maintains its own checkpoint.
+Existing one-shot launchers must be switched to a persistent collector to obtain
+the file-watch fast path; invoking standalone sync remains correct but can require
+source/file reconciliation. This PR does not install or replace a LaunchAgent.
 
 Repeat the export while `data.has_more` is true. The default limit is 5,000 journal events per
 invocation; `--batch-size` changes it. The encoded UTF-8 journal member is also capped at the
