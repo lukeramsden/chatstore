@@ -87,6 +87,7 @@ class Diagnosis:
 class ExtractStats:
     selected_message_rowids: set[int] | None = None
     reuse_whatsapp_headers: bool = False
+    selected_whatsapp_chat_rowids: set[int] | None = None
     selected_whatsapp_event_rowids: set[int] | None = None
     watch_path: Callable[[Path], None] | None = None
     memo: UnitMemo | None = None

@@ -876,3 +876,14 @@ takes 52 ms wall / 51 ms CPU. Verified export/import take 5 / 4 ms. This fixture
 one native group-change row; separate integration tests verify bounded extraction
 against 1,000 unrelated events and normalized duplicate owners. It is not a large
 event-history timing or real-network measurement.
+
+
+## Selective chat metadata pipeline
+
+[incremental-chat-metadata-pipeline.json](incremental-chat-metadata-pipeline.json)
+uses 1,000 messages and 1,000 extra alias pairs with encrypted text-only export and
+verified import. A group-title change takes 52 ms capture / 5 ms export / 4 ms import;
+a direct-chat archive-flag change takes 53 / 5 / 4 ms. Capture emits one chat and
+reuses unrelated headers. A direct-chat name change still takes the full header
+path (145 ms capture in this focused run). Source mutations are outside timings;
+this is not a representative large-chat-population or remote-network measurement.

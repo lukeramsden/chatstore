@@ -13,7 +13,7 @@ from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
-from .adapters.whatsapp import auxiliary, events
+from .adapters.whatsapp import auxiliary, chats, events
 from .adapters.whatsapp import media_watch as whatsapp_media_watch
 from .adapters.whatsapp.adapter import REQUIRED, WhatsAppAdapter
 from .cache import Cache
@@ -22,7 +22,7 @@ from .paths import DataDir
 from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
 from .sync import SyncOutcome
 
-POLICY_MODULES = (auxiliary, events, whatsapp_media_watch)
+POLICY_MODULES = (auxiliary, chats, events, whatsapp_media_watch)
 
 
 class MediaCaptureRequired(Exception):
@@ -61,7 +61,7 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     baseline = baseline and not reconcile
                     with auxiliary_session.views() as optional:
                         context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
-                                   'whatsapp_auxiliary': optional.evidence, 'whatsapp_events': {'format': 1}}
+                                   'whatsapp_auxiliary': optional.evidence, 'whatsapp_events': {'format': 1}, 'whatsapp_chats': {'format': 1}}
                         if media_watch is not None:
                             context['whatsapp_media'] = {'format': 1}
                         def validate(conn: sqlite3.Connection, baseline: bool = baseline,
@@ -71,6 +71,7 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                             if media_watch is not None:
                                 media_watch.prepare(conn, full=baseline)
                             events.prepare(conn, full=baseline)
+                            chats.prepare(conn, full=baseline)
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
                             context['whatsapp_alias_evidence_point'] = conn.execute(

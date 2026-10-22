@@ -1308,3 +1308,25 @@ normalized duplicate owners, native rollback, interrupted canonical writes, offl
 retry and encrypted import retaining revisions and source presence. The archive
 format is unchanged. Genuine identity, chat and other header changes still require
 complete header reconstruction.
+
+
+## Selective chat metadata
+
+Point-bound header ownership now also indexes normalized chat JIDs. Archive/removal
+flags and group titles can select only the affected canonical chat keys and every
+surviving native owner of those keys. Chat identity, session type, membership inputs
+and other native fields must remain unchanged; direct-chat renames still require
+identity reconstruction because they contribute names to identity evidence.
+
+The selective path shares canonical chat construction with full extraction, seeks
+associated group information through a private index and retains unrelated identity,
+alias and membership coverage. Tests include normalized duplicate chat owners and
+multiple group-info rows, compare the resulting chat heads against full extraction,
+and verify retained revisions through encrypted import with source databases expired.
+Native rollback and offline canonical retry cover both event and chat ownership.
+
+The event/chat ownership mechanism is shared; existing event ownership tables keep
+their schema. All writes stay in the private mirror transaction. Source restart,
+schema/policy change or a mismatched ownership point still requires reconciliation.
+This does not yet make direct-chat renames, new/deleted chats or identity changes
+selective.

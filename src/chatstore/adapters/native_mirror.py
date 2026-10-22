@@ -434,7 +434,7 @@ class NativeMirror:
         assert pending is not None
         return pending
 
-    def changes(self, token: str, *, reader: sqlite3.Connection | None = None) -> Iterator[NativeChange]:
+    def changes(self, token: str, *, reader: sqlite3.Connection | None = None, tables: Iterable[str] | None = None) -> Iterator[NativeChange]:
         """Read old/new changed values from one pinned prepared point."""
         with self.index.snapshot() if reader is None else nullcontext(reader) as snapshot:
             if not snapshot.in_transaction:
@@ -442,7 +442,11 @@ class NativeMirror:
             state = snapshot.execute('SELECT token,status FROM cs_native_mirror_state WHERE id=1').fetchone()
             if state is None or state['token'] != token or state['status'] != 'prepared':
                 raise MirrorUnavailable('native changes require the exact prepared capture')
-            for row in snapshot.execute('SELECT * FROM cs_native_mirror_changes ORDER BY name,row_id'):
+            names = tuple(sorted(set(tables))) if tables is not None else ()
+            if tables is not None and not names:
+                return
+            clause = ' WHERE name IN (' + ','.join('?' for _ in names) + ')' if names else ''
+            for row in snapshot.execute('SELECT * FROM cs_native_mirror_changes' + clause + ' ORDER BY name,row_id', names):
                 spec = snapshot.execute('SELECT rowid_alias,columns FROM cs_native_mirror_tables WHERE name=?', (row['name'],)).fetchone()
                 fields = ','.join(map(_quote, json.loads(spec['columns'])))
                 current = snapshot.execute(f'SELECT {fields} FROM {_quote(row["name"])} WHERE {_quote(spec["rowid_alias"])}=?', (row['row_id'],)).fetchone()

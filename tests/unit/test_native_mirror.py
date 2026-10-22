@@ -574,3 +574,24 @@ def test_reconciliation_preserves_sqlite_storage_class_changes(native, tmp_path)
         changes = list(mirror.changes(child.token))
         assert child.rows_changed == 1 and len(changes) == 1
         assert type(changes[0].before[1]) is int and type(changes[0].after[1]) is float
+
+
+def test_filtered_changes_read_only_requested_tables_at_exact_prepared_point(native, tmp_path):
+    path, writer = native
+    with NativeMirror(tmp_path / 'mirror.sqlite') as mirror:
+        parent = initialize(mirror, path)
+        mirror.acknowledge(parent.token, 'baseline')
+        writer.execute("UPDATE message SET body=x'0102' WHERE id=1")
+        writer.execute("UPDATE metadata SET value='changed context'")
+        writer.commit()
+        child = prepare(mirror, path, parent)
+        with mirror.index.snapshot() as reader:
+            statements = []
+            reader.set_trace_callback(statements.append)
+            selected = list(mirror.changes(child.token, reader=reader, tables=['message']))
+            assert len(selected) == 1 and selected[0].table == 'message'
+            assert not any('FROM "metadata"' in sql for sql in statements)
+            assert list(mirror.changes(child.token, reader=reader, tables=[])) == []
+            with pytest.raises(MirrorUnavailable, match='exact prepared'):
+                list(mirror.changes('wrong-token', reader=reader, tables=[]))
+        assert {change.table for change in mirror.changes(child.token)} == {'message', 'metadata'}

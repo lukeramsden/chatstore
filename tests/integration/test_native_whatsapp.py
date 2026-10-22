@@ -412,7 +412,8 @@ def test_group_event_changes_skip_unrelated_headers_and_preserve_history(collect
         assert first['counts']['events'] >= 1001
 
 
-def test_selected_group_event_retries_from_retained_point_after_source_expiry(collector, capsys, monkeypatch):
+@pytest.mark.parametrize('metadata', ['event', 'chat'])
+def test_selected_header_retries_from_retained_point_after_source_expiry(collector, capsys, monkeypatch, metadata):
     from chatstore.sync_session import SyncSession
 
     root, dd, writer = collector
@@ -425,7 +426,8 @@ def test_selected_group_event_retries_from_retained_point_after_source_expiry(co
             assert result is not None and result.exit_code == 0, result
             return result.run
         poll()
-        writer.execute("UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='offline@s.whatsapp.net' WHERE Z_PK=1")
+        sql = "UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='offline@s.whatsapp.net' WHERE Z_PK=1" if metadata == 'event' else 'UPDATE ZWACHATSESSION SET ZARCHIVED=1 WHERE Z_PK=1'
+        writer.execute(sql)
         writer.commit()
         def interrupt(*args, **kwargs):
             raise RuntimeError('interrupt selected event canonical write')
@@ -443,15 +445,19 @@ def test_selected_group_event_retries_from_retained_point_after_source_expiry(co
         retried = poll()
         assert retried['snapshot']['prepared_native']['capture']['token'] == pending.token
         assert retried['counts']['prepared_headers_reused'] == 1
-        assert retried['counts']['events'] == 1
+        assert retried['counts']['events' if metadata == 'event' else 'chats'] == 1
         from chatstore.identity import urn as U
         expected = U.derive_urn('whatsapp', ident.scope_for('whatsapp'), 'identity', 'offline@s.whatsapp.net')
-        assert any(expected in row['payload'].get('member_identity_urns', []) for row in cache.iter_records('events'))
+        if metadata == 'event':
+            assert any(expected in row['payload'].get('member_identity_urns', []) for row in cache.iter_records('events'))
+        else:
+            assert next(row for row in cache.iter_records('chats') if row['native_key'] == '15550001111@s.whatsapp.net')['is_archived']
         with NativeMirror(mirror_path) as mirror:
             assert mirror.pending() is None
 
 
-def test_failed_native_event_preparation_rolls_back_ownership_with_source_point(collector, capsys, monkeypatch):
+@pytest.mark.parametrize('metadata', ['event', 'chat'])
+def test_failed_native_header_preparation_rolls_back_ownership_with_source_point(collector, capsys, monkeypatch, metadata):
     from chatstore.sync_session import SyncSession
 
     root, dd, writer = collector
@@ -464,10 +470,12 @@ def test_failed_native_event_preparation_rolls_back_ownership_with_source_point(
             assert result is not None and result.exit_code == 0, result
             return result.run
         first = poll()['snapshot']['prepared_native']['capture']
+        prefix = 'cs_wa_event' if metadata == 'event' else 'cs_wa_chat'
         mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
         with NativeMirror(mirror_path) as mirror:
-            before = list(map(tuple, mirror.conn.execute('SELECT * FROM cs_wa_event_keys ORDER BY row_id')))
-        writer.execute('UPDATE ZWAGROUPMEMBERSCHANGE SET ZCHANGEDATE=700000091 WHERE Z_PK=1')
+            before = list(map(tuple, mirror.conn.execute(f'SELECT * FROM {prefix}_keys ORDER BY row_id')))
+        sql = 'UPDATE ZWAGROUPMEMBERSCHANGE SET ZCHANGEDATE=700000091 WHERE Z_PK=1' if metadata == 'event' else "UPDATE ZWACHATSESSION SET ZPARTNERNAME='retried group title' WHERE Z_PK=2"
+        writer.execute(sql)
         writer.commit()
         original = auxiliary.prepare
         def reject(*args, **kwargs):
@@ -480,10 +488,84 @@ def test_failed_native_event_preparation_rolls_back_ownership_with_source_point(
         with NativeMirror(mirror_path) as mirror:
             assert mirror.pending() is None
             assert mirror.continuation().token == first['token']
-            assert mirror.conn.execute('SELECT point FROM cs_wa_event_state').fetchone()[0] == first['token']
-            assert list(map(tuple, mirror.conn.execute('SELECT * FROM cs_wa_event_keys ORDER BY row_id'))) == before
-            assert not mirror.conn.execute('SELECT 1 FROM cs_wa_event_changes').fetchone()
+            assert mirror.conn.execute(f'SELECT point FROM {prefix}_state').fetchone()[0] == first['token']
+            assert list(map(tuple, mirror.conn.execute(f'SELECT * FROM {prefix}_keys ORDER BY row_id'))) == before
+            assert not mirror.conn.execute(f'SELECT 1 FROM {prefix}_changes').fetchone()
         changed = poll()
-        assert changed['counts']['events'] == 1
+        assert changed['counts']['events' if metadata == 'event' else 'chats'] == 1
         assert changed['counts']['prepared_headers_reused'] == 1
-        assert changed['counts']['absent_from_source:withdrawn'] == 1
+        assert changed['counts'].get('absent_from_source:withdrawn', 0) == (1 if metadata == 'event' else 0)
+
+
+@pytest.mark.parametrize('duplicate', [False, True])
+@pytest.mark.parametrize('mutation', [
+    'UPDATE ZWACHATSESSION SET ZARCHIVED=1-ZARCHIVED WHERE Z_PK=1',
+    'UPDATE ZWACHATSESSION SET ZREMOVED=1 WHERE Z_PK=2',
+    "UPDATE ZWACHATSESSION SET ZPARTNERNAME='edited group title' WHERE Z_PK=2",
+])
+def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collector, capsys, monkeypatch, duplicate, mutation):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.archive.import_ import import_archive
+    from chatstore.archive.incremental import export_changes
+    from chatstore.config import Identity
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWACHATSESSION)')]
+    original = dict(zip(columns, writer.execute('SELECT * FROM ZWACHATSESSION WHERE Z_PK=2').fetchone(), strict=True))
+    def insert(row):
+        writer.execute(f"INSERT INTO ZWACHATSESSION({','.join(columns)}) VALUES({','.join('?' for _ in columns)})", [row[c] for c in columns])
+    for i in range(100):
+        insert(dict(original, Z_PK=100+i, ZCONTACTJID=f'unrelated-{i}@g.us'))
+    if duplicate:
+        insert(dict(original, Z_PK=20, ZCONTACTJID=original['ZCONTACTJID'].upper(), ZPARTNERNAME='duplicate owner'))
+    writer.execute("INSERT INTO ZWAGROUPINFO VALUES(2,2,690000001,'creator@s.whatsapp.net','owner@s.whatsapp.net')")
+    writer.commit()
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    forbidden = False
+    original_read = aliases.read
+    def read(*args, **kwargs):
+        if forbidden:
+            pytest.fail('chat metadata materialized unrelated headers')
+        return original_read(*args, **kwargs)
+    monkeypatch.setattr(aliases, 'read', read)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        poll()
+        unrelated = next(row for row in cache.iter_records('chats') if row['native_key'] == 'unrelated-0@g.us')
+        def export():
+            return export_changes(cache, dd, cfg, ident, consumer='chats', output=dd.exports, password='test-password')
+        baseline = export()
+        writer.execute(mutation)
+        writer.commit()
+        forbidden = True
+        changed = poll()
+        assert changed['counts']['prepared_headers_reused'] == 1
+        assert changed['counts']['chats'] == (2 if duplicate and 'Z_PK=2' in mutation else 1)
+        assert not any(changed['counts'].get(kind) for kind in ('messages', 'identities', 'aliases', 'chat_memberships', 'events'))
+        assert changed['counts'].get('absent_from_source:withdrawn', 0) == 0
+        assert cache.observations_of(unrelated['urn'])[0]['sync_run'] != unrelated['sync_run']
+        forbidden = False
+        from chatstore.adapters.base import Emit, ExtractStats
+        from chatstore.prepared_sync import PreparedSync
+        with NativeMirror(next((dd.root / 'native').glob('*.sqlite3'))) as mirror:
+            snap = PreparedSync(mirror, mirror.continuation(), 'ChatStorage').snapshot()
+            full = {item.record['urn']: item.record['revision_digest']
+                    for item in WhatsAppAdapter().extract(snap, ident.scope_for('whatsapp'), cfg, ExtractStats(), None, full=True)
+                    if isinstance(item, Emit) and item.record['entity'] == 'chats'}
+        assert {row['urn']: row['revision_digest'] for row in cache.iter_records('chats')} == full
+        delta = export()
+        for name in ('ChatStorage', 'LID'):
+            (root / f'{name}.sqlite').rename(root / f'expired-{name}.sqlite')
+        restored = DataDir(dd.root.parent / 'chat-restore')
+        restored.create()
+        with closing(Cache(restored.cache)) as target:
+            for batch in (baseline, delta):
+                assert import_archive(target, restored, Identity(), Path(batch['path']), 'test-password').action == 'imported'
+            for row in cache.iter_records('chats'):
+                assert target.get(row['urn'])['revision_digest'] == row['revision_digest']
+                assert {r['revision_digest'] for r in target.revisions_of(row['urn'])} == {r['revision_digest'] for r in cache.revisions_of(row['urn'])}

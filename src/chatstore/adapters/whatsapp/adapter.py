@@ -28,9 +28,9 @@ from ..base import (
     native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
-from . import aliases, events, media
+from . import aliases, chats, events, header_ownership, media
 
-POLICY_MODULES = (aliases, events, media)
+POLICY_MODULES = (aliases, chats, events, media)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -150,6 +150,7 @@ class WhatsAppAdapter:
         conn.execute("CREATE INDEX IF NOT EXISTS cs_msg_key ON ZWAMESSAGE(ZCHATSESSION, ZSTANZAID)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_media_msg ON ZWAMEDIAITEM(ZMESSAGE)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_wa_media_file ON ZWAMEDIAITEM(ZMEDIALOCALPATH)")
+        conn.execute("CREATE INDEX IF NOT EXISTS cs_wa_group_info_chat ON ZWAGROUPINFO(ZCHATSESSION)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_data_msg ON ZWAMESSAGEDATAITEM(ZMESSAGE)")
         conn.commit()
         media_root = cfg.source_root(SOURCE) / "Message"
@@ -177,6 +178,8 @@ class WhatsAppAdapter:
             stats.bump('prepared_headers_reused')
             try:
                 yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
+                if stats.selected_whatsapp_chat_rowids is not None:
+                    yield from self._selected_chats(conn, scope, stats, urn, stats.selected_whatsapp_chat_rowids)
                 if stats.selected_whatsapp_event_rowids is not None:
                     yield from self._events(conn, scope, stats, urn, stats.selected_whatsapp_event_rowids)
             finally:
@@ -211,13 +214,8 @@ class WhatsAppAdapter:
             gi = group_info.get(r["Z_PK"])
             if kind == "direct":
                 add_name(jid, r["ZPARTNERNAME"], "chat_partner_name")
-            rec = record("chats", c_urn, SOURCE, scope, native_key=jid, kind=kind,
-                         observed_name=r["ZPARTNERNAME"], service="whatsapp", assignment="source",
-                         is_archived=bool(r["ZARCHIVED"]) if r["ZARCHIVED"] is not None else None,
-                         created_at=timestamp(gi["ZCREATIONDATE"], "s", EPOCH_2001) if gi and gi["ZCREATIONDATE"] is not None else None)
-            yield Emit(rec, Observation("ZWACHATSESSION", [r["Z_PK"]], jid,
-                                        fingerprint(jid, r["ZPARTNERNAME"], r["ZSESSIONTYPE"], r["ZARCHIVED"], r["ZREMOVED"])))
-            stats.bump("chats")
+            yield self._chat(r, gi, scope, urn)
+            stats.bump('chats')
 
         # --- memberships -----------------------------------------------------------------
         # Non-group chats have no ZWAGROUPMEMBER rows. Synthesise the counterpart (the chat's own
@@ -281,6 +279,30 @@ class WhatsAppAdapter:
 
         yield from self._events(conn, scope, stats, urn)
         conn.close()
+
+    def _chat(self, r, gi, scope, urn):
+        jid = U.whatsapp_jid(r['ZCONTACTJID'])
+        c_urn = urn('chat', jid)
+        kind = chat_kind(jid, r['ZSESSIONTYPE'])
+        rec = record("chats", c_urn, SOURCE, scope, native_key=jid, kind=kind,
+                     observed_name=r["ZPARTNERNAME"], service="whatsapp", assignment="source",
+                     is_archived=bool(r["ZARCHIVED"]) if r["ZARCHIVED"] is not None else None,
+                     created_at=timestamp(gi["ZCREATIONDATE"], "s", EPOCH_2001) if gi and gi["ZCREATIONDATE"] is not None else None)
+        return Emit(rec, Observation("ZWACHATSESSION", [r["Z_PK"]], jid,
+                                    fingerprint(jid, r["ZPARTNERNAME"], r["ZSESSIONTYPE"], r["ZARCHIVED"], r["ZREMOVED"])))
+
+    def _selected_chats(self, conn, scope, stats, urn, selected):
+        if not selected:
+            return
+        identity = header_ownership.rowid_alias(conn, 'ZWACHATSESSION')
+        info_identity = header_ownership.rowid_alias(conn, 'ZWAGROUPINFO')
+        for pk in sorted(selected):
+            row = conn.execute(f'SELECT * FROM ZWACHATSESSION WHERE {identity}=?', (pk,)).fetchone()
+            if row is None:
+                raise IncompatibleSource('selected chat metadata row is missing')
+            info = conn.execute(f'SELECT * FROM ZWAGROUPINFO WHERE ZCHATSESSION=? ORDER BY {info_identity} DESC LIMIT 1', (row['Z_PK'],)).fetchone()
+            yield self._chat(row, info, scope, urn)
+            stats.bump('chats')
 
     def _events(self, conn, scope, stats, urn, selected=None):
         fields = 'Z_PK,ZCHANGETYPE,ZCHANGEDATE,ZGROUPJID,ZMEMBERJIDS'
