@@ -317,21 +317,38 @@ class WhatsAppAdapter:
                   chat_by_pk: dict[int, tuple[str, str]], me_urn: str, media_root: Path,
                   checkpoints: dict[str, Any] | None, full: bool) -> Iterator[Emission]:
         max_pk = conn.execute("SELECT max(Z_PK) FROM ZWAMESSAGE").fetchone()[0] or 0
+        selected = None if full else stats.selected_message_rowids
         since_pk = 0
-        if not full and checkpoints and checkpoints.get("max_message_pk"):
+        if selected is None and not full and checkpoints and checkpoints.get("max_message_pk"):
             since_pk = int(checkpoints["max_message_pk"])
             if since_pk > max_pk:
                 stats.notes.append("source reset detected: max Z_PK went backwards; falling back to full scan")
                 stats.full_scan = True
                 since_pk = 0
         stats.checkpoints["max_message_pk"] = max_pk
-        stats.scanned_tables |= {"ZWAMESSAGE", "ZWAMEDIAITEM"}
+        if selected is None:
+            stats.scanned_tables |= {"ZWAMESSAGE", "ZWAMEDIAITEM"}
         # WhatsApp exposes no durable edit/delete cursor. A recent-row window misses old edits,
         # backfilled messages and attachment changes, so reconcile every logical group each poll.
-        groups = conn.execute(
-            """SELECT ZCHATSESSION, ZSTANZAID, group_concat(Z_PK) AS pks, count(*) AS n, max(ZSORT) AS maxsort
-               FROM ZWAMESSAGE WHERE ZSTANZAID IS NOT NULL AND ZSTANZAID != ''
-               GROUP BY ZCHATSESSION, ZSTANZAID""")
+        if selected is None:
+            groups = conn.execute(
+                """SELECT ZCHATSESSION, ZSTANZAID, group_concat(Z_PK) AS pks, count(*) AS n, max(ZSORT) AS maxsort
+                   FROM ZWAMESSAGE WHERE ZSTANZAID IS NOT NULL AND ZSTANZAID != ''
+                   GROUP BY ZCHATSESSION, ZSTANZAID""")
+        else:
+            if any(type(pk) is not int or not -(1 << 63) <= pk < (1 << 63) for pk in selected):
+                raise IncompatibleSource('selected WhatsApp message IDs must be signed integers')
+            conn.execute('CREATE TEMP TABLE cs_selected_wa_messages(pk INTEGER PRIMARY KEY)')
+            conn.executemany('INSERT INTO cs_selected_wa_messages VALUES(?)', ((pk,) for pk in selected))
+            groups = conn.execute("""WITH chosen AS MATERIALIZED (
+                SELECT DISTINCT m.ZCHATSESSION,m.ZSTANZAID
+                FROM temp.cs_selected_wa_messages s CROSS JOIN ZWAMESSAGE m
+                WHERE m.Z_PK=s.pk AND m.ZSTANZAID IS NOT NULL AND m.ZSTANZAID!='')
+                SELECT m.ZCHATSESSION,m.ZSTANZAID,group_concat(m.Z_PK) AS pks,
+                       count(*) AS n,max(m.ZSORT) AS maxsort
+                FROM chosen CROSS JOIN ZWAMESSAGE m INDEXED BY cs_msg_key
+                WHERE m.ZCHATSESSION IS chosen.ZCHATSESSION AND m.ZSTANZAID=chosen.ZSTANZAID
+                GROUP BY m.ZCHATSESSION,m.ZSTANZAID""")
         media_sql = "SELECT * FROM ZWAMEDIAITEM WHERE ZMESSAGE = ?"
         data_sql = "SELECT * FROM ZWAMESSAGEDATAITEM WHERE ZMESSAGE = ? ORDER BY ZINDEX"
         for g in groups:
