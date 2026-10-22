@@ -1009,3 +1009,29 @@ from 100 to 100,000 messages. Building those indexes still requires a baseline p
 snapshot collection rebuilds private indexes; only a retained native mirror can amortize that
 cost. Header emission still scales with distinct identities and other header rows, so this
 change does not establish fully incremental header materialization.
+
+## Frozen WhatsApp auxiliary alias evidence
+
+`adapters.whatsapp.aliases.prepare` accepts explicitly present or absent LID and ContactsV2
+views. Present views must already be in read transactions; the native mirror must be in its
+writer transaction. It retains the relevant raw alias columns and optional-database presence
+with the candidate page token in the same SQLite commit as native publication. It validates
+normalization before publication. A failure restores the preceding alias evidence and point.
+
+A bound `whatsapp_aliases: {format: 1}` capture context makes `PreparedSync.snapshot()` read only
+that token's retained evidence. The adapter shares the normalization rules with ordinary
+snapshot extraction, preserving LID phone parsing, Contacts evidence, duplicate evidence and
+owner alias closure. Missing or mismatched prepared evidence cannot fall back to live source
+reads. The extraction policy includes the new alias module.
+
+Tests capture both auxiliary databases, move ChatStorage/LID/Contacts offline, finish canonical
+sync, and cold-restore the alias revisions from an encrypted change archive. Rejected auxiliary
+updates retain the old evidence, and invalid point/writer boundaries reject capture.
+
+This is atomic publication of evidence gathered from separate source read transactions, not
+proof of a simultaneous cross-database source instant. The caller still needs to establish and
+monitor the optional-file presence and source views, bind their discovery/checkpoints, and
+coordinate retries with the main capture. Auxiliary row collection is currently a full pass;
+there is no incremental auxiliary page mirror yet. WhatsApp collector dispatch and selective
+canonical coverage remain unconnected. This handoff alone does not authorize skipping source
+or media discovery.
