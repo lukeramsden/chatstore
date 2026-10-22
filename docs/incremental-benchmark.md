@@ -887,3 +887,35 @@ a direct-chat archive-flag change takes 53 / 5 / 4 ms. Capture emits one chat an
 reuses unrelated headers. A direct-chat name change still takes the full header
 path (145 ms capture in this focused run). Source mutations are outside timings;
 this is not a representative large-chat-population or remote-network measurement.
+
+
+## Populated media and chat fixtures
+
+The WhatsApp harness now accepts `--chats`, `--media-items`, `--media-files` and
+`--media-bytes`. Native media rows without a downloaded path are distinct from
+file-backed media: both populations can be scaled independently. Extra chats receive
+synthetic messages, and each file-backed item belongs to its own image message.
+Fixture generation, file writes and source mutations remain outside timed stages.
+
+Completed 100-message / 10-chat / 50-media-row / 10-file checks cover
+[text-only archives](incremental-populated-media-smoke.json) and
+[attachment-byte archives](incremental-populated-media-bytes-smoke.json). The
+byte-including check verifies imported digests and bytes for every fixture file.
+These are correctness checks, not large-population performance acceptance.
+
+The larger acceptance command is:
+
+```sh
+.venv/bin/python scripts/benchmark_native_whatsapp.py \
+  --messages 500000 --aliases 1000 --chats 1000 \
+  --media-items 475000 --media-files 5000 --media-bytes 4096 \
+  --file-media --checkpoint-setup --wal-resets --pipeline
+```
+
+`--checkpoint-setup` checkpoints fixture construction and commits a fresh WAL frame
+before baseline timing. This keeps setup's artificial WAL backlog from exceeding
+the native collector's frame cap; it does not measure recovery from an oversized WAL.
+File bytes are deterministic synthetic binary data. Counts approximate a larger
+source shape but do not establish real-media content diversity, throughput for larger
+attachments, direct energy cost or actual remote-host transfer. The large command's
+results are not claimed until its complete JSON output and final assertions pass.
