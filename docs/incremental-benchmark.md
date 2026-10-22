@@ -783,3 +783,37 @@ watched 256 KiB file with text-only archives. Both reset stages complete encrypt
 and verified import. Checkpoint/truncate and fixture mutation happen outside capture timing;
 full source image backup, page ownership rebuild and ordered raw comparison happen inside it.
 This does not establish bounded discovery or large-history reset performance.
+
+
+## Energy counter availability
+
+On this laptop, `powermetrics --samplers tasks,cpu_power --sample-count 1
+--sample-rate 100` exits with `powermetrics must be invoked as the superuser`.
+This run therefore has no direct energy measurement. CPU time and process wakeup
+counters are reported separately and must not be relabeled as joules or Activity
+Monitor energy impact. No system privilege or sampling configuration was changed.
+
+
+## Large-history WAL reset measurement
+
+[Raw results](incremental-wal-reset-large.json) run the production collector with
+100,000 messages, 1,000 extra alias pairs, one watched 256 KiB file, and encrypted
+text-only export/verified import. Initial capture/export/import took 59.955 /
+59.110 / 229.448 seconds wall time and 48.163 / 55.350 / 118.171 seconds CPU.
+
+Compatible clean WAL reset capture took 1.617 seconds wall / 1.327 CPU; a reset
+with a historical edit took 1.263 / 1.187 seconds. These include full image backup,
+page ownership rebuild and ordered raw comparison. Their export/import stages
+took 4–10 ms each. The following ordinary historical edit took 67 ms capture,
+6 ms export and 6 ms import. A final clean capture took 56 ms.
+
+The measurements establish a bounded canonical delta after compatible resets,
+not bounded source discovery. File monitoring has only one fixture file. Wall
+times include contention and vary from earlier runs; process CPU and attributed
+I/O are reported separately in the raw output. RSS remains the lifetime peak.
+This run has no real remote-host transfer or direct energy measurement.
+
+The HTTPS delivery integration test uses a local TLS server trusted through a
+temporary test CA. A truncated archive response leaves the delivery checkpoint
+unadvanced; retry and idempotent reproof retrieve metadata and actual ciphertext
+again over TLS. This is protocol/failure evidence, not remote throughput evidence.
