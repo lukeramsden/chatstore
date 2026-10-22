@@ -37,7 +37,7 @@ implementation; the review map is additional documentation.
 
 These are draft PRs. They preserve the original scope of
 [issue #10](https://github.com/lukeramsden/chatstore/issues/10) and do not close it.
-Production media watcher integration, WhatsApp page/auxiliary routing, bounded WAL
+Media watcher resource/retry auditing, WhatsApp page/auxiliary routing, bounded WAL
 reset discovery, pending-policy upgrade recovery and the complete end-to-end
 workload/energy audit remain open. Header materialization and resource-limit
 behavior also need the final acceptance audit.

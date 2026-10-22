@@ -901,11 +901,14 @@ file-only versions, remove current evidence after native deletion, reject stale/
 roll back after media copying, require explicit file-change coverage, and recover a media point
 after a subprocess exits immediately following its commit.
 
-This handoff is internal. Production still excludes media-bearing sources because a complete,
-reliable and bounded file-change watcher has not yet supplied the dirty sets. The canonical
-coverage controller also keeps its full reconciliation gate for file-backed captures. Binding
-retained bytes does not by itself authorize unchanged-media re-sighting or establish the final
-production efficiency/energy requirements.
+Messages collection with `sync --watch-interval` now retains a `PreparedMediaWatch` in its
+sync session. It registers attachment paths before copying, maps shared paths to every owner,
+and commits the complete dirty attachment-ID set with the candidate media point. Canonical
+selection routes those IDs to their owning messages even when no source SQLite page changed.
+Clean continuations reuse frozen media evidence without opening attachment files. Initial
+capture, process restart, rebase, or a rejected publication requires full media reconciliation.
+Standalone collection without a retained watcher still uses ordinary capture for file-backed
+sources. The final production efficiency/energy requirements remain unverified.
 
 
 ## Routed live file-change notifications
@@ -936,9 +939,13 @@ Tests cover sparse changes among 100 files, repeated polling and failed acceptan
 writes after replacement, missing-child creation without existing-sibling invalidation,
 new missing-sibling registration, clean stat/open-free polling, database commits, retirement
 and manual rearm before event polling. Existing monitored-sync/source-view tests also pass.
-This is a live process-local discovery API, not a durable source cursor or a complete media
-collector. Attachment-ID mapping, lifecycle integration with native preparation, and the final
-resource/energy audit remain necessary before media-bearing production dispatch can be enabled.
+`MediaWatch` maps paths to attachment IDs and retires watches after their last owner disappears.
+`PreparedMediaWatch` binds that mapping to the private mirror path and exact parent token.
+Mutation during retention rejects the native transaction; a rolled-back candidate cannot
+authorize reuse on the next attempt. Session shutdown closes all media descriptors. Tests
+exercise the production coordinator with clean, file-only edit and deletion polls, preserving
+the prior attachment revisions. Descriptor exhaustion and incomplete symlink coverage fail
+closed; retry behavior and large attachment populations still need the final resource audit.
 
 
 The routed monitor also exposed a collector boundary condition: an unrelated directory
