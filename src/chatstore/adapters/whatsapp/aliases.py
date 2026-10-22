@@ -58,8 +58,14 @@ def prepare(conn: sqlite3.Connection, *, sources: Mapping[str, sqlite3.Connectio
     rows = collect(sources)
     pairs(rows)  # Validate native values before publishing the retained point.
     conn.execute('CREATE TABLE IF NOT EXISTS cs_native_wa_aliases(id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,format INTEGER NOT NULL,payload TEXT NOT NULL)')
+    payload = json.dumps(rows, sort_keys=True, allow_nan=False)
+    parent = conn.execute('SELECT token FROM cs_native_mirror_state WHERE id=1').fetchone()
+    previous = conn.execute('SELECT payload,format FROM cs_native_wa_aliases WHERE id=1').fetchone()
+    if (parent is not None and previous is not None and previous[1] == 1
+            and previous[0] == payload and reuse(conn, parent[0])):
+        return
     conn.execute('INSERT INTO cs_native_wa_aliases VALUES(1,?,1,?) ON CONFLICT(id) DO UPDATE SET point=excluded.point,format=1,payload=excluded.payload',
-                 (point[0], json.dumps(rows, sort_keys=True, allow_nan=False)))
+                 (point[0], payload))
     conn.execute('CREATE TABLE IF NOT EXISTS cs_native_wa_alias_state(id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,evidence_point TEXT NOT NULL)')
     conn.execute('INSERT INTO cs_native_wa_alias_state VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET point=excluded.point,evidence_point=excluded.evidence_point',
                  (point[0], point[0]))

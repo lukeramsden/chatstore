@@ -9,7 +9,7 @@ PRs are superseded. Review these areas in dependency order:
 4. Adapter dependency routing and retained media: historical changes and point-bound bytes.
 5. Prepared sync and persistent sessions: canonical publication, acknowledgement and retry.
 
-The full suite passes 535 tests. Ruff and mypy are the repository static checks. See
+The full suite passes 538 tests. Ruff and mypy are the repository static checks. See
 [incremental-preservation.md](incremental-preservation.md) for implementation details and
 [incremental-benchmark.md](incremental-benchmark.md) for measurements and their limits.
 

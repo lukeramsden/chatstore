@@ -292,3 +292,51 @@ def test_header_reuse_retries_offline_and_cold_restores_freshness(collector, cap
             actual = target.observations_of(header['urn'])[0]
             assert (actual['observed_at'], actual['sync_run'], actual['present']) == (
                 expected['observed_at'], expected['sync_run'], expected['present'])
+
+
+@pytest.mark.parametrize('mutation', [
+    'PRAGMA user_version=17',
+    'UPDATE ZWAZACCOUNT SET ZPHONENUMBER=ZPHONENUMBER WHERE Z_PK=1',
+    'CREATE TABLE unrelated_metadata(value TEXT)',
+])
+def test_auxiliary_commits_with_identical_evidence_reuse_headers(collector, capsys, monkeypatch, mutation):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.sync_session import SyncSession
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    forbidden = False
+    original_read = aliases.read
+    def read(*args, **kwargs):
+        if forbidden:
+            pytest.fail('identical auxiliary evidence materialized canonical headers')
+        return original_read(*args, **kwargs)
+    monkeypatch.setattr(aliases, 'read', read)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                    auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        first = poll()
+        header = next(cache.iter_records('aliases'))
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as source:
+            source.execute(mutation)
+            source.commit()
+        forbidden = True
+        changed = poll()
+        forbidden = False
+        assert changed['counts']['prepared_coverage_reused'] == 1
+        assert changed['counts']['written'] == {'inserted': 0, 'updated': 0, 'unchanged': 0}
+        before = first['snapshot']['prepared_native']['capture']
+        after = changed['snapshot']['prepared_native']['capture']
+        assert before['token'] != after['token']
+        assert before['context']['whatsapp_alias_evidence_point'] == after['context']['whatsapp_alias_evidence_point']
+        assert cache.observations_of(header['urn'])[0]['sync_run'] != header['sync_run']
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as source:
+            source.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+15550008888' WHERE Z_PK=1")
+            source.commit()
+        actual_change = poll()
+        assert not actual_change['counts'].get('prepared_coverage_reused')
+        assert actual_change['counts']['aliases'] > 0

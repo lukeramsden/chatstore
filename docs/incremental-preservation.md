@@ -1271,3 +1271,19 @@ offline retry, exact SQLite value types, rollback and encrypted archive-only col
 The cumulative suite passes 534 tests. A 100-message encrypted pipeline smoke is recorded in
 [incremental-wal-reset-smoke.json](incremental-wal-reset-smoke.json); it is a correctness
 check, not a representative large-history reset performance result.
+
+
+## Auxiliary commits with unchanged alias evidence
+
+When guarded optional WhatsApp sources change, capture still reads and validates the
+complete relevant alias evidence in pinned transactions. If the exact encoded payload
+is unchanged and the retained state matches the native parent, preparation rebinds
+the existing evidence to the candidate point. Canonical sync can then reuse headers
+and advance freshness without materializing them. This also works after restarting
+the process, provided fresh source capture proves equality; durable state alone does
+not authorize skipping source reads. Actual alias changes publish new evidence and
+rebuild affected canonical headers as before. Transaction rollback covers both paths.
+
+Tests cover optional database version changes, identical-value writes, unrelated table
+creation and subsequent real alias changes. This reduces canonical work after irrelevant
+commits; it does not implement incremental discovery inside the optional databases.

@@ -124,7 +124,7 @@ def main():
                 *([('wal-reset-clean', 'reset-clean'), ('wal-reset-old-edit', 'reset-edit')] if args.wal_resets else []),
                 ('old-edit', "UPDATE ZWAMESSAGE SET ZTEXT='benchmark historical edit' WHERE Z_PK=1"),
                 ('chat-title', "UPDATE ZWACHATSESSION SET ZPARTNERNAME='benchmark title' WHERE Z_PK=1"),
-                ('auxiliary-edit', 'auxiliary'),
+                ('auxiliary-noop', 'auxiliary-noop'), ('auxiliary-edit', 'auxiliary'),
                 *([('file-only-edit', 'file-edit'), ('clean-after-file', None),
                    ('file-missing', 'file-missing'), ('file-download', 'file-download')] if args.file_media else []),
                 ('old-delete', 'DELETE FROM ZWAMESSAGE WHERE Z_PK=1'),
@@ -150,6 +150,9 @@ def main():
                     else:
                         writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='historical edit after WAL reset' WHERE Z_PK=1")
                     writer.commit()
+                elif mutation == 'auxiliary-noop':
+                    lid.execute('PRAGMA user_version=1')
+                    lid.commit()
                 elif mutation == 'auxiliary':
                     lid.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+15550009900' WHERE Z_PK=1")
                     lid.commit()
@@ -167,7 +170,7 @@ def main():
                         media_watch=session.native_media(cfg, dd, source='whatsapp') if args.file_media else None)
                     assert outcome is not None and outcome.exit_code == 0, outcome
                     counts = outcome.run['counts']
-                    if label.startswith('clean'):
+                    if label.startswith('clean') or label == 'auxiliary-noop':
                         assert counts.get('prepared_coverage_reused') == 1
                     if label.startswith('wal-reset-'):
                         captured = outcome.run['snapshot']['prepared_native']['capture']

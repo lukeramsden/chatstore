@@ -817,3 +817,14 @@ The HTTPS delivery integration test uses a local TLS server trusted through a
 temporary test CA. A truncated archive response leaves the delivery checkpoint
 unadvanced; retry and idempotent reproof retrieve metadata and actual ciphertext
 again over TLS. This is protocol/failure evidence, not remote throughput evidence.
+
+
+## Unchanged auxiliary evidence
+
+[incremental-auxiliary-noop.json](incremental-auxiliary-noop.json) adds an optional
+database `user_version` commit without changing alias rows. With 1,000 messages and
+1,000 extra alias pairs, capture takes 66 ms wall / 59 ms CPU and reuses canonical
+coverage. Verified export/import take 5 / 3 ms. A following real alias edit takes
+284 ms wall / 219 ms CPU and rebuilds headers. Full optional-source evidence is
+still read on a changed database; the comparison only avoids unnecessary canonical
+materialization. This fixture is a focused check, not large-history acceptance.
