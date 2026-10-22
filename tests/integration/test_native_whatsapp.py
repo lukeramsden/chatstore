@@ -145,3 +145,52 @@ def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collect
         poll()
         assert len(reads) == 3
     assert auxiliary._monitor is None
+
+
+def test_clean_prepared_poll_skips_header_materialization_and_preserves_freshness(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.canonical.records import restamp
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    extraction, reads = [], []
+    original_extract, original_read = WhatsAppAdapter.extract, aliases.read
+    def extract(*args, **kwargs):
+        extraction.append(1)
+        return original_extract(*args, **kwargs)
+    def read(*args, **kwargs):
+        reads.append(1)
+        return original_read(*args, **kwargs)
+    monkeypatch.setattr(WhatsAppAdapter, 'extract', extract)
+    monkeypatch.setattr(aliases, 'read', read)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                     auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        poll()
+        alias = next(cache.iter_records('aliases'))
+        original_checkpoint = cache.get_checkpoint('whatsapp', ident.scope_for('whatsapp'), 'adapter')
+        clean = poll()
+        assert clean['counts']['prepared_coverage_reused'] == 1
+        assert clean['counts']['written'] == {'inserted': 0, 'updated': 0, 'unchanged': 0}
+        assert len(extraction) == len(reads) == 1
+        assert cache.get_checkpoint('whatsapp', ident.scope_for('whatsapp'), 'adapter') == original_checkpoint
+        assert cache.observations_of(alias['urn'])[0]['sync_run'] != alias['sync_run']
+        assert cache.observations_of(alias['urn'])[0]['present'] == 'present'
+        writer.execute("UPDATE ZWACHATSESSION SET ZPARTNERNAME='new source chat title' WHERE Z_PK=1")
+        writer.commit()
+        changed = poll()
+        assert not changed['counts'].get('prepared_coverage_reused')
+        assert len(extraction) == len(reads) == 2
+        chat = next(row for row in cache.iter_records('chats') if row['observed_name'] == 'new source chat title')
+        with cache.write():
+            cache.upsert(restamp(dict(chat, observed_name='local cache drift')))
+        recovered = poll()
+        assert recovered['mode'] == 'full_reconcile'
+        assert not recovered['counts'].get('prepared_coverage_reused')
+        assert len(extraction) == len(reads) == 3
+        assert cache.get(chat['urn'])['observed_name'] == 'new source chat title'

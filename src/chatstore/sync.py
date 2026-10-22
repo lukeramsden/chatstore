@@ -38,10 +38,16 @@ class SyncOutcome:
 
 
 def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, cache: Cache, *,
-             full: bool = False, session: SyncSession | None = None, prepared: PreparedSync | None = None, capture_state: CaptureCoverage | None = None, selected_message_rowids: set[int] | None = None, progress: Callable[[str], None] | None = None) -> SyncOutcome:
+             full: bool = False, session: SyncSession | None = None, prepared: PreparedSync | None = None, capture_state: CaptureCoverage | None = None, selected_message_rowids: set[int] | None = None, reuse_prepared_coverage: bool = False, progress: Callable[[str], None] | None = None) -> SyncOutcome:
     scope = ident.scope_for(adapter.source)
     if prepared is not None and session is not None:
         raise ValueError('prepared capture and live source monitoring cannot share a sync attempt')
+    if reuse_prepared_coverage:
+        if prepared is None or capture_state is None or full or selected_message_rowids != set():
+            raise ValueError('prepared coverage reuse requires complete retained selective coverage')
+        with cache.write():
+            if capture_state.full:
+                raise ValueError('prepared coverage reuse cannot skip full reconciliation')
     run_urn = prepared.run_urn if prepared is not None else uuid.uuid4().urn
     started = prepared.observed_at_ms if prepared is not None else now_ms()
     stats = ExtractStats(selected_message_rowids=selected_message_rowids)
@@ -111,7 +117,7 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
         session.begin(cache, stats)
 
     if prepared is not None:
-        snap = prepared.snapshot()
+        snap = prepared.snapshot(include_auxiliary=not reuse_prepared_coverage)
     else:
         say("snapshotting")
         try:
@@ -132,6 +138,10 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
         memo = ExtractionMemo(cache, adapter.source, scope, code_signature(adapter, cfg), reuse=not full)
         stats.memo = memo
         checkpoints = None if full or coverage_rebuild else prior
+        if reuse_prepared_coverage:
+            stats.checkpoints.update(prior or {})
+            stats.counts['prepared_coverage_reused'] = 1
+            stats.notes.append('unchanged prepared source; exact retained coverage re-sighted without adapter extraction')
         if mode == "initial":
             say("initial sync: no checkpoint, reading the whole source")
         elif full:
@@ -194,7 +204,8 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
             batch.clear()
 
         with cache.bulk():
-            for item in adapter.extract(snap, scope, cfg, stats, checkpoints, full=full):
+            emissions = () if reuse_prepared_coverage else adapter.extract(snap, scope, cfg, stats, checkpoints, full=full)
+            for item in emissions:
                 count = len(item.records) if isinstance(item, CapturedUnit) else item.record_count if isinstance(item, ReusedUnit) else 1
                 weight = max(1, count)
                 if weight > BATCH and isinstance(item, CapturedUnit):

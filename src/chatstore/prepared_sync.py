@@ -82,7 +82,7 @@ class PreparedSync:
         return {'prepared_native': {'binding': self.binding, 'file_name': self.file_name,
                                     'capture': json.loads(json.dumps(asdict(self.capture)))}}
 
-    def snapshot(self) -> Snapshot:
+    def snapshot(self, *, include_auxiliary: bool = True) -> Snapshot:
         prepared = self
 
         class BorrowedSnapshot(Snapshot):
@@ -96,7 +96,7 @@ class PreparedSync:
         at = self.observed_at_ms
         probe = None
         alias_pairs = None
-        if 'whatsapp_aliases' in self.capture.context:
+        if include_auxiliary and 'whatsapp_aliases' in self.capture.context:
             from .adapters.whatsapp.aliases import read
             if self.capture.context['whatsapp_aliases'] != {'format': 1}:
                 raise MirrorUnavailable('unsupported prepared WhatsApp alias evidence format')
@@ -238,6 +238,23 @@ def _messages_coverage(adapter, cfg, cache, prepared, scope, full):
             return CaptureCoverage.restart_full(cache, **args), None
 
 
+def _whatsapp_unchanged(cache, prepared):
+    capture = prepared.capture
+    evidence = capture.context.get('whatsapp_alias_evidence_point')
+    if capture.baseline or not capture.parent or not evidence:
+        return False
+    if prepared.mirror.conn.execute('SELECT 1 FROM cs_native_mirror_changes LIMIT 1').fetchone():
+        return False
+    state = prepared.mirror.conn.execute('SELECT point,evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()
+    if state is None or (state['point'], state['evidence_point']) != (capture.token, evidence):
+        return False
+    parent = cache.get(uuid.uuid5(uuid.NAMESPACE_URL, 'chatstore-native-capture/' + capture.parent).urn)
+    if parent is None or parent.get('status') != 'complete':
+        return False
+    context = (parent.get('snapshot') or {}).get('prepared_native', {}).get('capture', {}).get('context', {})
+    return context.get('whatsapp_alias_evidence_point') == evidence
+
+
 def _whatsapp_coverage(adapter, cache, prepared, scope, full):
     from .cache.capture_coverage import CaptureCoverage
     from .cache.projection_epoch import read_source
@@ -250,25 +267,28 @@ def _whatsapp_coverage(adapter, cache, prepared, scope, full):
         try:
             state = CaptureCoverage.resume(cache, token=capture.token, binding=prepared.binding)
             if full:
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             if state is not None and state.full:
-                return state, None
+                return state, None, False
             if capture.baseline:
-                return CaptureCoverage.begin(cache, **args, full=True), None
+                return CaptureCoverage.begin(cache, **args, full=True), None, False
             if capture.context.get('whatsapp_aliases') != {'format': 1}:
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             # No file-backed unit can be re-sighted from a SQL-only point.
             if prepared.mirror.conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             selection = whatsapp_dependencies.route_changes(prepared.mirror, capture)
+            unchanged = not selection.rowids and _whatsapp_unchanged(cache, prepared)
             if state is None:
                 proof = UnitWithdrawal.take(cache, adapter.source, scope, selection.old_unit_keys,
-                    expected_epoch=read_source(cache.conn, adapter.source, scope)).with_headers(cache,
-                    ['ZWACHATSESSION', 'ZWAGROUPMEMBER', 'ZWAGROUPMEMBERSCHANGE', 'jid', 'me', 'lid_phone_pair'])
+                    expected_epoch=read_source(cache.conn, adapter.source, scope))
+                if not unchanged:
+                    proof = proof.with_headers(cache,
+                        ['ZWACHATSESSION', 'ZWAGROUPMEMBER', 'ZWAGROUPMEMBERSCHANGE', 'jid', 'me', 'lid_phone_pair'])
                 state = CaptureCoverage.begin(cache, **args, full=False, withdrawal=proof)
-            return state, set(selection.rowids)
+            return state, set(selection.rowids), unchanged
         except (CoverageUnavailable, whatsapp_dependencies.RoutingUnavailable):
-            return CaptureCoverage.restart_full(cache, **args), None
+            return CaptureCoverage.restart_full(cache, **args), None, False
 
 
 def run_prepared_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity,
@@ -298,13 +318,13 @@ def _run_prepared_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: 
     if type(adapter) is WhatsAppAdapter and prepared.capture.context.get('whatsapp_aliases') != {'format': 1}:
         raise MirrorUnavailable('prepared WhatsApp capture requires frozen auxiliary alias evidence')
     prepared.check_parent(cache, adapter.source, scope)
-    capture_state, selected = None, None
+    capture_state, selected, reuse_coverage = None, None, False
     if type(adapter) is MessagesAdapter:
         capture_state, selected = _messages_coverage(adapter, cfg, cache, prepared, scope, full)
     elif type(adapter) is WhatsAppAdapter:
-        capture_state, selected = _whatsapp_coverage(adapter, cache, prepared, scope, full)
+        capture_state, selected, reuse_coverage = _whatsapp_coverage(adapter, cache, prepared, scope, full)
     outcome = run_sync(adapter, dd, cfg, ident, cache, full=full, prepared=prepared,
-                       capture_state=capture_state, selected_message_rowids=selected)
+                       capture_state=capture_state, selected_message_rowids=selected, reuse_prepared_coverage=reuse_coverage)
     if outcome.exit_code == 0:
         receipt = prepared.receipt(cache, adapter.source, scope)
         if receipt is None:

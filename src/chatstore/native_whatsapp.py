@@ -6,6 +6,7 @@ import hashlib
 import sqlite3
 from contextlib import ExitStack
 from datetime import UTC, datetime
+from typing import Any
 
 from .adapters.base import check_schema
 from .adapters.native_mirror import NativeMirror
@@ -56,11 +57,14 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     with auxiliary_session.views() as optional:
                         context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
                                    'whatsapp_auxiliary': optional.evidence}
-                        def validate(conn: sqlite3.Connection, baseline: bool = baseline) -> None:
+                        def validate(conn: sqlite3.Connection, baseline: bool = baseline,
+                                     context: dict[str, Any] = context) -> None:
                             if not baseline and conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                                 raise MediaCaptureRequired
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
+                            context['whatsapp_alias_evidence_point'] = conn.execute(
+                                'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
                         observed_at = datetime.now(UTC).isoformat()
                         if previous is None:
                             pending = mirror.initialize(view, REQUIRED, namespace=namespace, policy_tag=policy,
