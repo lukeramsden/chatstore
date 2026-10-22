@@ -98,11 +98,13 @@ Every non-obvious choice, what was decided, and the evidence behind it. Grouped 
 
 - **FTS tables are keyed by rowid** (`messages_idx.id`, `revisions.id`); deleting by an UNINDEXED
   column was a full-table scan and made sync superlinear.
-- **Performance**: `synchronous=NORMAL` under WAL, batched `upsert_many`/`observe_many`, and
+- **Earlier performance measurements**: `synchronous=NORMAL` under WAL, batched `upsert_many`/`observe_many`, and
   `Cache.bulk()` (no WAL autocheckpoint during a run, checkpoint+truncate on exit) took a full
-  WhatsApp sync from 282 s to 119 s. A crash loses at most the last commit; sync re-runs.
-- **WhatsApp incremental**: `Z_PK` checkpoint plus 5,000-row look-back for status changes.
-  Checkpoint going backwards = source reset → automatic `full_reconcile` in the same run.
+  WhatsApp sync from 282 s to 119 s. Preservation checkpoints now use `synchronous=FULL` and a
+  64 MiB page-cache cap, since a successful capture may be unavailable to recapture after a crash.
+- **WhatsApp reconciliation**: all logical groups are checked every poll. The former 5,000-row
+  look-back missed historical changes. Checkpoint going backwards still reports a source reset;
+  bounded source-side change detection remains unresolved.
 - **Messages incremental** re-decodes every row and relies on fingerprints (~10 s) because edits,
   receipts and tapbacks mutate old rows. A row-id checkpoint would miss them.
 - **Source absence is evidence, not deletion.** Full reconcile marks

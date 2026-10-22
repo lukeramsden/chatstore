@@ -1,0 +1,44 @@
+{
+  "persistent_sqlite_detected_commits": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "scope": "temporary synthetic file, open handle, write + fsync before each query",
+  "results": [
+    {
+      "write": 1,
+      "history_drained": true,
+      "reported_change": false,
+      "persistent_vnode_reported_change": true
+    },
+    {
+      "write": 2,
+      "history_drained": true,
+      "reported_change": false,
+      "persistent_vnode_reported_change": true
+    },
+    {
+      "write": 3,
+      "history_drained": true,
+      "reported_change": false,
+      "persistent_vnode_reported_change": true
+    },
+    {
+      "write": 4,
+      "history_drained": true,
+      "reported_change": false,
+      "persistent_vnode_reported_change": true
+    },
+    {
+      "write": 5,
+      "history_drained": true,
+      "reported_change": false,
+      "persistent_vnode_reported_change": true
+    }
+  ],
+  "missed_known_write": true,
+  "conclusion": "Do not use drained FSEvents history alone to skip media-byte checks."
+}

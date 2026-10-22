@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 
 from ..canonical.records import now_ms
 from ..identity.urn import revision_digest
-from . import fts
+from . import freshness, fts
 from .migrations import migrate
 
 
@@ -53,13 +53,20 @@ class Cache:
         self.conn.execute("PRAGMA busy_timeout=30000")
         self.conn.execute("PRAGMA foreign_keys=ON")
         if not readonly:
-            # WAL + NORMAL: a crash may lose the last commit but never corrupts; sync simply re-runs.
-            self.conn.execute("PRAGMA synchronous=NORMAL")
+            # Durable commits include the preservation journal and its consumer checkpoints.
+            self.conn.execute("PRAGMA synchronous=FULL")
             self.conn.execute("PRAGMA cache_size=-65536")
             self.conn.execute("PRAGMA temp_store=MEMORY")
         self.readonly = readonly
         if not readonly:
             migrate(self.conn)
+        self.has_covering_heads = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='records_heads'").fetchone() is not None
+        self.has_observation_refreshes = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='freshness_ranges'").fetchone() is not None
+
+        self.has_message_counts = self.conn.execute(
+            "SELECT 1 FROM meta WHERE key='message_counts_version' AND value='1'").fetchone() is not None
 
     def close(self) -> None:
         self.conn.close()
@@ -82,11 +89,10 @@ class Cache:
     @contextmanager
     def bulk(self) -> Iterator[None]:
         """Tune for a long run of large write transactions (sync, import): defer WAL checkpoints
-        and use a large page cache; checkpoint and truncate the WAL on exit."""
+        while retaining the normal page-cache limit; checkpoint and truncate the WAL on exit."""
         if self.readonly:
             raise RuntimeError("cache opened read-only")
         self.conn.execute("PRAGMA wal_autocheckpoint=0")
-        self.conn.execute("PRAGMA cache_size=-524288")
         try:
             yield
         finally:
@@ -116,8 +122,7 @@ class Cache:
         observation is newer; an older observation from the same history returns 'older'. A current
         digest outside the archive's history records a conflict and keeps the current record.
         """
-        cur = self.conn.execute("SELECT revision_digest, observed_at FROM records WHERE urn=?", (rec["urn"],)).fetchone()
-        head = (cur["revision_digest"], cur["observed_at"]) if cur else None
+        head = self.current_heads([rec["urn"]]).get(rec["urn"])
         return self._upsert(rec, head, observed_at, sync_run, prior_digests, origin)
 
     def current_heads(self, urns: Iterable[str]) -> dict[str, tuple[str, int]]:
@@ -126,23 +131,39 @@ class Cache:
         batch = list(urns)
         for i in range(0, len(batch), 500):
             chunk = batch[i:i + 500]
-            q = f"SELECT urn, revision_digest, observed_at FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
+            if self.has_observation_refreshes:
+                at = freshness.time_sql('record', 'k.id')
+                index = 'INDEXED BY records_heads' if self.has_covering_heads else ''
+                q = f"""SELECT r.urn,r.revision_digest,max(r.observed_at,coalesce({at},r.observed_at)) FROM records r {index}
+                    LEFT JOIN entity_keys k ON k.urn=r.urn WHERE r.urn IN ({','.join('?' * len(chunk))})"""
+            else:
+                q = f"SELECT urn,revision_digest,observed_at FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
             out.update((r[0], (r[1], r[2])) for r in self.conn.execute(q, chunk))
         return out
 
     def upsert_many(self, recs: list[dict[str, Any]], *, observed_at: int | None = None,
                     sync_run: str | None = None, origin: str = "sync") -> dict[str, int]:
         """Batch form of upsert(): one lookup for the whole batch. Must run inside write()."""
-        heads = self.current_heads(r["urn"] for r in recs)
+        observed_at = observed_at if observed_at is not None else now_ms()
+        heads = self.current_heads(r['urn'] for r in recs)
         outcomes: dict[str, int] = {}
+        unchanged = []
         for rec in recs:
-            o = self._upsert(rec, heads.get(rec["urn"]), observed_at, sync_run, None, origin)
-            heads[rec["urn"]] = (rec["revision_digest"], observed_at if observed_at is not None else now_ms())
+            head = heads.get(rec['urn'])
+            o = self._upsert(rec, head, observed_at, sync_run, None, origin, refresh=False)
+            if o == 'unchanged':
+                if head is not None and observed_at >= head[1]:
+                    unchanged.append(rec['urn'])
+                heads[rec['urn']] = (rec['revision_digest'], max(head[1] if head else 0, observed_at))
+            elif o in ('inserted', 'updated'):
+                heads[rec['urn']] = (rec['revision_digest'], observed_at)
             outcomes[o] = outcomes.get(o, 0) + 1
+        from .changefeed import refresh_records
+        refresh_records(self.conn, unchanged, observed_at, sync_run)
         return outcomes
 
     def _upsert(self, rec: dict[str, Any], head: tuple[str, int] | None, observed_at: int | None, sync_run: str | None,
-                prior_digests: set[str] | None, origin: str) -> str:
+                prior_digests: set[str] | None, origin: str, *, refresh: bool = True) -> str:
         conn = self.conn
         observed_at = observed_at if observed_at is not None else now_ms()
         cur_digest, cur_observed = head if head else (None, 0)
@@ -150,6 +171,11 @@ class Cache:
         rec["revision_digest"] = digest
         urn = rec["urn"]
         kind = rec["entity"]
+        if cur_digest == digest:
+            if refresh and observed_at >= cur_observed:
+                from .changefeed import refresh_records
+                refresh_records(conn, [urn], observed_at, sync_run)
+            return 'unchanged'
         stored = dict(rec)
         stored["observed_at"] = observed_at
         stored["sync_run"] = sync_run
@@ -162,10 +188,6 @@ class Cache:
             self._add_revision(urn, kind, digest, observed_at, sync_run, None, stored)
             self._index(kind, stored, new=True)
             return "inserted"
-        if cur_digest == digest:
-            if observed_at >= cur_observed:
-                conn.execute("UPDATE records SET observed_at=?, sync_run=? WHERE urn=?", (observed_at, sync_run, urn))
-            return "unchanged"
         # Differing content.
         if origin == "import" and cur_digest not in (prior_digests or set()):
             self.add_conflict("content", urn, {
@@ -256,29 +278,38 @@ class Cache:
     _OBSERVE_SQL = """INSERT INTO source_observations(entity_urn, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(entity_urn, source, account_scope, native_table) DO UPDATE SET
-                 native_row_ids=excluded.native_row_ids, fingerprint=excluded.fingerprint,
+                 native_row_ids=excluded.native_row_ids, native_key=excluded.native_key, minted=excluded.minted,
+                 fingerprint=excluded.fingerprint,
                  adapter_version=excluded.adapter_version, observed_at=excluded.observed_at,
                  sync_run=excluded.sync_run, present=excluded.present"""
 
     def observe_many(self, rows: Iterable[SourceObservation]) -> None:
         """Record sightings from a sync run (the live source always wins). Must run inside write()."""
-        self.conn.executemany(self._OBSERVE_SQL, [r.row() for r in rows])
+        rows = list(rows)
+        semantic_change = ' OR '.join(f'source_observations.{k} IS NOT excluded.{k}' for k in (
+            'native_row_ids', 'native_key', 'minted', 'fingerprint', 'adapter_version', 'present'))
+        self.conn.executemany(self._OBSERVE_SQL + ' WHERE ' + semantic_change, [r.row() for r in rows])
+        from .changefeed import refresh
+        refresh(self.conn, rows)
 
     def observe(self, obs: SourceObservation) -> None:
-        self.conn.execute(self._OBSERVE_SQL, obs.row())
+        self.observe_many([obs])
 
     def merge_observations(self, rows: Iterable[SourceObservation]) -> None:
         """Record sightings restored from an archive: only newer observations replace existing ones."""
-        self.conn.executemany(self._OBSERVE_SQL + " WHERE excluded.observed_at >= source_observations.observed_at",
+        at = freshness.time_sql('observation', 'source_observations.observation_id')
+        self.conn.executemany(self._OBSERVE_SQL + f" WHERE excluded.observed_at >= max(source_observations.observed_at,coalesce({at},source_observations.observed_at))",
                               [r.row() for r in rows])
 
     def mark_absent(self, source: str, account_scope: str, native_table: str, seen_before: int,
                     sync_run: str | None, state: str = "absent_from_source") -> int:
         """Mark observations of `native_table` not touched since `seen_before` as absent."""
+        at = freshness.time_sql('observation', 'source_observations.observation_id')
         cur = self.conn.execute(
-            "UPDATE source_observations SET present=?, sync_run=? WHERE source=? AND account_scope=? AND native_table=? AND observed_at<? AND present='present'",
-            (state, sync_run, source, account_scope, native_table, seen_before),
-        )
+            f"""UPDATE source_observations SET present=?,sync_run=?,observed_at=?
+                WHERE source=? AND account_scope=? AND native_table=? AND present='present'
+                AND max(observed_at,coalesce({at},observed_at))<?""",
+            (state, sync_run, seen_before, source, account_scope, native_table, seen_before))
         return int(cur.rowcount)
 
     def add_conflict(self, kind: str, entity_urn: str | None, detail: dict[str, Any]) -> int:
@@ -309,17 +340,17 @@ class Cache:
     # ---- reads --------------------------------------------------------------------------
 
     def get(self, urn: str) -> dict[str, Any] | None:
-        row = self.conn.execute("SELECT record FROM records WHERE urn=?", (urn,)).fetchone()
-        return json.loads(row[0]) if row else None
+        row = self.conn.execute("SELECT record,observed_at,sync_run FROM records WHERE urn=?", (urn,)).fetchone()
+        return self.record_freshness(json.loads(row[0]) | {"observed_at": row[1], "sync_run": row[2]}) if row else None
 
     def get_many(self, urns: Iterable[str]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         urns = [u for u in set(urns) if u]
         for i in range(0, len(urns), 500):
             chunk = urns[i:i + 500]
-            q = f"SELECT urn, record FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
+            q = f"SELECT urn,record,observed_at,sync_run FROM records WHERE urn IN ({','.join('?' * len(chunk))})"
             for r in self.conn.execute(q, chunk):
-                out[r[0]] = json.loads(r[1])
+                out[r[0]] = self.record_freshness(json.loads(r[1]) | {"observed_at": r[2], "sync_run": r[3]})
         return out
 
     def revisions_of(self, urn: str) -> list[dict[str, Any]]:
@@ -340,15 +371,26 @@ class Cache:
     def aliases_to(self, new_urn: str) -> list[str]:
         return [r[0] for r in self.conn.execute("SELECT old_urn FROM aliases_idx WHERE new_urn=?", (new_urn,))]
 
+    def observation_freshness(self, observation_id: int, observation: dict[str, Any]) -> dict[str, Any]:
+        if not self.has_observation_refreshes:
+            return observation
+        return freshness.lookup(self.conn, 'observation', observation_id, observation)
+
+    def record_freshness(self, rec: dict[str, Any]) -> dict[str, Any]:
+        if not self.has_observation_refreshes:
+            return rec
+        key = self.conn.execute('SELECT id FROM entity_keys WHERE urn=?', (rec['urn'],)).fetchone()
+        return freshness.lookup(self.conn, 'record', key[0], rec) if key else rec
+
     def observations_of(self, urn: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            "SELECT source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present FROM source_observations WHERE entity_urn=?",
+            "SELECT rowid AS observation_id, source, account_scope, native_table, native_row_ids, native_key, minted, fingerprint, adapter_version, observed_at, sync_run, present FROM source_observations WHERE entity_urn=?",
             (urn,))
-        return [dict(r) | {"native_row_ids": json.loads(r["native_row_ids"])} for r in rows]
+        return [self.observation_freshness(r["observation_id"], dict(r) | {"native_row_ids": json.loads(r["native_row_ids"])}) for r in rows]
 
     def iter_records(self, kind: str, *, source: str | None = None, scope: str | None = None,
                      include_tombstoned: bool = True) -> Iterator[dict[str, Any]]:
-        q = "SELECT record FROM records WHERE kind=?"
+        q = "SELECT record,observed_at,sync_run FROM records WHERE kind=?"
         args: list[Any] = [kind]
         if source:
             q += " AND source=?"
@@ -360,29 +402,37 @@ class Cache:
             q += " AND tombstoned=0"
         q += " ORDER BY urn"
         for r in self.conn.execute(q, args):
-            yield json.loads(r[0])
+            yield self.record_freshness(json.loads(r[0]) | {"observed_at": r[1], "sync_run": r[2]})
 
     def counts(self) -> dict[str, int]:
         return {r[0]: r[1] for r in self.conn.execute("SELECT kind, count(*) FROM records GROUP BY kind ORDER BY kind")}
 
     def coverage(self, source: str | None = None, scope: str | None = None) -> dict[str, Any]:
-        q = "SELECT min(utc_ms), max(utc_ms), count(*) FROM messages_idx WHERE kind='message'"
-        args: list[Any] = []
-        if source:
-            q += " AND source=?"
-            args.append(source)
-        if scope:
-            q += " AND account_scope=?"
-            args.append(scope)
-        r = self.conn.execute(q, args).fetchone()
-        return {"earliest_utc_ms": r[0], "latest_utc_ms": r[1], "messages": r[2]}
+        from .coverage import read
+        if self.has_message_counts:
+            return read(self.conn, source, scope)
+        # Read-only access to an older cache cannot install its count projection.
+        q = "SELECT min(utc_ms),max(utc_ms),count(*) FROM messages_idx WHERE kind='message'"
+        args = []
+        for column, value in (('source', source), ('account_scope', scope)):
+            if value is not None:
+                q += f' AND {column}=?'
+                args.append(value)
+        row = self.conn.execute(q, args).fetchone()
+        return {'earliest_utc_ms': row[0], 'latest_utc_ms': row[1], 'messages': row[2]}
 
-    def latest_sync_runs(self) -> list[dict[str, Any]]:
-        rows = self.conn.execute(
-            """SELECT record FROM records r WHERE kind='sync_runs' AND observed_at = (
-                 SELECT max(observed_at) FROM records r2 WHERE r2.kind='sync_runs' AND r2.source=r.source AND r2.account_scope=r.account_scope)
-               ORDER BY source""")
-        return [json.loads(r[0]) for r in rows]
+    def latest_sync_runs(self, scopes: Iterable[tuple[str, str]] | None = None) -> list[dict[str, Any]]:
+        if scopes is None:
+            scopes = [tuple(r) for r in self.conn.execute(
+                "SELECT DISTINCT source,account_scope FROM records WHERE kind='sync_runs'")]
+        out = []
+        for source, scope in sorted(scopes):
+            row = self.conn.execute("""SELECT record FROM records WHERE kind='sync_runs'
+                AND source=? AND account_scope=? ORDER BY observed_at DESC,urn DESC LIMIT 1""",
+                (source, scope)).fetchone()
+            if row:
+                out.append(json.loads(row[0]))
+        return out
 
     def conflicts(self, *, unresolved_only: bool = True) -> list[dict[str, Any]]:
         q = "SELECT id, kind, entity_urn, detail, created_at, resolved_at, resolution FROM conflicts"

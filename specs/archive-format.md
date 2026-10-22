@@ -167,3 +167,30 @@ from an open file descriptor; a size or hash mismatch during copy fails the expo
 - Password from OS keychain (`chatstore archive password set`), `CHATSTORE_PASSWORD_FILE`
   (path to a `0600` file), or interactive prompt. Never argv, never env value, never logs.
 - No Git operations.
+
+
+## Immutable changefeed extension
+
+`chatstore-changefeed-v1` uses the same AES-256 ZIP / authenticated TAR container and canonical
+record schemas, with `kind: delta`. Older readers reject its format. The TAR carries
+`records/changes.jsonl`, optional content-addressed blobs, `manifest.json` and `checksums.json`.
+Changefeed metadata may follow body members, allowing a single TAR-writing pass.
+
+Every event has integer `seq`, `operation` and object `data`. Supported operations are `record`
+(current canonical body, stable entity ID, observation time/run, optional previous digest), `revision` (canonical
+revision envelope), `observation` (source evidence plus stable producer observation ID),
+`observation_refresh` (inclusive observation-ID ranges and time/run), `record_refresh` (inclusive
+entity-ID ranges and time/run), `entity_key` (migration binding: ID, URN, head digest and optional
+observation time/run), and `identity_metadata`
+(scopes and mappings). Events are contiguous and ordered. Heads and revisions are independent
+events; a baseline can span several bounded objects. A refresh describes only the specified IDs,
+not an inferred timestamp window. Revision bodies retain their canonical digest checks.
+
+`manifest.feed` contains `producer`, `stream`, `after`, `through`, `parent`, `parent_sha256`.
+The first object starts after 0 with null parent/hash. Later objects require the exact preceding
+export ID **and ciphertext SHA-256**, with `after` equal to its `through`. `requires` contains
+that parent ID, or is empty for the first object. Each immutable object has revision 1, lineage
+containing only its own export ID and empty `supersedes`; these fields do not authorize monthly
+replacement/retirement semantics. All preceding objects are required for cold restore.
+
+See [the implementation workflow and failure contract](../docs/incremental-preservation.md).

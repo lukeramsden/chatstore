@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -29,6 +29,44 @@ class Emit:
 
 
 @dataclass
+class CapturedUnit:
+    key: str
+    fingerprint: str
+    records: list[Emit]
+    counts: dict[str, int]
+    unsupported: dict[str, int]
+    cacheable: bool
+
+
+@dataclass
+class ReusedUnit:
+    key: str
+    fingerprint: str
+    record_count: int
+    record_ranges: list[list[int]]
+    observation_ranges: list[list[int]]
+    counts: dict[str, int]
+    unsupported: dict[str, int]
+    build: Callable[[], Iterator[Emit]]
+
+
+Emission = Emit | CapturedUnit | ReusedUnit
+
+
+class UnitMemo(Protocol):
+    def extract(self, key: str, fingerprint: str, build: Callable[[], Iterator[Emit]],
+                stats: ExtractStats) -> Iterator[CapturedUnit | ReusedUnit]: ...
+
+
+def extract_unit(stats: ExtractStats, key: str, fingerprint: str,
+                 build: Callable[[], Iterator[Emit]]) -> Iterator[Emission]:
+    if stats.memo is None:
+        yield from build()
+    else:
+        yield from stats.memo.extract(key, fingerprint, build, stats)
+
+
+@dataclass
 class Diagnosis:
     source: str
     root: str
@@ -47,6 +85,10 @@ class Diagnosis:
 
 @dataclass
 class ExtractStats:
+    selected_message_rowids: set[int] | None = None
+    reuse_whatsapp_headers: bool = False
+    watch_path: Callable[[Path], None] | None = None
+    memo: UnitMemo | None = None
     counts: dict[str, int] = field(default_factory=dict)
     unsupported: dict[str, int] = field(default_factory=dict)
     errors: list[dict[str, Any]] = field(default_factory=list)
@@ -83,11 +125,19 @@ class SourceAdapter(Protocol):
     def diagnose(self, cfg: Config) -> Diagnosis: ...
     def snapshot(self, cfg: Config, staging: Path) -> Snapshot: ...
     def extract(self, snap: Snapshot, scope: str, cfg: Config, stats: ExtractStats,
-                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emit]: ...
+                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emission]: ...
 
 
 def fingerprint(*parts: Any) -> str:
     return hashlib.sha256(json.dumps(parts, ensure_ascii=False, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def native_fingerprint(*parts: Any) -> str:
+    def blob(value: Any) -> dict[str, Any]:
+        if isinstance(value, bytes):
+            return {'native_blob_sha256': hashlib.sha256(value).hexdigest(), 'native_blob_size': len(value)}
+        raise TypeError(f'unsupported native value {type(value).__name__}')
+    return hashlib.sha256(json.dumps(parts, ensure_ascii=False, separators=(',', ':'), default=blob).encode()).hexdigest()
 
 
 def table_columns(conn: Any, table: str) -> set[str]:

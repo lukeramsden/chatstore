@@ -32,7 +32,20 @@ scripts/build-helper.sh              # Rust helper for Apple Messages bodies (ne
 .venv/bin/chatstore --json context urn:uuid:... --before 3 --after 3
 ```
 
+Eligible WAL-backed Messages syncs use a durable native mirror under the data directory
+to select old edits and deletions across restarts. Pending captures retry before opening
+the source. Media-bearing and unsupported sources retain ordinary snapshot capture;
+see [implementation limits](docs/incremental-preservation.md#cli-native-messages-dispatch).
+
+For persistent source polling on macOS, `chatstore --json sync --watch-interval 900` retains
+live monitors and emits one JSON result per poll. Stable sources reuse exact captured coverage;
+changed sources reconcile normally. See [monitored sync](docs/incremental-preservation.md#persistent-sync-lifecycle).
+
 Archives:
+
+For frequent collectors, use `archive export --consumer NAME` for bounded immutable delta batches
+and independent checkpoints. See [incremental preservation](docs/incremental-preservation.md) for
+verified receipts, delivery confirmation, cold restore and remaining source-sync costs.
 
 ```sh
 chatstore archive password suggest          # 256-bit password; store it in a password manager

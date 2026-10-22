@@ -1,0 +1,501 @@
+{
+  "messages": 100000,
+  "additional_aliases": 1000,
+  "batch_limit": 5000,
+  "sqlite_stats": false,
+  "cache_spill_disabled": false,
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+  "measurements": [
+    {
+      "stage": "sync-baseline",
+      "wall_seconds": 52.66112187500403,
+      "cpu_seconds": 41.32621,
+      "storage_read_bytes": 2970161152,
+      "storage_written_bytes": 7193137152,
+      "package_idle_wakeups": 51,
+      "interrupt_wakeups": 4410,
+      "lifetime_peak_rss_bytes": 189743104,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "messages": 99999,
+        "canonical_units_rebuilt": 99999,
+        "attachments": 1,
+        "events": 2,
+        "unsupported": {
+          "group_event_type:15": 1,
+          "message_type:99": 1,
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 203018,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "initial"
+    },
+    {
+      "stage": "sync-clean",
+      "wall_seconds": 0.10722362499654992,
+      "cpu_seconds": 0.09862299999999635,
+      "storage_read_bytes": 12890112,
+      "storage_written_bytes": 7479296,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 189743104,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-new-message",
+      "wall_seconds": 0.1119773750033346,
+      "cpu_seconds": 0.09837900000000133,
+      "storage_read_bytes": 1433600,
+      "storage_written_bytes": 2478080,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 189743104,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-clean-after-new",
+      "wall_seconds": 0.05266595900320681,
+      "cpu_seconds": 0.050357000000005314,
+      "storage_read_bytes": 131072,
+      "storage_written_bytes": 929792,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 189743104,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 0.06995100000494858,
+      "cpu_seconds": 0.06060399999999788,
+      "storage_read_bytes": 2035712,
+      "storage_written_bytes": 2560000,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 189743104,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-chat-title",
+      "wall_seconds": 0.5435997919994406,
+      "cpu_seconds": 0.22015799999999786,
+      "storage_read_bytes": 57507840,
+      "storage_written_bytes": 1388544,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 196345856,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 3018
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-auxiliary-edit",
+      "wall_seconds": 0.1483038750011474,
+      "cpu_seconds": 0.14380299999999835,
+      "storage_read_bytes": 471040,
+      "storage_written_bytes": 1679360,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 197132288,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "events": 1,
+        "absent_from_source:withdrawn": 2,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 3018
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-old-delete",
+      "wall_seconds": 0.050397624996548984,
+      "cpu_seconds": 0.04903099999999938,
+      "storage_read_bytes": 69632,
+      "storage_written_bytes": 1441792,
+      "package_idle_wakeups": 10,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 197197824,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "absent_from_source:withdrawn": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-clean-after-changes",
+      "wall_seconds": 0.04417737499898067,
+      "cpu_seconds": 0.04278899999999908,
+      "storage_read_bytes": 114688,
+      "storage_written_bytes": 1011712,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 197197824,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    }
+  ],
+  "database_layout": {},
+  "layout_scope": "Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll.",
+  "new_message_profile": {
+    "sqlite_vm_steps_lower_bounds": {
+      "native-mirror": 26000,
+      "canonical-cache": 8000
+    },
+    "functions": [
+      {
+        "file": "native_collector.py",
+        "line": 41,
+        "function": "collect_native",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 1.3792000000000001e-05,
+        "cumulative_seconds": 0.110184292
+      },
+      {
+        "file": "native_whatsapp.py",
+        "line": 31,
+        "function": "collect",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 7.7334e-05,
+        "cumulative_seconds": 0.1101705
+      },
+      {
+        "file": "extraction.py",
+        "line": 134,
+        "function": "code_signature",
+        "primitive_calls": 4,
+        "calls": 4,
+        "self_seconds": 0.003926276,
+        "cumulative_seconds": 0.074042208
+      },
+      {
+        "file": "prepared_sync.py",
+        "line": 402,
+        "function": "_run_prepared_sync",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 5.2331000000000004e-05,
+        "cumulative_seconds": 0.07097508300000001
+      },
+      {
+        "file": "prepared_sync.py",
+        "line": 43,
+        "function": "policy_signature",
+        "primitive_calls": 3,
+        "calls": 3,
+        "self_seconds": 3.096e-05,
+        "cumulative_seconds": 0.062687291
+      },
+      {
+        "file": "sync.py",
+        "line": 40,
+        "function": "run_sync",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 6.3664e-05,
+        "cumulative_seconds": 0.048139333000000006
+      },
+      {
+        "file": "prepared_sync.py",
+        "line": 117,
+        "function": "validate",
+        "primitive_calls": 2,
+        "calls": 2,
+        "self_seconds": 1.0834e-05,
+        "cumulative_seconds": 0.041222876000000006
+      },
+      {
+        "file": "extraction.py",
+        "line": 61,
+        "function": "_literal",
+        "primitive_calls": 10384,
+        "calls": 21780,
+        "self_seconds": 0.011024259000000002,
+        "cumulative_seconds": 0.038448017
+      },
+      {
+        "file": "store.py",
+        "line": 22,
+        "function": "_j",
+        "primitive_calls": 6524,
+        "calls": 6524,
+        "self_seconds": 0.0016818920000000002,
+        "cumulative_seconds": 0.035177535
+      },
+      {
+        "file": "__init__.py",
+        "line": 185,
+        "function": "dumps",
+        "primitive_calls": 6566,
+        "calls": 6566,
+        "self_seconds": 0.004664468000000001,
+        "cumulative_seconds": 0.033863306
+      },
+      {
+        "file": "encoder.py",
+        "line": 185,
+        "function": "encode",
+        "primitive_calls": 6566,
+        "calls": 6566,
+        "self_seconds": 0.003929783,
+        "cumulative_seconds": 0.028287694000000002
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.sorted>",
+        "primitive_calls": 2253,
+        "calls": 2253,
+        "self_seconds": 0.0015952870000000001,
+        "cumulative_seconds": 0.025205079000000002
+      },
+      {
+        "file": "sync.py",
+        "line": 74,
+        "function": "save_run",
+        "primitive_calls": 2,
+        "calls": 2,
+        "self_seconds": 3.3665000000000004e-05,
+        "cumulative_seconds": 0.023930584
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+        "primitive_calls": 1855,
+        "calls": 1855,
+        "self_seconds": 0.023185835000000002,
+        "cumulative_seconds": 0.023204751000000003
+      },
+      {
+        "file": "encoder.py",
+        "line": 207,
+        "function": "iterencode",
+        "primitive_calls": 6566,
+        "calls": 6566,
+        "self_seconds": 0.022768172,
+        "cumulative_seconds": 0.022768172
+      },
+      {
+        "file": "extraction.py",
+        "line": 118,
+        "function": "_function_policy",
+        "primitive_calls": 906,
+        "calls": 906,
+        "self_seconds": 0.001467783,
+        "cumulative_seconds": 0.020907737000000003
+      },
+      {
+        "file": "extraction.py",
+        "line": 89,
+        "function": "_code_constant",
+        "primitive_calls": 963,
+        "calls": 9602,
+        "self_seconds": 0.007406009000000001,
+        "cumulative_seconds": 0.015696622
+      },
+      {
+        "file": "native_mirror.py",
+        "line": 264,
+        "function": "prepare",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 0.000177288,
+        "cumulative_seconds": 0.012391125000000001
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.next>",
+        "primitive_calls": 26,
+        "calls": 26,
+        "self_seconds": 2.5167e-05,
+        "cumulative_seconds": 0.010528375000000001
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.isinstance>",
+        "primitive_calls": 151748,
+        "calls": 151748,
+        "self_seconds": 0.01006459,
+        "cumulative_seconds": 0.01006459
+      },
+      {
+        "file": "page_index.py",
+        "line": 79,
+        "function": "update",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 6.875e-06,
+        "cumulative_seconds": 0.009927458
+      },
+      {
+        "file": "page_index.py",
+        "line": 83,
+        "function": "_apply",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 0.00020234700000000002,
+        "cumulative_seconds": 0.009920583
+      },
+      {
+        "file": "contextlib.py",
+        "line": 145,
+        "function": "__exit__",
+        "primitive_calls": 13,
+        "calls": 13,
+        "self_seconds": 1.0417e-05,
+        "cumulative_seconds": 0.007510626
+      },
+      {
+        "file": "page_index.py",
+        "line": 170,
+        "function": "visit",
+        "primitive_calls": 1,
+        "calls": 391,
+        "self_seconds": 0.0007565390000000001,
+        "cumulative_seconds": 0.006637208
+      },
+      {
+        "file": "sync.py",
+        "line": 180,
+        "function": "flush",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 8.165e-06,
+        "cumulative_seconds": 0.0057068330000000006
+      },
+      {
+        "file": "store.py",
+        "line": 89,
+        "function": "bulk",
+        "primitive_calls": 2,
+        "calls": 2,
+        "self_seconds": 8.25e-06,
+        "cumulative_seconds": 0.005681625
+      },
+      {
+        "file": "sync.py",
+        "line": 188,
+        "function": "commit_records",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 9.083000000000001e-06,
+        "cumulative_seconds": 0.0049705
+      },
+      {
+        "file": "sync.py",
+        "line": 165,
+        "function": "capture",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 1.7833e-05,
+        "cumulative_seconds": 0.004793334000000001
+      },
+      {
+        "file": "store.py",
+        "line": 165,
+        "function": "_upsert",
+        "primitive_calls": 4,
+        "calls": 4,
+        "self_seconds": 2.0206000000000003e-05,
+        "cumulative_seconds": 0.004226457
+      },
+      {
+        "file": "store.py",
+        "line": 144,
+        "function": "upsert_many",
+        "primitive_calls": 1,
+        "calls": 1,
+        "self_seconds": 9.419e-06,
+        "cumulative_seconds": 0.0035394170000000004
+      }
+    ]
+  },
+  "profiling_scope": "cProfile and SQLite progress handlers apply only to the third capture (new-message). VM counts aggregate 1,000-step callbacks by connection path label, rounded down per connection; omitted labels had no complete callback interval. Existing canonical Cache and newly opened SQLite connections are instrumented. This adds diagnostic overhead. No pipeline stages run unless --pipeline is passed. Physical I/O remains process-attributed."
+}

@@ -81,6 +81,7 @@ version = "1.1.1"
 dependencies = [
  "hex",
  "imessage-database",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",

@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack, closing
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -15,14 +17,20 @@ from ...config import Config
 from ...identity import urn as U
 from ..base import (
     Diagnosis,
+    Emission,
     Emit,
     ExtractStats,
     IncompatibleSource,
     Observation,
     check_schema,
+    extract_unit,
     fingerprint,
+    native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
+from . import aliases, media
+
+POLICY_MODULES = (aliases, media)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -47,6 +55,26 @@ CONTENT_TYPES = {0: "text", 1: "image", 2: "video", 3: "audio", 4: "contact", 5:
 SYSTEM_TYPE = 6
 ATTACHMENT_KIND = {"image": "image", "video": "video", "audio": "audio", "document": "document", "gif": "video",
                    "sticker": "image", "contact": "contact", "location": "location"}
+
+
+def _message_jids(conn: sqlite3.Connection, field: str, *, incoming: bool = False) -> Iterator[str]:
+    """Seek past duplicate JIDs instead of stepping every message's index entry."""
+    if field not in ('ZFROMJID', 'ZTOJID'):
+        raise ValueError('unsupported message JID field')
+    name = 'cs_jid_' + field.lower() + ('_incoming' if incoming else '')
+    condition = ' AND ZISFROMME=0' if incoming else ''
+    conn.execute(f'CREATE INDEX IF NOT EXISTS {name} ON ZWAMESSAGE({field})' +
+                 (' WHERE ZISFROMME=0' if incoming else ''))
+    last = None
+    while True:
+        bound = f' AND {field}>?' if last is not None else ''
+        row = conn.execute(f'SELECT {field} FROM ZWAMESSAGE INDEXED BY {name} '
+                           f'WHERE {field} IS NOT NULL{condition}{bound} ORDER BY {field} LIMIT 1',
+                           (last,) if last is not None else ()).fetchone()
+        if row is None:
+            return
+        last = row[0]
+        yield last
 
 
 def jid_kind(jid: str | None) -> str:
@@ -112,16 +140,16 @@ class WhatsAppAdapter:
     # ---- extraction --------------------------------------------------------------------
 
     def extract(self, snap: Snapshot, scope: str, cfg: Config, stats: ExtractStats,
-                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emit]:
+                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emission]:
         conn = sqlite3.connect(snap.files["ChatStorage"].snapshot_path)
         conn.row_factory = sqlite3.Row
         problems = check_schema(conn, REQUIRED)
         if problems:
             raise IncompatibleSource("; ".join(problems))
-        stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE"}
         # Indexes on our private copy only.
         conn.execute("CREATE INDEX IF NOT EXISTS cs_msg_key ON ZWAMESSAGE(ZCHATSESSION, ZSTANZAID)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_media_msg ON ZWAMEDIAITEM(ZMESSAGE)")
+        conn.execute("CREATE INDEX IF NOT EXISTS cs_wa_media_file ON ZWAMEDIAITEM(ZMEDIALOCALPATH)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_data_msg ON ZWAMESSAGEDATAITEM(ZMESSAGE)")
         conn.commit()
         media_root = cfg.source_root(SOURCE) / "Message"
@@ -131,6 +159,28 @@ class WhatsAppAdapter:
 
         me_key = U.whatsapp_me_key()
         me_urn = urn("identity", me_key)
+        if stats.reuse_whatsapp_headers:
+            if full or stats.selected_message_rowids is None:
+                conn.close()
+                raise IncompatibleSource('header reuse requires selected message rows')
+            conn.execute('CREATE TEMP TABLE cs_wa_header_selection(pk INTEGER PRIMARY KEY)')
+            conn.executemany('INSERT INTO cs_wa_header_selection VALUES(?)',
+                             ((pk,) for pk in stats.selected_message_rowids))
+            chats = conn.execute("""SELECT c.Z_PK,c.ZCONTACTJID
+                FROM temp.cs_wa_header_selection s CROSS JOIN ZWAMESSAGE m CROSS JOIN ZWACHATSESSION c
+                WHERE m.Z_PK=s.pk AND c.Z_PK=m.ZCHATSESSION
+                UNION SELECT c.Z_PK,c.ZCONTACTJID
+                FROM temp.cs_wa_header_selection s CROSS JOIN ZWAMESSAGE m
+                CROSS JOIN ZWAMESSAGE p CROSS JOIN ZWACHATSESSION c
+                WHERE m.Z_PK=s.pk AND p.Z_PK=m.ZPARENTMESSAGE AND c.Z_PK=p.ZCHATSESSION""")
+            selected_chats = {row[0]: (U.whatsapp_jid(row[1]), urn('chat', U.whatsapp_jid(row[1]))) for row in chats}
+            stats.bump('prepared_headers_reused')
+            try:
+                yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
+            finally:
+                conn.close()
+            return
+        stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE", "jid", "me", "lid_phone_pair"}
         names: dict[str, list[dict[str, str]]] = {}
 
         def add_name(jid: str | None, name: str | None, origin: str) -> None:
@@ -203,10 +253,10 @@ class WhatsAppAdapter:
         alias_pairs = self._alias_pairs(snap)
         all_jids = set(names) | member_jids | {j for j, _ in chat_by_pk.values()}
         all_jids |= {j for pair in alias_pairs for j in pair}
-        for r in conn.execute("SELECT DISTINCT ZFROMJID FROM ZWAMESSAGE WHERE ZFROMJID IS NOT NULL"):
-            all_jids.add(U.whatsapp_jid(r[0]))
-        for r in conn.execute("SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZTOJID IS NOT NULL"):
-            all_jids.add(U.whatsapp_jid(r[0]))
+        for jid in _message_jids(conn, 'ZFROMJID'):
+            all_jids.add(U.whatsapp_jid(jid))
+        for jid in _message_jids(conn, 'ZTOJID'):
+            all_jids.add(U.whatsapp_jid(jid))
         # The owner's real JIDs (phone + LID) appear as group members and as the counterpart of the
         # "message yourself" chat; flag them is_me so consumers do not treat the owner as a third
         # party (issue #7). The synthetic `me` identity below stays the sender of outgoing messages.
@@ -225,7 +275,7 @@ class WhatsAppAdapter:
         yield from self._aliases(alias_pairs, scope, stats, urn)
 
         # --- messages ---------------------------------------------------------------------
-        yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full)
+        yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
 
         # --- group membership change events ---------------------------------------------
         for r in conn.execute("SELECT Z_PK, ZCHANGETYPE, ZCHANGEDATE, ZGROUPJID, ZMEMBERJIDS FROM ZWAGROUPMEMBERSCHANGE"):
@@ -250,8 +300,7 @@ class WhatsAppAdapter:
         member and its LID is the self-chat's ZCONTACTJID). Nothing else in ChatStorage names the
         owner. The set is closed over LID<->phone alias pairs so both forms are flagged."""
         owners: set[str] = set()
-        for (jid,) in conn.execute(
-                "SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND ZTOJID IS NOT NULL AND ZTOJID != ''"):
+        for jid in _message_jids(conn, 'ZTOJID', incoming=True):
             j = U.whatsapp_jid(jid)
             if jid_kind(j) in ("jid_phone", "jid_lid"):
                 owners.add(j)
@@ -272,26 +321,12 @@ class WhatsAppAdapter:
 
     def _alias_pairs(self, snap: Snapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
         """(lid_jid, phone_jid) -> evidence, from LID.sqlite and ContactsV2.sqlite."""
-        pairs: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        if "LID" in snap.files:
-            c = sqlite3.connect(snap.files["LID"].snapshot_path)
-            try:
-                if {"ZWAZACCOUNT"} <= {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
-                    for lid, phone in c.execute("SELECT ZIDENTIFIER, ZPHONENUMBER FROM ZWAZACCOUNT WHERE ZIDENTIFIER IS NOT NULL AND ZPHONENUMBER IS NOT NULL"):
-                        digits = "".join(ch for ch in str(phone) if ch.isdigit())
-                        if digits and "@lid" in lid:
-                            pairs.setdefault((U.whatsapp_jid(lid), f"{digits}@s.whatsapp.net"), []).append({"type": "lid_phone_pair", "detail": "LID.sqlite/ZWAZACCOUNT"})
-            finally:
-                c.close()
-        if "ContactsV2" in snap.files:
-            c = sqlite3.connect(snap.files["ContactsV2"].snapshot_path)
-            try:
-                if {"ZWAADDRESSBOOKCONTACT"} <= {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
-                    for lid, wa in c.execute("SELECT ZLID, ZWHATSAPPID FROM ZWAADDRESSBOOKCONTACT WHERE ZLID IS NOT NULL AND ZWHATSAPPID IS NOT NULL"):
-                        pairs.setdefault((U.whatsapp_jid(lid), U.whatsapp_jid(wa)), []).append({"type": "address_book", "detail": "ContactsV2.sqlite/ZWAADDRESSBOOKCONTACT"})
-            finally:
-                c.close()
-        return pairs
+        if snap.whatsapp_alias_pairs is not None:
+            return snap.whatsapp_alias_pairs
+        with ExitStack() as stack:
+            sources = {name: stack.enter_context(closing(sqlite3.connect(snap.files[name].snapshot_path)))
+                       if name in snap.files else None for name in aliases.SOURCES}
+            return aliases.pairs(aliases.collect(sources))
 
     def _aliases(self, pairs: dict[tuple[str, str], list[dict[str, Any]]], scope: str, stats: ExtractStats,
                  urn: Any) -> Iterator[Emit]:
@@ -311,157 +346,197 @@ class WhatsAppAdapter:
 
     def _messages(self, conn: sqlite3.Connection, scope: str, stats: ExtractStats, urn: Any,
                   chat_by_pk: dict[int, tuple[str, str]], me_urn: str, media_root: Path,
-                  checkpoints: dict[str, Any] | None, full: bool) -> Iterator[Emit]:
+                  checkpoints: dict[str, Any] | None, full: bool,
+                  probe: Callable[[dict[str, Any]], tuple[str, str | None, int | None]] | None = None) -> Iterator[Emission]:
         max_pk = conn.execute("SELECT max(Z_PK) FROM ZWAMESSAGE").fetchone()[0] or 0
+        selected = None if full else stats.selected_message_rowids
         since_pk = 0
-        if not full and checkpoints and checkpoints.get("max_message_pk"):
+        if selected is None and not full and checkpoints and checkpoints.get("max_message_pk"):
             since_pk = int(checkpoints["max_message_pk"])
             if since_pk > max_pk:
                 stats.notes.append("source reset detected: max Z_PK went backwards; falling back to full scan")
                 stats.full_scan = True
                 since_pk = 0
         stats.checkpoints["max_message_pk"] = max_pk
-        if full or since_pk == 0:
+        if selected is None:
             stats.scanned_tables |= {"ZWAMESSAGE", "ZWAMEDIAITEM"}
-        # Logical message groups. Incremental: groups containing at least one new row; also a recent
-        # window rescan (last 5000 rows) to pick up status/text changes on recently observed groups.
-        window_pk = max(0, since_pk - 5000) if since_pk else 0
-        groups = conn.execute(
-            """SELECT ZCHATSESSION, ZSTANZAID, group_concat(Z_PK) AS pks, count(*) AS n, max(ZSORT) AS maxsort
-               FROM ZWAMESSAGE WHERE ZSTANZAID IS NOT NULL AND ZSTANZAID != ''
-               GROUP BY ZCHATSESSION, ZSTANZAID HAVING max(Z_PK) > ?""", (window_pk,))
+        # WhatsApp exposes no durable edit/delete cursor. A recent-row window misses old edits,
+        # backfilled messages and attachment changes, so reconcile every logical group each poll.
+        if selected is None:
+            groups = conn.execute(
+                """SELECT ZCHATSESSION, ZSTANZAID, group_concat(Z_PK) AS pks, count(*) AS n, max(ZSORT) AS maxsort
+                   FROM ZWAMESSAGE WHERE ZSTANZAID IS NOT NULL AND ZSTANZAID != ''
+                   GROUP BY ZCHATSESSION, ZSTANZAID""")
+        else:
+            if any(type(pk) is not int or not -(1 << 63) <= pk < (1 << 63) for pk in selected):
+                raise IncompatibleSource('selected WhatsApp message IDs must be signed integers')
+            conn.execute('CREATE TEMP TABLE cs_selected_wa_messages(pk INTEGER PRIMARY KEY)')
+            conn.executemany('INSERT INTO cs_selected_wa_messages VALUES(?)', ((pk,) for pk in selected))
+            groups = conn.execute("""WITH chosen AS MATERIALIZED (
+                SELECT DISTINCT m.ZCHATSESSION,m.ZSTANZAID
+                FROM temp.cs_selected_wa_messages s CROSS JOIN ZWAMESSAGE m
+                WHERE m.Z_PK=s.pk AND m.ZSTANZAID IS NOT NULL AND m.ZSTANZAID!='')
+                SELECT m.ZCHATSESSION,m.ZSTANZAID,group_concat(m.Z_PK) AS pks,
+                       count(*) AS n,max(m.ZSORT) AS maxsort
+                FROM chosen CROSS JOIN ZWAMESSAGE m INDEXED BY cs_msg_key
+                WHERE m.ZCHATSESSION IS chosen.ZCHATSESSION AND m.ZSTANZAID=chosen.ZSTANZAID
+                GROUP BY m.ZCHATSESSION,m.ZSTANZAID""")
         media_sql = "SELECT * FROM ZWAMEDIAITEM WHERE ZMESSAGE = ?"
         data_sql = "SELECT * FROM ZWAMESSAGEDATAITEM WHERE ZMESSAGE = ? ORDER BY ZINDEX"
         for g in groups:
-            pks = [int(x) for x in g["pks"].split(",")]
-            # representative: highest ZSORT (prefers non-negative UI rows), then highest PK
-            ph = ",".join("?" * len(pks))
-            rep = conn.execute(
-                f"SELECT * FROM ZWAMESSAGE WHERE Z_PK IN ({ph}) ORDER BY ZSORT DESC, Z_PK DESC LIMIT 1", pks
-            ).fetchone()
-            if rep["ZCHATSESSION"] is None or rep["ZCHATSESSION"] not in chat_by_pk:
-                # Pointer only: no text, no JIDs (issue #6).
-                stats.error("message_without_chat_session",
-                            f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZCHATSESSION={rep['ZCHATSESSION']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} "
-                            f"ZMESSAGETYPE={rep['ZMESSAGETYPE']} ZISFROMME={rep['ZISFROMME']} rows={len(pks)}")
-                stats.unsupported_bump("message_without_chat_session")
-                continue
-            chat_jid, c_urn = chat_by_pk[rep["ZCHATSESSION"]]
-            is_me = bool(rep["ZISFROMME"])
-            from_jid = rep["ZFROMJID"]
-            if not is_me and not from_jid:
-                stats.error("incoming_without_sender",
-                            f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} ZMESSAGETYPE={rep['ZMESSAGETYPE']}")
-                continue
-            try:
-                m_key = U.whatsapp_message_key(chat_jid, from_jid, is_me, rep["ZSTANZAID"])
-            except ValueError as e:
-                stats.error("bad_message_key", str(e))
-                continue
-            m_urn = urn("message", m_key)
-            sender_urn = me_urn if is_me else urn("identity", U.whatsapp_jid(from_jid))
-            mtype = rep["ZMESSAGETYPE"]
-            text = rep["ZTEXT"] or None
-            if mtype == SYSTEM_TYPE:
-                kind = "system"
-            elif mtype in CONTENT_TYPES:
-                kind = "message"
-            else:
-                kind = f"unknown:{mtype}"
-                stats.unsupported_bump(f"message_type:{mtype}")
-            parts: list[dict[str, Any]] = []
-            attachments: list[dict[str, Any]] = []
-            if text:
-                parts.append({"type": "text", "text": text, "parser_status": "decoded", "payload": None, "attachment_urn": None})
-            media = conn.execute(media_sql, (rep["Z_PK"],)).fetchone()
+            pks = [int(x) for x in g['pks'].split(',')]
+            ph = ','.join('?' * len(pks))
+            native_rows = list(conn.execute(
+                f'SELECT * FROM ZWAMESSAGE WHERE Z_PK IN ({ph}) ORDER BY ZSORT DESC,Z_PK DESC', pks))
+            rep = native_rows[0]
+            media = conn.execute(media_sql, (rep['Z_PK'],)).fetchone()
             if media is None and len(pks) > 1:
                 for pk in pks:
                     media = conn.execute(media_sql, (pk,)).fetchone()
                     if media:
                         break
-            ctype = CONTENT_TYPES.get(mtype)
-            if media is not None and (ctype in ATTACHMENT_KIND or media["ZMEDIALOCALPATH"]):
-                a_key = U.whatsapp_attachment_key(m_key, 0)
-                a_urn = urn("attachment", a_key)
-                rel = media["ZMEDIALOCALPATH"]
-                availability, sha, size = "not_downloaded", None, media["ZFILESIZE"]
-                if rel:
-                    if rel.startswith("/") or ".." in rel.split("/"):
-                        availability = "unknown"
-                        stats.error("unsafe_media_path", f"ZWAMEDIAITEM Z_PK={media['Z_PK']} ZMESSAGE={rep['Z_PK']}")
-                    else:
-                        p = media_root / rel
-                        if p.is_file() and not p.is_symlink():
-                            availability = "available"
-                            sha, size = _sha256(p)
-                        else:
-                            availability = "missing"
-                media_payload = allowlisted(dict(media), ALLOWLIST["whatsapp.payload"])
-                akind = ATTACHMENT_KIND.get(ctype or "", "other")
-                attachments.append({"urn": a_urn, "key": a_key, "rec": record(
-                    "attachments", a_urn, SOURCE, scope, native_key=a_key, message_urn=m_urn, part_index=len(parts),
-                    filename=os.path.basename(rel) if rel else None, mime_type=None, uti=None, declared_size=size,
-                    availability=availability, blob_sha256=sha, source_path_hint=rel, is_sticker=(ctype == "sticker"), kind=akind)})
-                part_type = {"contact": "contact", "location": "location"}.get(ctype or "", "attachment")
-                ppayload: dict[str, Any] = dict(media_payload)
-                if ctype == "location":
-                    ppayload = {"latitude": media["ZLATITUDE"], "longitude": media["ZLONGITUDE"]}
-                if ctype == "contact":
-                    ppayload = {"vcard_name": media["ZVCARDNAME"]}
-                if media["ZTITLE"]:
-                    ppayload["title"] = media["ZTITLE"]
-                parts.append({"type": part_type, "text": media["ZTITLE"] if ctype in ("document", "contact") else None,
-                              "attachment_urn": a_urn if part_type == "attachment" else None, "payload": ppayload or None, "parser_status": "decoded"})
-                if media["ZMETADATA"] is not None:
-                    parts.append({"type": "opaque", "text": None, "attachment_urn": None, "parser_status": "unsupported",
-                                  "payload": {"source_field": "ZWAMEDIAITEM.ZMETADATA", "sha256": hashlib.sha256(media["ZMETADATA"]).hexdigest(), "size": len(media["ZMETADATA"])}})
-            for d in conn.execute(data_sql, (rep["Z_PK"],)):
-                parts.append({"type": "link", "text": None, "attachment_urn": None, "parser_status": "partial",
-                              "payload": {k: v for k, v in {"title": d["ZTITLE"], "summary": d["ZSUMMARY"], "url": d["ZMATCHEDTEXT"]}.items() if v}})
-            flags = allowlisted(dict(rep), ALLOWLIST["whatsapp.source_flags"])
-            flags["zsort_negative_only"] = (g["maxsort"] or 0) < 0
-            flags["duplicate_rows"] = len(pks)
-            reply_native = None
-            if rep["ZPARENTMESSAGE"]:
-                pr = conn.execute("SELECT ZCHATSESSION, ZSTANZAID, ZFROMJID, ZISFROMME FROM ZWAMESSAGE WHERE Z_PK=?", (rep["ZPARENTMESSAGE"],)).fetchone()
-                if pr and pr["ZCHATSESSION"] in chat_by_pk and pr["ZSTANZAID"]:
-                    try:
-                        reply_native = U.whatsapp_message_key(chat_by_pk[pr["ZCHATSESSION"]][0], pr["ZFROMJID"], bool(pr["ZISFROMME"]), pr["ZSTANZAID"])
-                    except ValueError:
-                        reply_native = None
-            status = {0: "pending", 1: "sent", 5: "delivered", 6: "sent", 8: "read"}.get(rep["ZMESSAGESTATUS"] or -1, "unknown")
-            if not is_me:
-                status = "unknown"
-            rec = record(
-                "messages", m_urn, SOURCE, scope, native_key=m_key, chat_urn=c_urn, chat_assignment="source_column",
-                sender_urn=sender_urn, is_from_me=is_me, transport="whatsapp", kind=kind,
-                sent_at=timestamp(rep["ZMESSAGEDATE"], "s", EPOCH_2001),
-                received_at=timestamp(rep["ZSENTDATE"], "s", EPOCH_2001) if rep["ZSENTDATE"] is not None else None,
-                edited_at=None, retracted_at=None, state=status, reply_to_urn=urn("message", reply_native) if reply_native else None,
-                reply_to_native=reply_native, text=text, has_attachments=bool(attachments), part_count=len(parts),
-                source_flags=flags, tombstone=None,
-            )
-            fp = fingerprint(text, rep["ZMESSAGEDATE"], mtype, rep["ZMESSAGESTATUS"], rep["ZFLAGS"], len(pks),
-                             media["ZMEDIALOCALPATH"] if media else None)
-            yield Emit(rec, Observation("ZWAMESSAGE", sorted(pks), m_key, fp))
-            stats.bump("messages")
-            for i, p in enumerate(parts):
-                pk_key = U.composite_key("part", m_key, str(i))
-                yield Emit(record("message_parts", urn("event", pk_key), SOURCE, scope, message_urn=m_urn, index=i, **p))
-            for a in attachments:
-                yield Emit(a["rec"], Observation("ZWAMEDIAITEM", [media["Z_PK"]] if media else [], a["key"], fingerprint(a["rec"]["availability"], a["rec"]["blob_sha256"])))
-                stats.bump("attachments")
-                if a["rec"]["availability"] == "available":
-                    yield Emit(record("blobs", urn("attachment", U.composite_key("blob", a["rec"]["blob_sha256"])), SOURCE, scope,
-                                      sha256=a["rec"]["blob_sha256"], size=a["rec"]["declared_size"] or 0, mime_type=None, first_seen=0))
-            if kind == "system":
-                ev_key = U.composite_key("sysevent", m_key)
-                yield Emit(record("events", urn("event", ev_key), SOURCE, scope, kind=f"unknown:{rep['ZGROUPEVENTTYPE']}",
-                                  target_urn=c_urn, target_native=chat_jid, actor_urn=sender_urn,
-                                  at=timestamp(rep["ZMESSAGEDATE"], "s", EPOCH_2001), payload={"group_event_type": rep["ZGROUPEVENTTYPE"]},
-                                  carrier_message_urn=m_urn))
-                stats.unsupported_bump(f"group_event_type:{rep['ZGROUPEVENTTYPE']}")
-                stats.bump("events")
+            data_rows = list(conn.execute(data_sql, (rep['Z_PK'],)))
+            parent = conn.execute('SELECT ZCHATSESSION,ZSTANZAID,ZFROMJID,ZISFROMME FROM ZWAMESSAGE WHERE Z_PK=?',
+                                  (rep['ZPARENTMESSAGE'],)).fetchone() if rep['ZPARENTMESSAGE'] else None
+            if stats.watch_path and media is not None and media['ZMEDIALOCALPATH']:
+                rel = media['ZMEDIALOCALPATH']
+                if not rel.startswith('/') and '..' not in rel.split('/'):
+                    stats.watch_path(media_root / rel)
+            media_probe = probe(dict(media)) if probe is not None and media is not None else _probe_media(media_root, media)
+            key = str(g['ZCHATSESSION']) + ':' + str(g['ZSTANZAID'])
+            digest = native_fingerprint(
+                [dict(r) for r in native_rows], dict(media) if media else None,
+                [dict(r) for r in data_rows], dict(parent) if parent else None, media_probe,
+                chat_by_pk.get(rep['ZCHATSESSION']), chat_by_pk.get(parent['ZCHATSESSION']) if parent else None, me_urn)
+            yield from extract_unit(stats, key, digest,
+                partial(self._message_group, g, rep, pks, media, data_rows, parent, media_probe, scope, stats, urn, chat_by_pk, me_urn))
+
+    def _message_group(self, g: Any, rep: Any, pks: list[int], media: Any, data_rows: list[Any], parent: Any,
+                       media_probe: tuple[str, str | None, int | None], scope: str, stats: ExtractStats,
+                       urn: Any, chat_by_pk: dict[int, tuple[str, str]], me_urn: str) -> Iterator[Emit]:
+        if rep["ZCHATSESSION"] is None or rep["ZCHATSESSION"] not in chat_by_pk:
+            # Pointer only: no text, no JIDs (issue #6).
+            stats.error("message_without_chat_session",
+                        f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZCHATSESSION={rep['ZCHATSESSION']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} "
+                        f"ZMESSAGETYPE={rep['ZMESSAGETYPE']} ZISFROMME={rep['ZISFROMME']} rows={len(pks)}")
+            stats.unsupported_bump("message_without_chat_session")
+            return
+        chat_jid, c_urn = chat_by_pk[rep["ZCHATSESSION"]]
+        is_me = bool(rep["ZISFROMME"])
+        from_jid = rep["ZFROMJID"]
+        if not is_me and not from_jid:
+            stats.error("incoming_without_sender",
+                        f"ZWAMESSAGE Z_PK={rep['Z_PK']} ZMESSAGEDATE={rep['ZMESSAGEDATE']} ZMESSAGETYPE={rep['ZMESSAGETYPE']}")
+            return
+        try:
+            m_key = U.whatsapp_message_key(chat_jid, from_jid, is_me, rep["ZSTANZAID"])
+        except ValueError as e:
+            stats.error("bad_message_key", str(e))
+            return
+        m_urn = urn("message", m_key)
+        sender_urn = me_urn if is_me else urn("identity", U.whatsapp_jid(from_jid))
+        mtype = rep["ZMESSAGETYPE"]
+        text = rep["ZTEXT"] or None
+        if mtype == SYSTEM_TYPE:
+            kind = "system"
+        elif mtype in CONTENT_TYPES:
+            kind = "message"
+        else:
+            kind = f"unknown:{mtype}"
+            stats.unsupported_bump(f"message_type:{mtype}")
+        parts: list[dict[str, Any]] = []
+        attachments: list[dict[str, Any]] = []
+        if text:
+            parts.append({"type": "text", "text": text, "parser_status": "decoded", "payload": None, "attachment_urn": None})
+        ctype = CONTENT_TYPES.get(mtype)
+        if media is not None and (ctype in ATTACHMENT_KIND or media["ZMEDIALOCALPATH"]):
+            a_key = U.whatsapp_attachment_key(m_key, 0)
+            a_urn = urn("attachment", a_key)
+            rel = media["ZMEDIALOCALPATH"]
+            availability, sha, size = media_probe
+            if rel and (rel.startswith("/") or ".." in rel.split("/")):
+                availability = "unknown"
+                stats.error("unsafe_media_path", f"ZWAMEDIAITEM Z_PK={media['Z_PK']} ZMESSAGE={rep['Z_PK']}")
+            media_payload = allowlisted(dict(media), ALLOWLIST["whatsapp.payload"])
+            akind = ATTACHMENT_KIND.get(ctype or "", "other")
+            attachments.append({"urn": a_urn, "key": a_key, "rec": record(
+                "attachments", a_urn, SOURCE, scope, native_key=a_key, message_urn=m_urn, part_index=len(parts),
+                filename=os.path.basename(rel) if rel else None, mime_type=None, uti=None, declared_size=size,
+                availability=availability, blob_sha256=sha, source_path_hint=rel, is_sticker=(ctype == "sticker"), kind=akind)})
+            part_type = {"contact": "contact", "location": "location"}.get(ctype or "", "attachment")
+            ppayload: dict[str, Any] = dict(media_payload)
+            if ctype == "location":
+                ppayload = {"latitude": media["ZLATITUDE"], "longitude": media["ZLONGITUDE"]}
+            if ctype == "contact":
+                ppayload = {"vcard_name": media["ZVCARDNAME"]}
+            if media["ZTITLE"]:
+                ppayload["title"] = media["ZTITLE"]
+            parts.append({"type": part_type, "text": media["ZTITLE"] if ctype in ("document", "contact") else None,
+                          "attachment_urn": a_urn if part_type == "attachment" else None, "payload": ppayload or None, "parser_status": "decoded"})
+            if media["ZMETADATA"] is not None:
+                parts.append({"type": "opaque", "text": None, "attachment_urn": None, "parser_status": "unsupported",
+                              "payload": {"source_field": "ZWAMEDIAITEM.ZMETADATA", "sha256": hashlib.sha256(media["ZMETADATA"]).hexdigest(), "size": len(media["ZMETADATA"])}})
+        for d in data_rows:
+            parts.append({"type": "link", "text": None, "attachment_urn": None, "parser_status": "partial",
+                          "payload": {k: v for k, v in {"title": d["ZTITLE"], "summary": d["ZSUMMARY"], "url": d["ZMATCHEDTEXT"]}.items() if v}})
+        flags = allowlisted(dict(rep), ALLOWLIST["whatsapp.source_flags"])
+        flags["zsort_negative_only"] = (g["maxsort"] or 0) < 0
+        flags["duplicate_rows"] = len(pks)
+        reply_native = None
+        if rep["ZPARENTMESSAGE"]:
+            pr = parent
+            if pr and pr["ZCHATSESSION"] in chat_by_pk and pr["ZSTANZAID"]:
+                try:
+                    reply_native = U.whatsapp_message_key(chat_by_pk[pr["ZCHATSESSION"]][0], pr["ZFROMJID"], bool(pr["ZISFROMME"]), pr["ZSTANZAID"])
+                except ValueError:
+                    reply_native = None
+        status = {0: "pending", 1: "sent", 5: "delivered", 6: "sent", 8: "read"}.get(rep["ZMESSAGESTATUS"] or -1, "unknown")
+        if not is_me:
+            status = "unknown"
+        rec = record(
+            "messages", m_urn, SOURCE, scope, native_key=m_key, chat_urn=c_urn, chat_assignment="source_column",
+            sender_urn=sender_urn, is_from_me=is_me, transport="whatsapp", kind=kind,
+            sent_at=timestamp(rep["ZMESSAGEDATE"], "s", EPOCH_2001),
+            received_at=timestamp(rep["ZSENTDATE"], "s", EPOCH_2001) if rep["ZSENTDATE"] is not None else None,
+            edited_at=None, retracted_at=None, state=status, reply_to_urn=urn("message", reply_native) if reply_native else None,
+            reply_to_native=reply_native, text=text, has_attachments=bool(attachments), part_count=len(parts),
+            source_flags=flags, tombstone=None,
+        )
+        fp = fingerprint(text, rep["ZMESSAGEDATE"], mtype, rep["ZMESSAGESTATUS"], rep["ZFLAGS"], len(pks),
+                         media["ZMEDIALOCALPATH"] if media else None)
+        yield Emit(rec, Observation("ZWAMESSAGE", sorted(pks), m_key, fp))
+        stats.bump("messages")
+        for i, p in enumerate(parts):
+            pk_key = U.composite_key("part", m_key, str(i))
+            yield Emit(record("message_parts", urn("event", pk_key), SOURCE, scope, message_urn=m_urn, index=i, **p))
+        for a in attachments:
+            yield Emit(a["rec"], Observation("ZWAMEDIAITEM", [media["Z_PK"]] if media else [], a["key"], fingerprint(a["rec"]["availability"], a["rec"]["blob_sha256"])))
+            stats.bump("attachments")
+            if a["rec"]["availability"] == "available":
+                yield Emit(record("blobs", urn("attachment", U.composite_key("blob", a["rec"]["blob_sha256"])), SOURCE, scope,
+                                  sha256=a["rec"]["blob_sha256"], size=a["rec"]["declared_size"] or 0, mime_type=None, first_seen=0))
+        if kind == "system":
+            ev_key = U.composite_key("sysevent", m_key)
+            yield Emit(record("events", urn("event", ev_key), SOURCE, scope, kind=f"unknown:{rep['ZGROUPEVENTTYPE']}",
+                              target_urn=c_urn, target_native=chat_jid, actor_urn=sender_urn,
+                              at=timestamp(rep["ZMESSAGEDATE"], "s", EPOCH_2001), payload={"group_event_type": rep["ZGROUPEVENTTYPE"]},
+                              carrier_message_urn=m_urn))
+            stats.unsupported_bump(f"group_event_type:{rep['ZGROUPEVENTTYPE']}")
+            stats.bump("events")
+
+def _probe_media(root: Path, media: Any) -> tuple[str, str | None, int | None]:
+    if media is None:
+        return 'not_downloaded', None, None
+    rel, size = media['ZMEDIALOCALPATH'], media['ZFILESIZE']
+    if not rel:
+        return 'not_downloaded', None, size
+    if rel.startswith('/') or '..' in rel.split('/'):
+        return 'unknown', None, size
+    path = root / rel
+    if path.is_file() and not path.is_symlink():
+        sha, size = _sha256(path)
+        return 'available', sha, size
+    return 'missing', None, size
 
 
 def _sha256(p: Path) -> tuple[str, int]:

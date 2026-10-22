@@ -17,7 +17,7 @@ import tarfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 import pyzipper
 
@@ -97,9 +97,11 @@ class TarBuilder:
         self.members.append(name)
         return digest
 
-    def finish(self) -> str:
+    def finish(self, *, hash_file: bool = True) -> str:
         self.tar.close()
         self._fh.close()
+        if not hash_file:
+            return ""
         h = hashlib.sha256()
         with open(self.path, "rb") as f:
             while chunk := f.read(1 << 20):
@@ -166,7 +168,7 @@ def _has_aes_extra(info: zipfile.ZipInfo) -> bool:
     return getattr(info, "compress_type", None) == 99
 
 
-def read_payload_to_file(zip_path: Path, password: str, dst_tar: Path, limits: dict[str, int] | None = None) -> str:
+def read_payload_to_file(zip_path: Path | BinaryIO, password: str, dst_tar: Path, limits: dict[str, int] | None = None) -> str:
     """Decrypt + authenticate the payload into dst_tar (0600). Returns plaintext sha256.
 
     Raises WrongPassword / InvalidArchive. dst_tar is removed on failure.
@@ -268,7 +270,11 @@ def open_payload(tar_path: Path, payload_sha256: str, *, load_blobs: bool = Fals
         checksums = json.loads(members["checksums.json"])
     except (ValueError, UnicodeDecodeError) as e:
         raise InvalidArchive(f"manifest/checksums not valid JSON: {e}") from None
-    if manifest.get("archive_format") != ARCHIVE_FORMAT:
+    if not isinstance(manifest, dict) or not isinstance(checksums, dict):
+        raise InvalidArchive('manifest and checksums must be objects')
+    if any(not isinstance(name, str) or not isinstance(digest, str) for name, digest in checksums.items()):
+        raise InvalidArchive('member checksums must map names to digests')
+    if manifest.get("archive_format") not in (ARCHIVE_FORMAT, "chatstore-changefeed-v1"):
         raise InvalidArchive(f"unsupported archive format {manifest.get('archive_format')!r}")
     if manifest.get("payload_digest") != "sha256:" + members_digest(checksums):
         raise InvalidArchive("payload digest does not match manifest")

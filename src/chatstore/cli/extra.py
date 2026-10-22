@@ -55,6 +55,17 @@ def cmd_archive_export(ctx: Ctx) -> Result:
     cache = ctx.cache()
     adapter_versions = {s: adapter_for(s).version for s in SOURCES}
     results = []
+    if a.consumer:
+        if since is not None or until is not None or a.no_catalogue or a.catalogue_only or a.force or a.context != 'full':
+            raise CliError(EXIT_USAGE, 'incremental_options', '--consumer requires unrestricted full preservation; omit date/catalogue/context/force options')
+        from ..archive.incremental import export_changes
+        try:
+            result = export_changes(cache, ctx.data_dir, ctx.cfg, ctx.ident, consumer=a.consumer,
+                                    output=output, password=pw, media=a.media, limit=a.batch_size)
+        except ValueError as e:
+            raise CliError(EXIT_USAGE, 'incremental_options', str(e)) from None
+        return Result({'output': str(output), 'written': int(result['action'] == 'written'),
+                       'archives': [result], 'has_more': result['has_more']})
     plans = []
     if not a.no_catalogue:
         plans.append(E.collect_catalogue(cache))
@@ -93,6 +104,26 @@ def _archive_paths(arg: list[str]) -> list[Path]:
     return order_paths(out)
 
 
+def cmd_archive_pending(ctx: Ctx) -> Result:
+    from ..archive.delivery import pending
+    ctx.require_init()
+    try:
+        return Result(pending(ctx.cache(), ctx.args.consumer, ctx.args.destination))
+    except ValueError as e:
+        raise CliError(EXIT_USAGE, 'delivery_options', str(e)) from None
+
+
+def cmd_archive_confirm(ctx: Ctx) -> Result:
+    from ..archive.delivery import confirm
+    ctx.require_init()
+    try:
+        proof = confirm(ctx.cache(), destination=ctx.args.destination, export_id=ctx.args.export_id,
+                        receipt_url=ctx.args.receipt_url, archive_url=ctx.args.archive_url)
+    except ValueError as e:
+        raise CliError(EXIT_INVALID_ARCHIVE, 'delivery_unverified', str(e)) from None
+    return Result(proof)
+
+
 def cmd_archive_verify(ctx: Ctx) -> Result:
     from ..archive.verify import verify_archive
     paths = _archive_paths(ctx.args.paths)
@@ -108,7 +139,7 @@ def cmd_archive_verify(ctx: Ctx) -> Result:
             continue
         v = verify_archive(p, pw, validate_schema=not ctx.args.no_schema)
         results.append({"path": v.path, "ok": v.ok, "wrong_password": v.wrong_password, "problems": v.problems,
-                        "counts": v.counts, "schema_errors": v.schema_errors,
+                        "counts": v.counts, "schema_errors": v.schema_errors, "receipt": v.receipt,
                         "manifest": {k: v.manifest.get(k) for k in ("export_id", "export_set", "kind", "bucket", "revision",
                                                                     "supersedes", "created_at", "coverage", "attachment_policy",
                                                                     "media", "counts")} if v.manifest else None})
@@ -265,6 +296,8 @@ def cmd_scope(ctx: Ctx) -> Any:
         try:
             with cache.write():
                 res = C.map_scope(cache, ctx.ident, a.from_scope, a.to_scope)
+                from ..cache.changefeed import capture_identity
+                capture_identity(cache.conn, ctx.ident)
         except ValueError as e:
             raise CliError(EXIT_USAGE, "bad_scope", str(e)) from None
         save_identity(ctx.data_dir, ctx.ident)
@@ -307,7 +340,7 @@ def cmd_purge(ctx: Ctx) -> Any:
             res = C.purge_entity(cache, a.entity) if a.entity else C.purge_source(cache, a.source, a.scope)
     except KeyError:
         raise CliError(EXIT_NOT_FOUND, "not_found", f"unknown entity {a.entity}") from None
-    warning = "already exported archives still contain the purged records; re-export produces a new revision"
+    warning = "immutable archives and the preservation journal retain previously captured content; purge removes the current cache projection"
     return Result(res | {"warning": warning}, warnings=[{"code": "archives_unchanged", "message": warning}],
                     human=lambda d: f"removed {d['removed']} record(s). {warning}")
 
@@ -408,6 +441,8 @@ def register_extra(sub: Any) -> None:
 
     s = ars.add_parser("export", help="Write encrypted monthly archives + catalogue.")
     s.add_argument("--output", "-o", help="Destination directory (default: <data-dir>/exports).")
+    s.add_argument('--consumer', help='Export a bounded immutable changefeed batch for this independent consumer.')
+    s.add_argument('--batch-size', type=int, default=5000, help='Maximum journal events per changefeed batch (default: 5000). Repeat while has_more is true.')
     s.add_argument("--since")
     s.add_argument("--until")
     s.add_argument("--media", choices=["text", "available-media"], default="text")
@@ -432,6 +467,18 @@ def register_extra(sub: Any) -> None:
     s = ars.add_parser("password", help="Manage the archive password (keychain).")
     s.add_argument("action", choices=["suggest", "set", "status", "clear"])
     s.set_defaults(fn=cmd_archive_password)
+
+    s = ars.add_parser('pending', help='List committed batches and verification receipts still awaiting delivery proof.')
+    s.add_argument('--consumer', required=True)
+    s.add_argument('--destination', required=True)
+    s.set_defaults(fn=cmd_archive_pending)
+
+    s = ars.add_parser('confirm-delivery', help='Verify published HTTPS metadata and remotely retrieved ciphertext before acknowledging durability.')
+    s.add_argument('--destination', required=True)
+    s.add_argument('--export-id', required=True)
+    s.add_argument('--receipt-url', required=True)
+    s.add_argument('--archive-url', required=True)
+    s.set_defaults(fn=cmd_archive_confirm)
 
     ars.add_parser("list", help="Show export and import ledgers.").set_defaults(fn=cmd_archive_list)
 

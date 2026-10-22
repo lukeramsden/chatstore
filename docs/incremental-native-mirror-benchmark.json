@@ -1,0 +1,66 @@
+{
+  "rows": 100000,
+  "scope": "Synthetic coordinated WAL validation, persistent ownership, native-row comparison and durable prepared mirror transaction; includes reading retained old/new changes. Full image only at baseline. Canonical capture, media bytes, sync/archive work, source setup/mutation, kernel IO and energy excluded. Uses stand-in benchmark acknowledgements, not canonical receipts. SQLite/index/WAL-index reads additional to WAL byte counters.",
+  "measurements": [
+    {
+      "stage": "baseline-view-image-index-and-native-rows",
+      "wall_seconds": 0.7068867919733748,
+      "cpu_seconds": 0.6986519999999999,
+      "native_rows_prepared": 100000
+    },
+    {
+      "stage": "old-edit",
+      "wall_seconds": 0.006186500075273216,
+      "cpu_seconds": 0.006120999999999932,
+      "native_rows_prepared": 1,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4432
+    },
+    {
+      "stage": "new-row",
+      "wall_seconds": 0.004374041920527816,
+      "cpu_seconds": 0.004301999999999917,
+      "native_rows_prepared": 1,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4432
+    },
+    {
+      "stage": "old-delete",
+      "wall_seconds": 0.005787250003777444,
+      "cpu_seconds": 0.005563000000000096,
+      "native_rows_prepared": 1,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4432
+    },
+    {
+      "stage": "large-payload",
+      "wall_seconds": 0.009148666053079069,
+      "cpu_seconds": 0.009053000000000089,
+      "native_rows_prepared": 1,
+      "wal_pages_retrieved": 18,
+      "wal_discovery_bytes": 74248,
+      "wal_page_reader_bytes": 75424
+    },
+    {
+      "stage": "overflow-only",
+      "wall_seconds": 0.006044875015504658,
+      "cpu_seconds": 0.00579799999999997,
+      "native_rows_prepared": 1,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4432
+    },
+    {
+      "stage": "clean",
+      "wall_seconds": 0.000697875046171248,
+      "cpu_seconds": 0.0006410000000000027,
+      "native_rows_prepared": 0,
+      "wal_pages_retrieved": 0,
+      "wal_discovery_bytes": 88,
+      "wal_page_reader_bytes": 256
+    }
+  ]
+}

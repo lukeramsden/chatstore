@@ -77,12 +77,21 @@ class Identity:
 
 
 def _write_private(path: Path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    serialized = json.dumps(data, indent=2, sort_keys=True) + '\n'
+    if path.exists() and path.read_text() == serialized:
+        return
+    tmp = path.with_suffix(path.suffix + '.tmp')
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump(data, f, indent=2, sort_keys=True)
-        f.write("\n")
+    with os.fdopen(fd, 'w') as f:
+        f.write(serialized)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
+    fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def load_config(dd: DataDir) -> Config:

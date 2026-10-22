@@ -1,0 +1,35 @@
+{
+  "messages": 100000,
+  "scope": "Synthetic canonical cache components only. Summary compares the previous scan with maintained counts and per-namespace indexed date bounds. Withdrawal includes writer commit, journal/invalidations and one missing observation among unrelated unit memberships. Setup, source/mirror extraction, full selective-capture lifecycle, archives, kernel IO and energy excluded. Timings include SQLite progress-handler instrumentation; VM counters are floors at 100-instruction resolution.",
+  "measurements": [
+    {
+      "stage": "legacy-summary-scan",
+      "wall_seconds": 0.147488999995403,
+      "cpu_seconds": 0.016455000000000553,
+      "sqlite_vm_steps_floor": 900000,
+      "result": {
+        "earliest_utc_ms": 1,
+        "latest_utc_ms": 100000,
+        "messages": 100000
+      }
+    },
+    {
+      "stage": "maintained-count-indexed-summary",
+      "wall_seconds": 8.55419784784317e-05,
+      "cpu_seconds": 8.599999999958641e-05,
+      "sqlite_vm_steps_floor": 0,
+      "result": {
+        "earliest_utc_ms": 1,
+        "latest_utc_ms": 100000,
+        "messages": 100000
+      }
+    },
+    {
+      "stage": "one-unit-withdrawal-with-unrelated-memberships",
+      "wall_seconds": 0.0006229589926078916,
+      "cpu_seconds": 0.0005950000000005673,
+      "sqlite_vm_steps_floor": 400,
+      "result": 1
+    }
+  ]
+}
