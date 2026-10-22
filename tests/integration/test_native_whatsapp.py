@@ -105,3 +105,43 @@ def test_file_path_transition_rolls_back_native_candidate_before_fallback(collec
     assert 'prepared_native' not in fallback['snapshot']
     with closing(Cache(dd.cache)) as cache:
         assert next(cache.iter_records('attachments'))['availability'] == 'available'
+
+
+def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.sync_session import SyncSession
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    original = aliases.collect
+    reads = []
+    def collect_rows(sources):
+        reads.append(1)
+        return original(sources)
+    monkeypatch.setattr(aliases, 'collect', collect_rows)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        auxiliary = session.native_auxiliary(cfg)
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=auxiliary)
+            assert result is not None and result.exit_code == 0
+            return result.run['snapshot']['prepared_native']['capture']
+        first = poll()
+        assert len(reads) == 1
+        second = poll()
+        assert len(reads) == 1
+        mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == first['token']
+            assert mirror.conn.execute('SELECT point FROM cs_native_wa_alias_state').fetchone()[0] == second['token']
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as writer:
+            writer.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+1 555 333 4444' WHERE Z_PK=1")
+            writer.commit()
+        changed = poll()
+        assert len(reads) == 2
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == changed['token']
+        auxiliary.close()  # Simulate restart: the durable payload alone cannot authorize reuse.
+        poll()
+        assert len(reads) == 3
+    assert auxiliary._monitor is None

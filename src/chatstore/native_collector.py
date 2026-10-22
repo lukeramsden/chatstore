@@ -18,6 +18,7 @@ from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
 from .adapters.whatsapp.adapter import WhatsAppAdapter
+from .adapters.whatsapp.auxiliary import AuxiliarySession
 from .cache import Cache
 from .config import Config, Identity
 from .paths import DataDir
@@ -38,7 +39,8 @@ def _validate_text_only(conn: sqlite3.Connection) -> None:
 
 
 def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity,
-                   cache: Cache, *, full: bool = False, media_watch: PreparedMediaWatch | None = None) -> SyncOutcome | None:
+                   cache: Cache, *, full: bool = False, media_watch: PreparedMediaWatch | None = None,
+                   auxiliary_session: AuxiliarySession | None = None) -> SyncOutcome | None:
     """Return None only when ordinary snapshot capture is required.
 
     A pending point is always handled before opening the source. Errors after
@@ -47,7 +49,7 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
     if sys.platform != 'darwin':
         return None
     if type(adapter) is WhatsAppAdapter:
-        return native_whatsapp.collect(adapter, dd, cfg, ident, cache, full=full)
+        return native_whatsapp.collect(adapter, dd, cfg, ident, cache, full=full, auxiliary_session=auxiliary_session)
     if type(adapter) is not MessagesAdapter:
         return None
     scope = ident.scope_for(adapter.source)

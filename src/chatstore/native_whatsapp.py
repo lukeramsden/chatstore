@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import ExitStack
 from datetime import UTC, datetime
 
 from .adapters.base import check_schema
@@ -11,7 +12,7 @@ from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
-from .adapters.whatsapp import aliases, auxiliary
+from .adapters.whatsapp import auxiliary
 from .adapters.whatsapp.adapter import REQUIRED, WhatsAppAdapter
 from .cache import Cache
 from .config import Config, Identity
@@ -27,16 +28,20 @@ class MediaCaptureRequired(Exception):
 
 
 def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
-            cache: Cache, *, full: bool = False) -> SyncOutcome | None:
+            cache: Cache, *, full: bool = False,
+            auxiliary_session: auxiliary.AuxiliarySession | None = None) -> SyncOutcome | None:
     namespace = f'whatsapp/{ident.scope_for(adapter.source)}'
     directory = dd.root / 'native'
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = directory / (hashlib.sha256(namespace.encode()).hexdigest() + '.sqlite3')
-    with _capture_lock(path), NativeMirror(path) as mirror:
+    with _capture_lock(path), NativeMirror(path) as mirror, ExitStack() as resources:
         pending = mirror.pending()
         if pending is not None:
             return _run_prepared_sync(adapter, dd, cfg, ident, cache, PreparedSync(mirror, pending, 'ChatStorage'), full=full)
         previous = mirror.continuation()
+        if auxiliary_session is None:
+            auxiliary_session = auxiliary.AuxiliarySession(cfg.source_root('whatsapp'))
+            resources.callback(auxiliary_session.close)
         policy = policy_signature(adapter, cfg)
         source_path = adapter.discover(cfg)['ChatStorage']
         for continuation in (True, False):
@@ -48,13 +53,13 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     baseline = previous is None or after is None or previous.schema_version != view.schema_version
                     if baseline and view.connection.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                         return None
-                    with auxiliary.AuxiliaryViews(cfg.source_root('whatsapp')) as optional:
+                    with auxiliary_session.views() as optional:
                         context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
                                    'whatsapp_auxiliary': optional.evidence}
                         def validate(conn: sqlite3.Connection, baseline: bool = baseline) -> None:
                             if not baseline and conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                                 raise MediaCaptureRequired
-                            aliases.prepare(conn, sources=optional.sources)
+                            auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
                         observed_at = datetime.now(UTC).isoformat()
                         if previous is None:

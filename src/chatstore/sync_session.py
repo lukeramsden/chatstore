@@ -12,6 +12,7 @@ from .adapters.media_watch import PreparedMediaWatch
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.monitor import CaptureToken, MonitoringUnavailable, SourceMonitor
 from .adapters.whatsapp.adapter import WhatsAppAdapter
+from .adapters.whatsapp.auxiliary import AuxiliarySession
 from .cache import Cache
 from .cache.changefeed import append, id_ranges
 from .cache.extraction import code_signature
@@ -38,6 +39,18 @@ class SyncSession:
         self._source_paths: list[Path] = []
         self._native_media: PreparedMediaWatch | None = None
         self._native_media_key: tuple[str, str] | None = None
+        self._native_auxiliary: AuxiliarySession | None = None
+        self._native_auxiliary_root: str | None = None
+
+    def native_auxiliary(self, cfg: Config) -> AuxiliarySession:
+        root = str(cfg.source_root('whatsapp').absolute())
+        if self._native_auxiliary_root != root:
+            if self._native_auxiliary is not None:
+                self._native_auxiliary.close()
+            self._native_auxiliary = AuxiliarySession(cfg.source_root('whatsapp'))
+            self._native_auxiliary_root = root
+        assert self._native_auxiliary is not None
+        return self._native_auxiliary
 
     def native_media(self, cfg: Config, dd: DataDir) -> PreparedMediaWatch:
         key = (str(cfg.source_root('messages').absolute()), str(dd.root.absolute()))
@@ -166,6 +179,10 @@ class SyncSession:
             self._summary = summary
 
     def close(self) -> None:
+        if self._native_auxiliary is not None:
+            self._native_auxiliary.close()
+        self._native_auxiliary = None
+        self._native_auxiliary_root = None
         if self._native_media is not None:
             self._native_media.close()
         self._native_media = None
