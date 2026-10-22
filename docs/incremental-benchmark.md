@@ -457,3 +457,37 @@ changed provenance, corrupted content and mismatched revision wrappers.
 Reproduce the current profile with `.venv/bin/python -m cProfile -o /tmp/chatstore-wa.pstats
 scripts/benchmark_native_whatsapp.py --messages 10000 --aliases 1000 --pipeline` on one line.
 [Before/after counters and stage measurements](incremental-verification-profile.json).
+
+## SQLite cache-spill experiment
+
+The native WhatsApp harness accepts `--sqlite-stats` to build a temporary instrumentation
+extension with the local C compiler. It samples the public `sqlite3_db_status` API on the
+canonical producer and importer connections, then disables extension loading again. Normal
+application connections do not load this extension. Native mirror and source-reader connections
+are outside these counters. `cache_writes` counts pages written to WAL; `cache_spills` counts
+pages written mid-transaction because the pager cache overflowed. Neither is a byte count or
+a count of checkpoint writes. Cache bytes and file sizes are end-of-stage gauges.
+
+Two independent 30,000-row fixtures with 100 additional alias pairs compared defaults with
+`--disable-cache-spill`. Both used encryption, verified export/import and the same operation
+sequence. This flag is benchmark-only; production settings were not changed.
+
+| Baseline stage | Default WAL page writes / spills | Spilling disabled page writes / spills |
+| --- | ---: | ---: |
+| Producer sync | 186,980 / 20,786 | 186,410 / 0 |
+| Consumer import | 271,456 / 0 | 271,489 / 0 |
+
+Producer cache memory after sync grew from 78.4 MB to 90.0 MB. Attributed producer storage
+writes were 1.316 GB versus 1.255 GB, while import writes were 3.754 GB versus 3.790 GB.
+The import had no spills in either run, and disabling producer spills barely changed the
+number of page writes. This does not support changing the production spill setting as a fix
+for the observed amplification. Logical writes, checkpoint work and filesystem attribution
+need further investigation.
+
+These are individual runs, not randomized repeated trials; their wall times and lifetime peak
+RSS also varied. The experiment rejects the broad spill hypothesis at this tested size, not
+every possible large-transaction problem. No energy measurement is available here.
+
+Reproduce with `.venv/bin/python scripts/benchmark_native_whatsapp.py --messages 30000
+--aliases 100 --pipeline --sqlite-stats`, adding `--disable-cache-spill` for the second case.
+[Raw counter comparison](incremental-sqlite-spill-benchmark.json).

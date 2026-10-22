@@ -6,6 +6,7 @@ import json
 import platform
 import resource
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -34,11 +35,26 @@ def main():
     parser.add_argument('--aliases', type=int, default=1000)
     parser.add_argument('--pipeline', action='store_true')
     parser.add_argument('--batch-limit', type=int, default=5000)
+    parser.add_argument('--sqlite-stats', action='store_true')
+    parser.add_argument('--disable-cache-spill', action='store_true')
     args = parser.parse_args()
     if sys.platform != 'darwin' or args.messages < 8 or args.aliases < 0 or not 1 <= args.batch_limit <= 100000:
         parser.error('requires macOS, at least eight messages, nonnegative aliases, and batch limit 1..100000')
     measurements = []
+    connections = {}
+    def sqlite_stats():
+        if not args.sqlite_stats:
+            return {}
+        result = {}
+        for name, cache in connections.items():
+            result[name] = {key: cache.conn.execute('SELECT chatstore_benchmark_db_status(?)', (code,)).fetchone()[0]
+                            for key, code in (('cache_bytes', 1), ('cache_misses', 8), ('cache_writes', 9), ('cache_spills', 12))}
+            result[name]['database_bytes'] = cache.path.stat().st_size
+            wal = cache.path.with_name(cache.path.name + '-wal')
+            result[name]['wal_bytes'] = wal.stat().st_size if wal.exists() else 0
+        return result
     def measure(stage, operation):
+        sqlite_before = sqlite_stats()
         before = io_counters()
         wall, cpu = time.perf_counter(), time.process_time()
         result, details = operation()
@@ -46,12 +62,22 @@ def main():
         after = io_counters()
         if before is not None and after is not None:
             elapsed.update({key: after[key] - before[key] for key in before})
+        sqlite_after = sqlite_stats()
+        if sqlite_after:
+            elapsed['sqlite'] = {name: {
+                **{key: values[key] - sqlite_before[name][key] for key in ('cache_misses', 'cache_writes', 'cache_spills')},
+                **{key + '_after': values[key] for key in ('cache_bytes', 'database_bytes', 'wal_bytes')},
+            } for name, values in sqlite_after.items()}
         measurements.append({'stage': stage, **elapsed,
                              'lifetime_peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, **details})
         print(f'{stage}: {elapsed["wall_seconds"]:.3f}s wall, {elapsed["cpu_seconds"]:.3f}s CPU', file=sys.stderr, flush=True)
         return result
     with tempfile.TemporaryDirectory(prefix='chatstore-native-wa-') as directory:
         root = Path(directory).resolve()
+        extension = root / 'sqlite_stats.dylib'
+        if args.sqlite_stats:
+            subprocess.run(['/usr/bin/cc', '-dynamiclib', '-Wall', '-Wextra', '-Werror',
+                            str(Path(__file__).with_name('sqlite_benchmark_stats.c')), '-o', str(extension)], check=True)
         native = build_whatsapp(root / 'source', extra_messages=args.messages - 8)
         dd, restored = DataDir(root / 'data'), DataDir(root / 'restored')
         dd.create()
@@ -62,6 +88,16 @@ def main():
         with (closing(sqlite3.connect(native / 'ChatStorage.sqlite')) as writer,
               closing(sqlite3.connect(native / 'LID.sqlite')) as lid,
               closing(Cache(dd.cache)) as cache, closing(Cache(restored.cache)) as target, SyncSession() as session):
+            connections.update(producer=cache, importer=target)
+            for connection in (cache.conn, target.conn):
+                if args.sqlite_stats:
+                    connection.enable_load_extension(True)
+                    try:
+                        connection.load_extension(str(extension))
+                    finally:
+                        connection.enable_load_extension(False)
+                if args.disable_cache_spill:
+                    connection.execute('PRAGMA cache_spill=OFF')
             writer.execute('PRAGMA journal_mode=WAL')
             writer.execute('PRAGMA wal_autocheckpoint=0')
             writer.execute('UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH=NULL')
@@ -113,8 +149,9 @@ def main():
             assert any(row['text'] == 'benchmark historical edit' for row in cache.iter_records('messages'))
             if args.pipeline:
                 assert any(row['text'] == 'benchmark historical edit' for row in target.iter_records('messages'))
-    print(json.dumps({'messages': args.messages, 'additional_aliases': args.aliases, 'batch_limit': args.batch_limit, 'platform': platform.platform(),
-        'scope': 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
+    print(json.dumps({'messages': args.messages, 'additional_aliases': args.aliases, 'batch_limit': args.batch_limit,
+        'sqlite_stats': args.sqlite_stats, 'cache_spill_disabled': args.disable_cache_spill, 'platform': platform.platform(),
+        'scope': 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
         'measurements': measurements}, indent=2))
 
 

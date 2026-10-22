@@ -1,0 +1,1469 @@
+{
+  "scope": "Synthetic production collector/export/import with 30,000 native WhatsApp rows and 100 additional alias pairs. Same parameters, independent fixtures. Optional SQLite extension samples public sqlite3_db_status counters on canonical producer/importer Cache connections; native mirror and source reader connections are excluded. Disabling cache spills is experimental only and not applied to production code. Measurements are individual runs, not randomized repeated trials.",
+  "runs": [
+    {
+      "variant": "default",
+      "result": {
+        "messages": 30000,
+        "additional_aliases": 100,
+        "batch_limit": 5000,
+        "sqlite_stats": true,
+        "cache_spill_disabled": false,
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "scope": "Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+        "measurements": [
+          {
+            "stage": "sync-baseline",
+            "wall_seconds": 12.914881374999823,
+            "cpu_seconds": 11.743834,
+            "storage_read_bytes": 331599872,
+            "storage_written_bytes": 1316409344,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 123,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 8187,
+                "cache_writes": 186980,
+                "cache_spills": 20786,
+                "cache_bytes_after": 78393600,
+                "database_bytes_after": 470913024,
+                "wal_bytes_after": 119512
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 4096,
+                "wal_bytes_after": 1474992
+              }
+            },
+            "lifetime_peak_rss_bytes": 152846336,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "messages": 29999,
+              "canonical_units_rebuilt": 29999,
+              "attachments": 1,
+              "events": 2,
+              "unsupported": {
+                "group_event_type:15": 1,
+                "message_type:99": 1,
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 60318,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "initial"
+          },
+          {
+            "stage": "export-verified-baseline",
+            "wall_seconds": 16.337218332999328,
+            "cpu_seconds": 15.420441999999998,
+            "storage_read_bytes": 439676928,
+            "storage_written_bytes": 315346944,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 7,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 44589,
+                "cache_writes": 247,
+                "cache_spills": 0,
+                "cache_bytes_after": 78393600,
+                "database_bytes_after": 470913024,
+                "wal_bytes_after": 1137152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 4096,
+                "wal_bytes_after": 1474992
+              }
+            },
+            "lifetime_peak_rss_bytes": 237912064,
+            "archives": 31,
+            "ciphertext_bytes": 9076583
+          },
+          {
+            "stage": "import-verified-baseline",
+            "wall_seconds": 28.272067457997764,
+            "cpu_seconds": 25.366981,
+            "storage_read_bytes": 207007744,
+            "storage_written_bytes": 3753975808,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 37,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 470913024,
+                "wal_bytes_after": 1137152
+              },
+              "importer": {
+                "cache_misses": 961,
+                "cache_writes": 271456,
+                "cache_spills": 0,
+                "cache_bytes_after": 144330752,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 31
+          },
+          {
+            "stage": "sync-clean",
+            "wall_seconds": 0.07835849999537459,
+            "cpu_seconds": 0.06520500000000595,
+            "storage_read_bytes": 4841472,
+            "storage_written_bytes": 3112960,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 74,
+                "cache_writes": 50,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 470986752,
+                "wal_bytes_after": 111272
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "prepared_coverage_reused": 1,
+              "unsupported": {},
+              "written": {
+                "inserted": 0,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-clean",
+            "wall_seconds": 0.00463066700467607,
+            "cpu_seconds": 0.004481000000005508,
+            "storage_read_bytes": 4096,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 19,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 470986752,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 2332
+          },
+          {
+            "stage": "import-verified-clean",
+            "wall_seconds": 0.004743208002764732,
+            "cpu_seconds": 0.0043250000000014666,
+            "storage_read_bytes": 24576,
+            "storage_written_bytes": 217088,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 470986752,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 1,
+                "cache_writes": 43,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          },
+          {
+            "stage": "sync-old-edit",
+            "wall_seconds": 0.15147862499725306,
+            "cpu_seconds": 0.07600300000000004,
+            "storage_read_bytes": 16384000,
+            "storage_written_bytes": 2158592,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 1100,
+                "cache_writes": 106,
+                "cache_spills": 0,
+                "cache_bytes_after": 5176192,
+                "database_bytes_after": 471007232,
+                "wal_bytes_after": 107152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139173632,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "messages": 1,
+              "canonical_units_rebuilt": 1,
+              "events": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 320
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-old-edit",
+            "wall_seconds": 0.005506791996594984,
+            "cpu_seconds": 0.005482000000000653,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 16,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5176192,
+                "database_bytes_after": 471007232,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139173632,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 3384
+          },
+          {
+            "stage": "import-verified-old-edit",
+            "wall_seconds": 0.006865709001431242,
+            "cpu_seconds": 0.00537499999999369,
+            "storage_read_bytes": 229376,
+            "storage_written_bytes": 462848,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5176192,
+                "database_bytes_after": 471007232,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 21,
+                "cache_writes": 102,
+                "cache_spills": 0,
+                "cache_bytes_after": 139173632,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          },
+          {
+            "stage": "sync-chat-title",
+            "wall_seconds": 0.06643733300006716,
+            "cpu_seconds": 0.06246999999999758,
+            "storage_read_bytes": 524288,
+            "storage_written_bytes": 1699840,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 46,
+                "cache_writes": 100,
+                "cache_spills": 0,
+                "cache_bytes_after": 5402496,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 123632
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138947328,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-chat-title",
+            "wall_seconds": 0.005284457998641301,
+            "cpu_seconds": 0.00520800000000321,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 11,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5402496,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 152472
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138947328,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 3147
+          },
+          {
+            "stage": "import-verified-chat-title",
+            "wall_seconds": 0.006976042001042515,
+            "cpu_seconds": 0.005842000000001235,
+            "storage_read_bytes": 81920,
+            "storage_written_bytes": 413696,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5402496,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 152472
+              },
+              "importer": {
+                "cache_misses": 8,
+                "cache_writes": 91,
+                "cache_spills": 0,
+                "cache_bytes_after": 138947328,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          },
+          {
+            "stage": "sync-auxiliary-edit",
+            "wall_seconds": 0.06595266699878266,
+            "cpu_seconds": 0.06144100000000208,
+            "storage_read_bytes": 573440,
+            "storage_written_bytes": 1757184,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 48,
+                "cache_writes": 111,
+                "cache_spills": 0,
+                "cache_bytes_after": 5650560,
+                "database_bytes_after": 471064576,
+                "wal_bytes_after": 164832
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138699264,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "absent_from_source:withdrawn": 2,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 2,
+                "updated": 0,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-auxiliary-edit",
+            "wall_seconds": 0.0055150420012068935,
+            "cpu_seconds": 0.0054450000000016985,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 77824,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 10,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5650560,
+                "database_bytes_after": 471064576,
+                "wal_bytes_after": 193672
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138699264,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 3244
+          },
+          {
+            "stage": "import-verified-auxiliary-edit",
+            "wall_seconds": 0.006025041002430953,
+            "cpu_seconds": 0.005344000000000904,
+            "storage_read_bytes": 65536,
+            "storage_written_bytes": 462848,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5650560,
+                "database_bytes_after": 471064576,
+                "wal_bytes_after": 193672
+              },
+              "importer": {
+                "cache_misses": 12,
+                "cache_writes": 104,
+                "cache_spills": 0,
+                "cache_bytes_after": 138699264,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          },
+          {
+            "stage": "sync-old-delete",
+            "wall_seconds": 0.06872333300270839,
+            "cpu_seconds": 0.06554599999999766,
+            "storage_read_bytes": 327680,
+            "storage_written_bytes": 1945600,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 28,
+                "cache_writes": 94,
+                "cache_spills": 0,
+                "cache_bytes_after": 5802880,
+                "database_bytes_after": 471101440,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138546944,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "absent_from_source:withdrawn": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-old-delete",
+            "wall_seconds": 0.005327417005901225,
+            "cpu_seconds": 0.005302000000000362,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 10,
+                "cache_writes": 10,
+                "cache_spills": 0,
+                "cache_bytes_after": 5802880,
+                "database_bytes_after": 471101440,
+                "wal_bytes_after": 177192
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138546944,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 3276
+          },
+          {
+            "stage": "import-verified-old-delete",
+            "wall_seconds": 0.005200250001507811,
+            "cpu_seconds": 0.004846000000000572,
+            "storage_read_bytes": 36864,
+            "storage_written_bytes": 364544,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5802880,
+                "database_bytes_after": 471101440,
+                "wal_bytes_after": 177192
+              },
+              "importer": {
+                "cache_misses": 2,
+                "cache_writes": 81,
+                "cache_spills": 0,
+                "cache_bytes_after": 138546944,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          },
+          {
+            "stage": "sync-clean-after-changes",
+            "wall_seconds": 0.0491278749977937,
+            "cpu_seconds": 0.04753700000000549,
+            "storage_read_bytes": 131072,
+            "storage_written_bytes": 1028096,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 10,
+                "cache_writes": 49,
+                "cache_spills": 0,
+                "cache_bytes_after": 5863808,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 107152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138486016,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "counts": {
+              "prepared_coverage_reused": 1,
+              "unsupported": {},
+              "written": {
+                "inserted": 0,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-clean-after-changes",
+            "wall_seconds": 0.004548040997178759,
+            "cpu_seconds": 0.004505999999999233,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 8,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5863808,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138486016,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1,
+            "ciphertext_bytes": 2398
+          },
+          {
+            "stage": "import-verified-clean-after-changes",
+            "wall_seconds": 0.0033403330016881227,
+            "cpu_seconds": 0.0032399999999981333,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 233472,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5863808,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 47,
+                "cache_spills": 0,
+                "cache_bytes_after": 138486016,
+                "database_bytes_after": 502878208,
+                "wal_bytes_after": 54474672
+              }
+            },
+            "lifetime_peak_rss_bytes": 295157760,
+            "archives": 1
+          }
+        ]
+      }
+    },
+    {
+      "variant": "disabled",
+      "result": {
+        "messages": 30000,
+        "additional_aliases": 100,
+        "batch_limit": 5000,
+        "sqlite_stats": true,
+        "cache_spill_disabled": true,
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "scope": "Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+        "measurements": [
+          {
+            "stage": "sync-baseline",
+            "wall_seconds": 13.856193749998056,
+            "cpu_seconds": 11.814910999999999,
+            "storage_read_bytes": 532082688,
+            "storage_written_bytes": 1255034880,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 215,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 24739,
+                "cache_writes": 186410,
+                "cache_spills": 0,
+                "cache_bytes_after": 89965568,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 107152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 4096,
+                "wal_bytes_after": 1474992
+              }
+            },
+            "lifetime_peak_rss_bytes": 164757504,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "messages": 29999,
+              "canonical_units_rebuilt": 29999,
+              "attachments": 1,
+              "events": 2,
+              "unsupported": {
+                "group_event_type:15": 1,
+                "message_type:99": 1,
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 60318,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "initial"
+          },
+          {
+            "stage": "export-verified-baseline",
+            "wall_seconds": 19.915610292002384,
+            "cpu_seconds": 17.078733,
+            "storage_read_bytes": 439988224,
+            "storage_written_bytes": 315318272,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 2,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 44589,
+                "cache_writes": 247,
+                "cache_spills": 0,
+                "cache_bytes_after": 89965568,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 1124792
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 4096,
+                "wal_bytes_after": 1474992
+              }
+            },
+            "lifetime_peak_rss_bytes": 247840768,
+            "archives": 31,
+            "ciphertext_bytes": 9074798
+          },
+          {
+            "stage": "import-verified-baseline",
+            "wall_seconds": 35.02161375000287,
+            "cpu_seconds": 27.280520000000003,
+            "storage_read_bytes": 449011712,
+            "storage_written_bytes": 3789611008,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 64,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5376,
+                "database_bytes_after": 471031808,
+                "wal_bytes_after": 1124792
+              },
+              "importer": {
+                "cache_misses": 7936,
+                "cache_writes": 271489,
+                "cache_spills": 0,
+                "cache_bytes_after": 144330752,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 31
+          },
+          {
+            "stage": "sync-clean",
+            "wall_seconds": 0.10183770800358616,
+            "cpu_seconds": 0.06889199999999818,
+            "storage_read_bytes": 5074944,
+            "storage_written_bytes": 2949120,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 74,
+                "cache_writes": 47,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 471105536,
+                "wal_bytes_after": 111272
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "prepared_coverage_reused": 1,
+              "unsupported": {},
+              "written": {
+                "inserted": 0,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-clean",
+            "wall_seconds": 0.008110374998068437,
+            "cpu_seconds": 0.005199999999994986,
+            "storage_read_bytes": 12288,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 19,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 471105536,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 2336
+          },
+          {
+            "stage": "import-verified-clean",
+            "wall_seconds": 0.0035704590045497753,
+            "cpu_seconds": 0.0034309999999990737,
+            "storage_read_bytes": 4096,
+            "storage_written_bytes": 217088,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 358528,
+                "database_bytes_after": 471105536,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 43,
+                "cache_spills": 0,
+                "cache_bytes_after": 143991296,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          },
+          {
+            "stage": "sync-old-edit",
+            "wall_seconds": 0.17050166600529337,
+            "cpu_seconds": 0.07771699999999981,
+            "storage_read_bytes": 17309696,
+            "storage_written_bytes": 2162688,
+            "package_idle_wakeups": 3,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 1090,
+                "cache_writes": 104,
+                "cache_spills": 0,
+                "cache_bytes_after": 5132672,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 107152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139217152,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "messages": 1,
+              "canonical_units_rebuilt": 1,
+              "events": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 320
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-old-edit",
+            "wall_seconds": 0.007689833000767976,
+            "cpu_seconds": 0.006027000000003113,
+            "storage_read_bytes": 12288,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 16,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5132672,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139217152,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 3379
+          },
+          {
+            "stage": "import-verified-old-edit",
+            "wall_seconds": 0.00946920900605619,
+            "cpu_seconds": 0.006098000000001491,
+            "storage_read_bytes": 229376,
+            "storage_written_bytes": 446464,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5132672,
+                "database_bytes_after": 471126016,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 18,
+                "cache_writes": 100,
+                "cache_spills": 0,
+                "cache_bytes_after": 139217152,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          },
+          {
+            "stage": "sync-chat-title",
+            "wall_seconds": 0.0717790840062662,
+            "cpu_seconds": 0.06398899999999941,
+            "storage_read_bytes": 471040,
+            "storage_written_bytes": 1437696,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 35,
+                "cache_writes": 85,
+                "cache_spills": 0,
+                "cache_bytes_after": 5315456,
+                "database_bytes_after": 471154688,
+                "wal_bytes_after": 111272
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139034368,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-chat-title",
+            "wall_seconds": 0.005710292003641371,
+            "cpu_seconds": 0.005546999999999969,
+            "storage_read_bytes": 0,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 11,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5315456,
+                "database_bytes_after": 471154688,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 139034368,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 3147
+          },
+          {
+            "stage": "import-verified-chat-title",
+            "wall_seconds": 0.006316959006653633,
+            "cpu_seconds": 0.005531000000004838,
+            "storage_read_bytes": 81920,
+            "storage_written_bytes": 364544,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5315456,
+                "database_bytes_after": 471154688,
+                "wal_bytes_after": 140112
+              },
+              "importer": {
+                "cache_misses": 7,
+                "cache_writes": 76,
+                "cache_spills": 0,
+                "cache_bytes_after": 139034368,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          },
+          {
+            "stage": "sync-auxiliary-edit",
+            "wall_seconds": 0.10194312500243541,
+            "cpu_seconds": 0.07135599999999442,
+            "storage_read_bytes": 774144,
+            "storage_written_bytes": 1921024,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 61,
+                "cache_writes": 131,
+                "cache_spills": 0,
+                "cache_bytes_after": 5628800,
+                "database_bytes_after": 471191552,
+                "wal_bytes_after": 193672
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138721024,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "absent_from_source:withdrawn": 2,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 2,
+                "updated": 0,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-auxiliary-edit",
+            "wall_seconds": 0.007654000000911765,
+            "cpu_seconds": 0.006667999999997676,
+            "storage_read_bytes": 24576,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 10,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5628800,
+                "database_bytes_after": 471191552,
+                "wal_bytes_after": 222512
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138721024,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 3241
+          },
+          {
+            "stage": "import-verified-auxiliary-edit",
+            "wall_seconds": 0.01097108400426805,
+            "cpu_seconds": 0.006897999999999627,
+            "storage_read_bytes": 102400,
+            "storage_written_bytes": 528384,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5628800,
+                "database_bytes_after": 471191552,
+                "wal_bytes_after": 222512
+              },
+              "importer": {
+                "cache_misses": 12,
+                "cache_writes": 121,
+                "cache_spills": 0,
+                "cache_bytes_after": 138721024,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          },
+          {
+            "stage": "sync-old-delete",
+            "wall_seconds": 0.10074112500296906,
+            "cpu_seconds": 0.07348500000000513,
+            "storage_read_bytes": 729088,
+            "storage_written_bytes": 1912832,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 23,
+                "cache_writes": 89,
+                "cache_spills": 0,
+                "cache_bytes_after": 5759360,
+                "database_bytes_after": 471232512,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138590464,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "chats": 3,
+              "chat_memberships": 7,
+              "identities": 207,
+              "aliases": 102,
+              "events": 1,
+              "absent_from_source:withdrawn": 1,
+              "unsupported": {
+                "group_change_type:5": 1
+              },
+              "written": {
+                "inserted": 0,
+                "updated": 2,
+                "unchanged": 318
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-old-delete",
+            "wall_seconds": 0.006423083003028296,
+            "cpu_seconds": 0.005907000000000551,
+            "storage_read_bytes": 4096,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 10,
+                "cache_writes": 10,
+                "cache_spills": 0,
+                "cache_bytes_after": 5759360,
+                "database_bytes_after": 471232512,
+                "wal_bytes_after": 177192
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138590464,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 3281
+          },
+          {
+            "stage": "import-verified-old-delete",
+            "wall_seconds": 0.005382374998589512,
+            "cpu_seconds": 0.00524599999999964,
+            "storage_read_bytes": 16384,
+            "storage_written_bytes": 348160,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5759360,
+                "database_bytes_after": 471232512,
+                "wal_bytes_after": 177192
+              },
+              "importer": {
+                "cache_misses": 1,
+                "cache_writes": 76,
+                "cache_spills": 0,
+                "cache_bytes_after": 138590464,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          },
+          {
+            "stage": "sync-clean-after-changes",
+            "wall_seconds": 0.06180116700124927,
+            "cpu_seconds": 0.05639599999999945,
+            "storage_read_bytes": 204800,
+            "storage_written_bytes": 1044480,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 11,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 14,
+                "cache_writes": 50,
+                "cache_spills": 0,
+                "cache_bytes_after": 5842048,
+                "database_bytes_after": 471261184,
+                "wal_bytes_after": 107152
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138507776,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "counts": {
+              "prepared_coverage_reused": 1,
+              "unsupported": {},
+              "written": {
+                "inserted": 0,
+                "updated": 0,
+                "unchanged": 0
+              }
+            },
+            "mode": "incremental"
+          },
+          {
+            "stage": "export-verified-clean-after-changes",
+            "wall_seconds": 0.005447208997793496,
+            "cpu_seconds": 0.005152000000002488,
+            "storage_read_bytes": 4096,
+            "storage_written_bytes": 94208,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 8,
+                "cache_writes": 7,
+                "cache_spills": 0,
+                "cache_bytes_after": 5842048,
+                "database_bytes_after": 471261184,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 138507776,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1,
+            "ciphertext_bytes": 2400
+          },
+          {
+            "stage": "import-verified-clean-after-changes",
+            "wall_seconds": 0.005087625002488494,
+            "cpu_seconds": 0.004012000000003013,
+            "storage_read_bytes": 24576,
+            "storage_written_bytes": 233472,
+            "package_idle_wakeups": 0,
+            "interrupt_wakeups": 0,
+            "sqlite": {
+              "producer": {
+                "cache_misses": 0,
+                "cache_writes": 0,
+                "cache_spills": 0,
+                "cache_bytes_after": 5842048,
+                "database_bytes_after": 471261184,
+                "wal_bytes_after": 135992
+              },
+              "importer": {
+                "cache_misses": 1,
+                "cache_writes": 48,
+                "cache_spills": 0,
+                "cache_bytes_after": 138507776,
+                "database_bytes_after": 502988800,
+                "wal_bytes_after": 54565312
+              }
+            },
+            "lifetime_peak_rss_bytes": 266010624,
+            "archives": 1
+          }
+        ]
+      }
+    }
+  ]
+}
