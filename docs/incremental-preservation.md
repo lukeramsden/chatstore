@@ -996,7 +996,7 @@ high ID. Explicit full adapter reconciliation continues to visit all groups.
 Tests compare selected duplicate-group output with full output and count SQLite VM work while
 unselected history grows from 100 to 10,000 rows. That bound covers message grouping and its
 dependencies only. The collector does not yet dispatch WhatsApp through prepared selective coverage. Header work, joint auxiliary
-capture, frozen media evidence, canonical withdrawal/coverage and collector integration remain
+capture, frozen media evidence and collector integration remain
 necessary before the WhatsApp end-to-end efficiency claim can be made.
 
 WhatsApp header JID discovery now uses private indexes and successive greater-than seeks for
@@ -1032,6 +1032,27 @@ This is atomic publication of evidence gathered from separate source read transa
 proof of a simultaneous cross-database source instant. The caller still needs to establish and
 monitor the optional-file presence and source views, bind their discovery/checkpoints, and
 coordinate retries with the main capture. Auxiliary row collection is currently a full pass;
-there is no incremental auxiliary page mirror yet. WhatsApp collector dispatch and selective
-canonical coverage remain unconnected. This handoff alone does not authorize skipping source
+there is no incremental auxiliary page mirror yet. WhatsApp collector dispatch remains
+unconnected. This handoff alone does not authorize skipping source
 or media discovery.
+
+## Selective WhatsApp canonical coverage
+
+Prepared WhatsApp captures now use the canonical coverage controller. Baselines reconcile all
+units; eligible continuations withdraw affected old stanza keys and complete header coverage,
+extract the selected complete stanza groups, and re-sight exact retained coverage intervals.
+Absence, freshness, the canonical receipt and source checkpoint finish in one transaction.
+Newly inserted stanza groups do not require nonexistent prior memo coverage. Missing/invalid
+coverage or unclassified dependencies require full reconciliation.
+
+Prepared WhatsApp sync requires frozen auxiliary alias evidence. File-backed media still forces
+full canonical extraction until durable WhatsApp file evidence is integrated; an indexed private
+path lookup avoids scanning all media rows merely to establish that gate. This is not production
+collector dispatch or proof of complete media coverage.
+
+Tests run baseline, clean, old edit, historical backfill, deletion and auxiliary-only alias
+deletion through native preparation, canonical selection and mirror acknowledgement. They verify
+unrelated re-sighting, retained historical revisions and absence evidence. An interrupted write
+does not advance the canonical checkpoint; retry succeeds from the same prepared point after
+ChatStorage, LID and Contacts disappear. Auxiliary discovery/checkpoint coordination, efficient
+auxiliary deltas, media capture and CLI dispatch remain to be integrated.
