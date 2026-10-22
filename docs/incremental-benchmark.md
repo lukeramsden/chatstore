@@ -418,8 +418,8 @@ these are not logical SQL byte counts. Lifetime process peak RSS grew from 166.7
 baseline sync to 287.6 MiB by the end. It includes fixture/baseline memory and is not an isolated
 steady-poll memory measurement.
 
-No network transfer, remote durability proof, file-backed media, new-message timing or energy
-measurement is included. Ciphertext size is potential transfer volume, not observed traffic.
+That earlier run includes no network transfer, remote durability proof, file-backed media,
+new-message timing or energy measurement. A later new-message run is recorded below. Ciphertext size is potential transfer volume, not observed traffic.
 The run also exposed an oversized journal member when requesting 100,000 events; the exporter
 now splits by encoded UTF-8 member size as well as event count, with regression tests for
 gap-free sequences and oversized-single-event checkpoint retention.
@@ -607,3 +607,51 @@ This remains a single synthetic allocation comparison, not a process RSS, CPU or
 It uses the same `scripts/benchmark_export_memory.py` reproduction command. Raw allocations
 include only work after export starts and exclude native-library allocations.
 [Raw record-line allocation measurements](incremental-record-line-memory.json).
+
+
+## New-message pipeline on 100,000 native WhatsApp rows
+
+The production WhatsApp benchmark now inserts one new native message after baseline and clean
+capture, then checks another clean poll. It asserts incremental mode, one emitted message and
+one rebuilt canonical unit for the insert. Final producer/importer checks require the new
+message and the captured historical edit after source deletion. Export output now includes
+journal-event counts as well as archive count and ciphertext size.
+
+The run used 100,000 starting native messages, 1,000 extra alias pairs and 5,000-event archive
+batches. It includes the schema-validation and buffer-lifetime changes above. Baseline sync
+took 46.490 s wall / 41.175 s CPU, encrypted verified export 52.132 / 49.896 s, and verified
+import 101.496 / 91.929 s. The baseline carried 509,109 events in 102 archives totaling
+30,637,473 ciphertext bytes. This is a later single run, not a controlled speedup comparison
+with the older baseline.
+
+| Operation | Sync wall / CPU ms | Verified export wall / CPU ms | Verified import wall / CPU ms | Export events | Ciphertext bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Clean after baseline | 113.09 / 93.15 | 5.12 / 4.42 | 3.17 / 2.93 | 6 | 2,337 |
+| New message | 710.73 / 207.67 | 6.09 / 5.28 | 4.56 / 4.51 | 19 | 3,303 |
+| Clean after new message | 45.97 / 44.73 | 4.55 / 4.50 | 2.88 / 2.86 | 6 | 2,377 |
+| Historical edit | 165.59 / 156.12 | 5.59 / 5.47 | 5.21 / 4.90 | 19 | 3,401 |
+| Chat title | 148.56 / 145.13 | 5.45 / 5.28 | 4.23 / 4.13 | 19 | 3,166 |
+| Auxiliary alias edit | 155.19 / 148.00 | 5.68 / 5.59 | 4.85 / 4.74 | 21 | 3,264 |
+| Historical deletion | 156.45 / 153.19 | 4.94 / 4.89 | 3.63 / 3.40 | 14 | 2,679 |
+| Clean after all changes | 45.98 / 44.04 | 4.52 / 4.49 | 2.95 / 2.82 | 6 | 2,414 |
+
+Each subsequent export wrote one archive. Clean polls preserve new freshness evidence, so their
+exports contain six metadata events rather than zero events. The new-message capture emitted
+one message unit but still visited 2,007 identities, 1,002 aliases and other headers; 3,020
+canonical writes were reported unchanged. Incremental header work remains open.
+
+The new-message sync reported 91,561,984 attributed read bytes and 2,654,208 written bytes.
+The following clean sync reported 86,016 reads and 929,792 writes. The first changed capture's
+read volume needs investigation; small output does not establish bounded source I/O. Darwin
+counters can attribute buffered work across stage boundaries, so these are not logical query
+bytes. Baseline sync/export/import writes were 7.20 / 1.06 / 24.70 GB. Write amplification
+remains substantial. Lifetime RSS reached 321.0 MiB after the new-message capture; this is not
+an isolated incremental peak or evidence that whole-process RSS improved with the allocation
+changes above.
+
+Setup and source mutations are outside timings. The new row has a unique native key and a
+source date after the fixture's latest message. No network traffic, remote proof, file-backed
+media or joules are measured. Run the command at the start of the production-path section to
+reproduce the expanded stages. Both the large pipeline and a fresh 100-row smoke run completed;
+the latter also ran the final new-message count assertions.
+[Raw expanded pipeline measurements](incremental-new-message-pipeline.json).

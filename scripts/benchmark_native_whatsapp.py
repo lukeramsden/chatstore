@@ -109,13 +109,25 @@ def main():
             lid.commit()
             stages = [
                 ('baseline', None), ('clean', None),
+                ('new-message', 'new-message'), ('clean-after-new', None),
                 ('old-edit', "UPDATE ZWAMESSAGE SET ZTEXT='benchmark historical edit' WHERE Z_PK=1"),
                 ('chat-title', "UPDATE ZWACHATSESSION SET ZPARTNERNAME='benchmark title' WHERE Z_PK=1"),
                 ('auxiliary-edit', 'auxiliary'), ('old-delete', 'DELETE FROM ZWAMESSAGE WHERE Z_PK=1'),
                 ('clean-after-changes', None),
             ]
             for label, mutation in stages:
-                if mutation == 'auxiliary':
+                if mutation == 'new-message':
+                    columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWAMESSAGE)')]
+                    values = dict(zip(columns, writer.execute('SELECT * FROM ZWAMESSAGE WHERE Z_PK=1').fetchone(), strict=True))
+                    values.update(
+                        Z_PK=writer.execute('SELECT max(Z_PK)+1 FROM ZWAMESSAGE').fetchone()[0],
+                        ZSORT=writer.execute('SELECT max(ZSORT)+1 FROM ZWAMESSAGE').fetchone()[0],
+                        ZMESSAGEDATE=writer.execute('SELECT max(ZMESSAGEDATE)+1 FROM ZWAMESSAGE').fetchone()[0],
+                        ZSTANZAID='BENCHMARK-NEW-MESSAGE', ZTEXT='benchmark newly arrived message')
+                    writer.execute(f"INSERT INTO ZWAMESSAGE({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                                   [values[column] for column in columns])
+                    writer.commit()
+                elif mutation == 'auxiliary':
                     lid.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+15550009900' WHERE Z_PK=1")
                     lid.commit()
                 elif mutation:
@@ -127,20 +139,26 @@ def main():
                     counts = outcome.run['counts']
                     if label.startswith('clean'):
                         assert counts.get('prepared_coverage_reused') == 1
+                    if label == 'new-message':
+                        assert outcome.run['mode'] == 'incremental'
+                        assert counts.get('messages') == 1 and counts.get('canonical_units_rebuilt') == 1, counts
                     return outcome, {'counts': counts, 'mode': outcome.run['mode']}
                 measure('sync-' + label, capture)
                 if not args.pipeline:
                     continue
                 def export():
                     paths = []
+                    journal_events = 0
                     while True:
                         result = export_changes(cache, dd, cfg, ident, consumer='benchmark', output=dd.exports,
                                                 password=PASSWORD, limit=args.batch_limit)
                         if result['action'] == 'written':
                             paths.append(Path(result['path']))
+                            journal_events += result['counts']['changes']
                         if not result['has_more']:
                             break
-                    return paths, {'archives': len(paths), 'ciphertext_bytes': sum(path.stat().st_size for path in paths)}
+                    return paths, {'archives': len(paths), 'journal_events': journal_events,
+                                   'ciphertext_bytes': sum(path.stat().st_size for path in paths)}
                 paths = measure('export-verified-' + label, export)
                 def importing(paths=paths):
                     for path in paths:
@@ -149,7 +167,9 @@ def main():
                     return None, {'archives': len(paths)}
                 measure('import-verified-' + label, importing)
             assert any(row['text'] == 'benchmark historical edit' for row in cache.iter_records('messages'))
+            assert any(row['text'] == 'benchmark newly arrived message' for row in cache.iter_records('messages'))
             if args.pipeline:
+                assert any(row['text'] == 'benchmark newly arrived message' for row in target.iter_records('messages'))
                 assert any(row['text'] == 'benchmark historical edit' for row in target.iter_records('messages'))
             if args.database_layout:
                 for name, database in connections.items():
