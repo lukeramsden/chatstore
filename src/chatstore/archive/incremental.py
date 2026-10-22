@@ -156,7 +156,7 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
             shutil.rmtree(work, ignore_errors=True)
 
 
-def validate_event(event: Any) -> str | None:
+def validate_event(event: Any, *, schema_checked: set[bytes] | None = None) -> str | None:
     from .verify import _check_observation, _check_row
     if not isinstance(event, dict) or type(event.get('seq')) is not int or not 1 <= event['seq'] <= 2**63 - 1:
         return 'change needs an integer sequence'
@@ -180,7 +180,7 @@ def validate_event(event: Any) -> str | None:
             return 'identity metadata needs scopes and scope mappings'
         return None
     if op == 'revision':
-        return _check_row('revisions', d, True)
+        return _check_row('revisions', d, True, schema_checked=schema_checked)
     if op == 'record':
         r = d.get('record')
         if not isinstance(r, dict) or r.get('entity') not in M.RECORD_ORDER:
@@ -190,7 +190,7 @@ def validate_event(event: Any) -> str | None:
         from .verify import SHA_RE
         if d.get('previous_digest') is not None and not SHA_RE.fullmatch(str(d['previous_digest'])):
             return 'change previous_digest must be a SHA-256 digest or null'
-        return _check_row(r['entity'], r, True)
+        return _check_row(r['entity'], r, True, schema_checked=schema_checked)
     if op == 'observation':
         if type(d.get('observation_id')) is not int or not 1 <= d['observation_id'] <= 2**63 - 1:
             return 'observation needs a positive stable id'

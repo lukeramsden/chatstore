@@ -165,13 +165,25 @@ def _digest_ok(rec: dict[str, Any]) -> bool:
     return SHA_RE.match(str(rec.get("revision_digest", ""))) is not None and revision_digest(body) == rec["revision_digest"]
 
 
-def _check_row(entity: str, rec: dict[str, Any], validate_schema: bool) -> str | None:
+def _schema_error(rec: dict[str, Any], checked: set[bytes] | None) -> str | None:
+    key = hashlib.sha256(json.dumps(rec, sort_keys=True, ensure_ascii=False,
+                                   separators=(',', ':')).encode()).digest() if checked is not None else None
+    if key is not None and checked is not None and key in checked:
+        return None
+    error = validate_record(rec)
+    if error is None and checked is not None and key is not None:
+        checked.add(key)
+    return error
+
+
+def _check_row(entity: str, rec: dict[str, Any], validate_schema: bool, *,
+               schema_checked: set[bytes] | None = None) -> str | None:
     """Return a problem string for one parsed row, or None."""
     if not isinstance(rec, dict):
         return "row is not an object"
     if entity == "changes":
         from .incremental import validate_event
-        return validate_event(rec)
+        return validate_event(rec, schema_checked=schema_checked)
     if entity == "stubs":
         if not isinstance(rec.get("urn"), str) or not isinstance(rec.get("entity"), str):
             return "stub needs urn and entity"
@@ -184,7 +196,7 @@ def _check_row(entity: str, rec: dict[str, Any], validate_schema: bool) -> str |
             return "revision digest does not match record content"
         if not isinstance(rec.get("observed_at"), int):
             return "revision observed_at must be an integer"
-        if validate_schema and (err := validate_record(inner)):
+        if validate_schema and (err := _schema_error(inner, schema_checked)):
             return f"schema: {err}"
         return None
     if entity == "source_observations":
@@ -193,7 +205,7 @@ def _check_row(entity: str, rec: dict[str, Any], validate_schema: bool) -> str |
         return f"entity field {rec.get('entity')!r} != {entity!r}"
     if not _digest_ok(rec):
         return "revision_digest does not match record content"
-    if validate_schema and (err := validate_record(rec)):
+    if validate_schema and (err := _schema_error(rec, schema_checked)):
         return f"schema: {err}"
     return None
 
@@ -230,6 +242,9 @@ def _check_and_parse(payload: Payload, validate_schema: bool) -> tuple[dict[str,
     problems: list[str] = []
     schema_errors = 0
     parsed: dict[str, list[dict[str, Any]]] = {}
+    # Each archive load owns its checks. Exact duplicate bodies may share schema
+    # validation; digests, event envelopes and trust boundaries are still checked.
+    schema_checked: set[bytes] = set()
     m = payload.manifest
     for name, data in payload.members.items():
         if not name.startswith("records/"):
@@ -244,7 +259,7 @@ def _check_and_parse(payload: Payload, validate_schema: bool) -> tuple[dict[str,
             except ValueError:
                 problems.append(f"{name}:{lineno}: invalid JSON")
                 break
-            err = _check_row(entity, rec, validate_schema)
+            err = _check_row(entity, rec, validate_schema, schema_checked=schema_checked)
             if err:
                 schema_errors += 1
                 if schema_errors <= MAX_REPORTED:
