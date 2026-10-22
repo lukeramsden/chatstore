@@ -1032,8 +1032,8 @@ updates retain the old evidence, and invalid point/writer boundaries reject capt
 This is atomic publication of evidence gathered from separate source read transactions, not
 proof of a simultaneous cross-database source instant. The caller still needs to establish and
 monitor the optional-file presence and source views, bind their discovery/checkpoints, and
-coordinate retries with the main capture. Auxiliary row collection is currently a full pass;
-there is no incremental auxiliary page mirror yet. The guarded collector below supplies optional
+coordinate retries with the main capture. Changed auxiliary row collection is currently a full
+pass; there is no incremental auxiliary page mirror yet. The guarded collector below supplies optional
 source views and records their capture evidence. This handoff alone does not authorize skipping source
 or media discovery.
 
@@ -1072,8 +1072,9 @@ files. It opens present sources read-only, pins SQL read transactions, and verif
 monitor tokens while pinning and again in the native pre-publication hook. The bound capture
 context records presence, file identities, schema versions and process-local monitor/SQLite
 version evidence. These values describe that capture; they are not durable auxiliary WAL
-cursors and do not authorize skipping auxiliary rows after restart. Alias collection still
-reads the relevant auxiliary rows on each capture. Source commits after final validation
+cursors and do not authorize skipping auxiliary rows after restart. Standalone captures read
+the relevant auxiliary rows on each capture; retained watch sessions can reuse unchanged evidence
+as described below. Source commits after final validation
 remain for the following poll; separate SQLite databases do not share a global read instant.
 
 Tests exercise the CLI with clean polls, historical edits/deletions, later Contacts creation,
@@ -1081,3 +1082,24 @@ offline pending retry and media-path fallback. Coordinator tests verify read-onl
 pinned old rows during later WAL commits, creation/replacement rejection, symlink failure and
 closed connections/monitors. Source changes detected during preparation reject publication;
 the watch loop reports the existing retry-required error and retains the collection cadence.
+
+## Retained auxiliary monitoring in watch sessions
+
+The watch command retains an `AuxiliarySession` across eligible WhatsApp polls. It can reuse
+alias evidence only when the live monitor token and exact durable parent point match the
+previous successful preparation, in the same private mirror. The process-local token covers
+optional paths, their WAL paths and SQLite versions. Restart, source events, policy/schema
+rebase, or a rolled-back candidate require source-row capture again. Monitoring/view failures
+close the retained monitor before retry; normal session shutdown also closes it.
+
+Frozen alias payload and point binding now use separate private tables. An unchanged preparation
+advances the small point-reference row while preserving the original payload and its evidence
+point. The reader verifies that reference and the current native token together. This avoids
+rereading source alias rows or copying a large retained payload merely to bind it to a new point.
+It does not skip canonical alias-header materialization from the retained payload.
+
+A collector test verifies one source-row collection for baseline plus clean continuation,
+recapture after a LID update, an unchanged original payload point during reuse, and forced
+recapture after the monitor is closed. These are monitored unchanged-source savings. A changed
+large auxiliary database still requires a full relevant-row read; durable auxiliary page deltas
+and fully incremental header emission remain open acceptance work.
