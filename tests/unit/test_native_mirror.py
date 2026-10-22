@@ -1,8 +1,9 @@
+import json
 import sqlite3
 import subprocess
 import sys
 from contextlib import closing, contextmanager
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -418,3 +419,44 @@ def test_candidate_validation_failure_rolls_back_rows_and_page_cursor(native, tm
         assert not list(mirror.conn.execute('SELECT * FROM cs_native_mirror_changes'))
         retry = prepare(mirror, path, initial)
         assert retry.rows_changed == 1 and retry.parent == initial.token
+
+
+def test_policy_recovery_retains_original_source_cut_and_requires_rebase(native, tmp_path):
+    path, _ = native
+    with NativeMirror(tmp_path / 'mirror.sqlite') as mirror:
+        original = initialize(mirror, path)
+        before = rows(mirror.conn, 'message')
+        recovered = mirror.recover_pending_policy(original, policy_tag='adapter-v2', metadata={'binding': 'test'})
+        assert recovered.token != original.token and recovered.baseline
+        assert recovered.parent == original.parent and recovered.cursor == original.cursor
+        assert recovered.observed_at == original.observed_at
+        assert recovered.context['policy_recovery']['capture'] == json.loads(json.dumps(asdict(original)))
+        assert rows(mirror.conn, 'message') == before
+        assert mirror.conn.execute('SELECT point FROM cs_native_page_state').fetchone()[0] == recovered.token
+        mirror.acknowledge(recovered.token, 'recovered-canonical-receipt')
+        with (view(path, recovered.cursor) as source,
+              WalPages(path.with_name(path.name + '-wal'), source.changes) as pages,
+              pytest.raises(MirrorUnavailable, match='continuation point or policy mismatch')):
+            mirror.prepare(source, pages, expected_token=recovered.token, namespace=recovered.namespace,
+                policy_tag='adapter-v2', observed_at='2026-10-18T10:30:00Z', context={})
+        with view(path) as source:
+            rebased = mirror.rebase(source, ['message', 'metadata', 'audit'], expected_token=recovered.token,
+                namespace=recovered.namespace, policy_tag='adapter-v2', observed_at='2026-10-18T10:30:00Z', context={})
+        assert rebased.baseline and rebased.parent == recovered.token
+        assert not rebased.context.get('native_rebase_required')
+
+
+def test_rejected_policy_rebind_rolls_back_point_and_private_evidence(native, tmp_path):
+    path, _ = native
+    with NativeMirror(tmp_path / 'mirror.sqlite') as mirror:
+        original = initialize(mirror, path)
+        mirror.conn.execute('CREATE TABLE retained_evidence(point TEXT)')
+        mirror.conn.execute('INSERT INTO retained_evidence VALUES(?)', (original.token,))
+        def reject(conn, token):
+            conn.execute('UPDATE retained_evidence SET point=?', (token,))
+            raise RuntimeError('rebind rejected')
+        with pytest.raises(RuntimeError, match='rebind rejected'):
+            mirror.recover_pending_policy(original, policy_tag='adapter-v2', metadata={}, rebind=reject)
+        assert mirror.pending() == original
+        assert mirror.conn.execute('SELECT point FROM cs_native_page_state').fetchone()[0] == original.token
+        assert mirror.conn.execute('SELECT point FROM retained_evidence').fetchone()[0] == original.token

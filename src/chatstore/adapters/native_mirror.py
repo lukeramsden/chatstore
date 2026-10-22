@@ -127,6 +127,41 @@ class NativeMirror:
             raise MirrorUnavailable('prepared native capture must be acknowledged before continuation')
         return self._capture(state) if state is not None else None
 
+    def recover_pending_policy(self, expected: PreparedCapture, *, policy_tag: str,
+                               metadata: Mapping[str, Any],
+                               rebind: Callable[[sqlite3.Connection, str], None] | None = None) -> PreparedCapture:
+        """Reinterpret retained rows under a new policy without acknowledging the old point.
+
+        Recovery is a full canonical capture of the original source cut. Its page
+        graph remains an old-policy artifact, so later native discovery must rebase.
+        """
+        token = str(uuid.uuid4())
+        self.conn.execute('BEGIN IMMEDIATE')
+        try:
+            if self.pending() != expected:
+                raise MirrorUnavailable('policy recovery requires the exact pending native capture')
+            if not policy_tag or policy_tag == expected.policy_tag:
+                raise MirrorUnavailable('policy recovery requires a different extraction policy')
+            point = self.conn.execute('SELECT point FROM cs_native_page_state WHERE id=1').fetchone()
+            if point is None or point[0] != expected.token:
+                raise MirrorUnavailable('pending page graph differs from the policy recovery point')
+            context = dict(expected.context)
+            context['policy_recovery'] = {'capture': asdict(expected), 'metadata': dict(metadata)}
+            context['native_rebase_required'] = True
+            self.conn.execute('UPDATE cs_native_page_state SET point=? WHERE id=1', (token,))
+            if rebind is not None:
+                rebind(self.conn, token)
+            self.conn.execute('''UPDATE cs_native_mirror_state SET token=?,policy_tag=?,context=?,baseline=1,
+                rows_changed=0,receipt=NULL WHERE id=1''',
+                (token, policy_tag, json.dumps(context, sort_keys=True, allow_nan=False)))
+            self.conn.execute('COMMIT')
+        except BaseException:
+            self.conn.execute('ROLLBACK')
+            raise
+        recovered = self.pending()
+        assert recovered is not None
+        return recovered
+
     def _publish(self, view: SourceReadView, *, token: str, parent: str | None, namespace: str,
                  policy_tag: str, observed_at: str, context: Mapping[str, Any], baseline: bool, count: int):
         self.conn.execute('''INSERT INTO cs_native_mirror_state VALUES(1,?,?,?,?,?,?,?,?,?,?, 'prepared',NULL)
@@ -238,6 +273,7 @@ class NativeMirror:
                 if (state is None or state['status'] != 'acknowledged' or state['token'] != expected_token
                         or state['namespace'] != namespace or state['policy_tag'] != policy_tag
                         or state['schema_version'] != view.schema_version
+                        or json.loads(state['context']).get('native_rebase_required')
                         or _cursor(state['cursor']).database_identity != view.database_identity
                         or _cursor(state['cursor']).wal != view.changes.after):
                     raise MirrorUnavailable('native mirror continuation point or policy mismatch')
