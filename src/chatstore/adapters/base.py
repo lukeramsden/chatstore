@@ -86,6 +86,7 @@ class Diagnosis:
 @dataclass
 class ExtractStats:
     selected_message_rowids: set[int] | None = None
+    reuse_whatsapp_headers: bool = False
     watch_path: Callable[[Path], None] | None = None
     memo: UnitMemo | None = None
     counts: dict[str, int] = field(default_factory=dict)

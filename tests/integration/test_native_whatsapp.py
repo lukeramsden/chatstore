@@ -194,3 +194,101 @@ def test_clean_prepared_poll_skips_header_materialization_and_preserves_freshnes
         assert not recovered['counts'].get('prepared_coverage_reused')
         assert len(extraction) == len(reads) == 3
         assert cache.get(chat['urn'])['observed_name'] == 'new source chat title'
+
+
+@pytest.mark.parametrize(('mutation', 'reuse'), [
+    ("UPDATE ZWAMESSAGE SET ZTEXT='header-safe edit' WHERE Z_PK=1", True),
+    (("INSERT INTO ZWAMESSAGE(Z_PK,ZCHATSESSION,ZSTANZAID,ZTEXT,ZFROMJID,ZTOJID,ZISFROMME,ZMESSAGETYPE,ZMESSAGEDATE,ZSORT) "
+      "VALUES(999,1,'NEW-STANZA','new known sender','15550001111@s.whatsapp.net','15550009999@s.whatsapp.net',0,0,800000000,999)"), True),
+    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=2', True),
+    ("UPDATE ZWAMESSAGE SET ZFROMJID='new-sender@lid' WHERE Z_PK=1", False),
+    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=1', False),
+    ("UPDATE ZWACHATSESSION SET ZPARTNERNAME='header changed' WHERE Z_PK=1", False),
+])
+def test_message_capture_reuses_only_proven_unchanged_headers(collector, capsys, monkeypatch, mutation, reuse):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    reads = []
+    original = aliases.read
+    def read(*args, **kwargs):
+        reads.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(aliases, 'read', read)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                    auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        poll()
+        header = next(cache.iter_records('aliases'))
+        writer.execute(mutation)
+        writer.commit()
+        changed = poll()
+        assert bool(changed['counts'].get('prepared_headers_reused')) is reuse
+        assert len(reads) == (1 if reuse else 2)
+        if reuse:
+            assert not any(key in changed['counts'] for key in ('identities', 'aliases', 'chats', 'chat_memberships'))
+            assert changed['counts']['written']['unchanged'] == (1 if mutation.startswith('DELETE') else 0)
+            assert cache.get(header['urn'])['revision_digest'] == header['revision_digest']
+            evidence = cache.observations_of(header['urn'])[0]
+            assert evidence['present'] == 'present'
+            observed_run = cache.get(evidence['sync_run'])
+            assert observed_run['snapshot']['prepared_native']['capture']['token'] == changed['snapshot']['prepared_native']['capture']['token']
+        assert poll()['counts']['prepared_coverage_reused'] == 1
+
+
+def test_header_reuse_retries_offline_and_cold_restores_freshness(collector, capsys, monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from chatstore.archive.import_ import import_archive
+    from chatstore.archive.incremental import export_changes
+    from chatstore.config import Identity
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    writer.execute('UPDATE ZWAMESSAGE SET ZPARENTMESSAGE=1 WHERE Z_PK=8')
+    writer.commit()
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            return collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                   auxiliary_session=session.native_auxiliary(cfg))
+        assert poll().exit_code == 0
+        header = next(cache.iter_records('aliases'))
+        first = next(row for row in cache.iter_records('messages') if row['text'] == 'hello from alice')
+        def export():
+            return export_changes(cache, dd, cfg, ident, consumer='header-restore', output=dd.exports, password='test-password')
+        baseline = export()
+        writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='offline header-safe edit' WHERE Z_PK=1")
+        writer.commit()
+        def interrupt(*args, **kwargs):
+            raise RuntimeError('interrupt header-safe capture')
+        with monkeypatch.context() as patch:
+            patch.setattr(cache, 'upsert_many', interrupt)
+            with pytest.raises(RuntimeError, match='interrupt header-safe'):
+                poll()
+        for name in ('ChatStorage', 'LID'):
+            (root / f'{name}.sqlite').rename(root / f'offline-{name}.sqlite')
+        retried = poll()
+        assert retried.exit_code == 0 and retried.run['counts']['prepared_headers_reused'] == 1
+        assert retried.run['counts']['messages'] == 2  # Includes a reply from a different chat.
+        reply = next(row for row in cache.iter_records('messages') if row['text'] == 'direct from lid')
+        assert reply['reply_to_urn'] == first['urn']
+        delta = export()
+        expected = cache.observations_of(header['urn'])[0]
+        restored = DataDir(tmp_path / 'cold-header-restore')
+        restored.create()
+        with closing(Cache(restored.cache)) as target:
+            for archive in (baseline, delta):
+                assert import_archive(target, restored, Identity(), Path(archive['path']), 'test-password').action == 'imported'
+            assert target.get(first['urn'])['text'] == 'offline header-safe edit'
+            assert len(target.revisions_of(first['urn'])) == 2
+            actual = target.observations_of(header['urn'])[0]
+            assert (actual['observed_at'], actual['sync_run'], actual['present']) == (
+                expected['observed_at'], expected['sync_run'], expected['present'])

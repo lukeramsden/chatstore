@@ -38,7 +38,7 @@ class SyncOutcome:
 
 
 def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, cache: Cache, *,
-             full: bool = False, session: SyncSession | None = None, prepared: PreparedSync | None = None, capture_state: CaptureCoverage | None = None, selected_message_rowids: set[int] | None = None, reuse_prepared_coverage: bool = False, progress: Callable[[str], None] | None = None) -> SyncOutcome:
+             full: bool = False, session: SyncSession | None = None, prepared: PreparedSync | None = None, capture_state: CaptureCoverage | None = None, selected_message_rowids: set[int] | None = None, reuse_prepared_coverage: bool = False, reuse_prepared_headers: bool = False, progress: Callable[[str], None] | None = None) -> SyncOutcome:
     scope = ident.scope_for(adapter.source)
     if prepared is not None and session is not None:
         raise ValueError('prepared capture and live source monitoring cannot share a sync attempt')
@@ -48,9 +48,17 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
         with cache.write():
             if capture_state.full:
                 raise ValueError('prepared coverage reuse cannot skip full reconciliation')
+    if reuse_prepared_headers:
+        from .adapters.whatsapp.adapter import WhatsAppAdapter
+        if (type(adapter) is not WhatsAppAdapter or prepared is None or capture_state is None
+                or full or selected_message_rowids is None or reuse_prepared_coverage):
+            raise ValueError('header reuse requires a selective prepared WhatsApp capture')
+        with cache.write():
+            if capture_state.full:
+                raise ValueError('header reuse cannot skip full reconciliation')
     run_urn = prepared.run_urn if prepared is not None else uuid.uuid4().urn
     started = prepared.observed_at_ms if prepared is not None else now_ms()
-    stats = ExtractStats(selected_message_rowids=selected_message_rowids)
+    stats = ExtractStats(selected_message_rowids=selected_message_rowids, reuse_whatsapp_headers=reuse_prepared_headers)
     written: dict[str, int] = {"inserted": 0, "updated": 0, "unchanged": 0}
     coverage_rebuild = capture_state is not None and selected_message_rowids is None
     mode = "initial"
@@ -117,7 +125,7 @@ def run_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity, 
         session.begin(cache, stats)
 
     if prepared is not None:
-        snap = prepared.snapshot(include_auxiliary=not reuse_prepared_coverage)
+        snap = prepared.snapshot(include_auxiliary=not (reuse_prepared_coverage or reuse_prepared_headers))
     else:
         say("snapshotting")
         try:

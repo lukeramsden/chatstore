@@ -146,7 +146,6 @@ class WhatsAppAdapter:
         problems = check_schema(conn, REQUIRED)
         if problems:
             raise IncompatibleSource("; ".join(problems))
-        stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE", "jid", "me", "lid_phone_pair"}
         # Indexes on our private copy only.
         conn.execute("CREATE INDEX IF NOT EXISTS cs_msg_key ON ZWAMESSAGE(ZCHATSESSION, ZSTANZAID)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_media_msg ON ZWAMEDIAITEM(ZMESSAGE)")
@@ -160,6 +159,28 @@ class WhatsAppAdapter:
 
         me_key = U.whatsapp_me_key()
         me_urn = urn("identity", me_key)
+        if stats.reuse_whatsapp_headers:
+            if full or stats.selected_message_rowids is None:
+                conn.close()
+                raise IncompatibleSource('header reuse requires selected message rows')
+            conn.execute('CREATE TEMP TABLE cs_wa_header_selection(pk INTEGER PRIMARY KEY)')
+            conn.executemany('INSERT INTO cs_wa_header_selection VALUES(?)',
+                             ((pk,) for pk in stats.selected_message_rowids))
+            chats = conn.execute("""SELECT c.Z_PK,c.ZCONTACTJID
+                FROM temp.cs_wa_header_selection s CROSS JOIN ZWAMESSAGE m CROSS JOIN ZWACHATSESSION c
+                WHERE m.Z_PK=s.pk AND c.Z_PK=m.ZCHATSESSION
+                UNION SELECT c.Z_PK,c.ZCONTACTJID
+                FROM temp.cs_wa_header_selection s CROSS JOIN ZWAMESSAGE m
+                CROSS JOIN ZWAMESSAGE p CROSS JOIN ZWACHATSESSION c
+                WHERE m.Z_PK=s.pk AND p.Z_PK=m.ZPARENTMESSAGE AND c.Z_PK=p.ZCHATSESSION""")
+            selected_chats = {row[0]: (U.whatsapp_jid(row[1]), urn('chat', U.whatsapp_jid(row[1]))) for row in chats}
+            stats.bump('prepared_headers_reused')
+            try:
+                yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full)
+            finally:
+                conn.close()
+            return
+        stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE", "jid", "me", "lid_phone_pair"}
         names: dict[str, list[dict[str, str]]] = {}
 
         def add_name(jid: str | None, name: str | None, origin: str) -> None:

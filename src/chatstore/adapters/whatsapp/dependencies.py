@@ -111,3 +111,54 @@ def route_changes(mirror: NativeMirror, capture: PreparedCapture, *,
                     old_keys.add(key)
         return WhatsAppSelection(capture.token, frozenset(selected), frozenset(old_keys),
                                  frozenset(new_keys), frozenset(headers))
+
+
+def headers_unchanged(mirror: NativeMirror, capture: PreparedCapture) -> bool:
+    """Prove unchanged ChatStorage header inputs; caller must also bind auxiliary evidence.
+
+    Message-derived headers depend on distinct sender/recipient JIDs and incoming
+    recipient JIDs. Seek only values contributed by changed rows, excluding those
+    rows when reconstructing prior membership. No source tables are scanned.
+    """
+    if capture.baseline:
+        return False
+    with mirror.index.snapshot() as reader:
+        if mirror.pending(reader=reader) != capture:
+            raise RoutingUnavailable('header reuse requires the exact pending native point')
+        columns = None
+        before, after = [], []
+        for change in mirror.changes(capture.token, reader=reader):
+            if change.table not in ('ZWAMESSAGE', 'ZWAMEDIAITEM', 'ZWAMESSAGEDATAITEM'):
+                return False
+            if change.table != 'ZWAMESSAGE':
+                continue
+            if columns is None:
+                columns = json.loads(reader.execute(
+                    "SELECT columns FROM cs_native_mirror_tables WHERE name='ZWAMESSAGE'").fetchone()[0])
+            if change.before is not None:
+                before.append(dict(zip(columns, change.before, strict=True)))
+            if change.after is not None:
+                after.append(dict(zip(columns, change.after, strict=True)))
+        for field, incoming in (('ZFROMJID', False), ('ZTOJID', False), ('ZTOJID', True)):
+            index = 'cs_jid_' + field.lower() + ('_incoming' if incoming else '')
+            if not reader.execute("SELECT 1 FROM sqlite_schema WHERE type='index' AND name=?", (index,)).fetchone():
+                return False
+            previous = {row[field] for row in before if row[field] is not None
+                        and (not incoming or row['ZISFROMME'] == 0)}
+            current = {row[field] for row in after if row[field] is not None
+                       and (not incoming or row['ZISFROMME'] == 0)}
+            if any(not isinstance(value, str) for value in previous | current):
+                return False
+            condition = ' AND m.ZISFROMME=0' if incoming else ''
+            query = f'SELECT 1 FROM ZWAMESSAGE m INDEXED BY {index} WHERE m.{field}=?{condition}'
+            for value in previous | current:
+                old_present = value in previous
+                if not old_present:
+                    old_present = reader.execute(query + " AND NOT EXISTS(SELECT 1 FROM cs_native_mirror_changes d "
+                        "WHERE d.name='ZWAMESSAGE' AND d.row_id=m.Z_PK) LIMIT 1", (value,)).fetchone() is not None
+                new_present = value in current
+                if not new_present:
+                    new_present = reader.execute(query + ' LIMIT 1', (value,)).fetchone() is not None
+                if old_present != new_present:
+                    return False
+        return True
