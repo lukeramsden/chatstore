@@ -655,3 +655,39 @@ media or joules are measured. Run the command at the start of the production-pat
 reproduce the expanded stages. Both the large pipeline and a fresh 100-row smoke run completed;
 the latter also ran the final new-message count assertions.
 [Raw expanded pipeline measurements](incremental-new-message-pipeline.json).
+
+
+## Diagnose first changed capture reads
+
+A new diagnostic wrapper profiles only the new-message capture and installs 1,000-step SQLite
+progress callbacks on its canonical Cache and newly opened SQLite connections. It leaves the
+production collector unchanged. Two no-pipeline runs held the alias count fixed at 1,000 extra
+pairs while increasing starting message rows from 100 to 100,000.
+
+| Instrumented new-message capture | 100 rows | 100,000 rows |
+| --- | ---: | ---: |
+| Wall / CPU seconds | 0.250 / 0.248 | 0.508 / 0.292 |
+| Canonical SQLite VM steps, rounded down | 622,000 | 632,000 |
+| Native-mirror VM steps, rounded down | under callback interval | 26,000 |
+| Rebuilt message units | 1 | 1 |
+
+Canonical VM work rose about 1.6% for 1,000 times as many messages with the same headers. This
+supports bounded logical canonical work for this fixture shape. It does not establish bounded
+physical I/O, auxiliary/header cardinality scaling or arbitrary source schemas. VM counts omit
+partial 1,000-step intervals per connection and do not count Python WAL/page decoding.
+
+In the larger profile, routing took 0.46 ms. Canonical current-head lookups took 133.9 ms and
+header withdrawal 53.2 ms. Extraction took 102 ms, and four code-signature computations took
+72 ms cumulatively; these figures overlap other parent frames and must not be summed as
+independent stages. The capture still emitted 3,022 records because unrelated headers were
+materialized. The no-pipeline large run reported 49.2 MB of attributed reads, compared with
+91.6 MB in the preceding encrypted-pipeline run. This variation and the profile point toward
+canonical header lookup/cache behavior as the next target; they do not prove where every
+physical read originated or excuse the observed volume. No production optimization follows
+from this measurement alone.
+
+Reproduce with `PYTHONPATH=src:. .venv/bin/python scripts/benchmark_whatsapp_new_profile.py
+--messages 100000 --aliases 1000`, then repeat with `--messages 100`. The wrapper accepts the
+underlying benchmark's CLI options; pass `--pipeline` only when that additional work is wanted.
+Its timings include profiling overhead. A fresh small run validated the durable wrapper.
+[Raw profiles and VM counters](incremental-new-capture-profile.json).
