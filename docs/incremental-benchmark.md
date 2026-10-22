@@ -691,3 +691,36 @@ Reproduce with `PYTHONPATH=src:. .venv/bin/python scripts/benchmark_whatsapp_new
 underlying benchmark's CLI options; pass `--pipeline` only when that additional work is wanted.
 Its timings include profiling overhead. A fresh small run validated the durable wrapper.
 [Raw profiles and VM counters](incremental-new-capture-profile.json).
+
+
+## Message-only header reuse measurement
+
+After adding the indexed header-input proof, the same instrumented no-pipeline benchmark used
+100,000 starting messages and 1,000 extra alias pairs. The new-message capture emitted one
+message unit and two new canonical records, with zero unchanged emitted records. It skipped
+the previous 3,020 unchanged header records and frozen alias JSON loading.
+
+| Instrumented new-message measurement | Before header reuse | After |
+| --- | ---: | ---: |
+| Wall / CPU seconds | 0.508 / 0.292 | 0.112 / 0.098 |
+| Canonical SQLite VM steps, rounded down | 632,000 | 8,000 |
+| Native-mirror VM steps, rounded down | 26,000 | 26,000 |
+| Attributed read bytes | 49,201,152 | 1,433,600 |
+| Attributed written bytes | 2,752,512 | 2,478,080 |
+
+The callback counts show that canonical work dropped with header materialization removed.
+The physical counters are single-run process attribution and remain sensitive to cache state;
+the reduction is not a universal I/O or energy guarantee. Both captures include cProfile and
+SQLite-progress overhead. Baseline work is still full-history work. Code-signature computation
+now accounts for 74 ms cumulatively in the larger capture profile; parent frame timings overlap.
+
+The large diagnostic completed all stages. A separate 100-message / 1,000-extra-alias encrypted
+pipeline smoke also passed capture, export and verified import after the change. It is a
+correctness smoke, not a replacement for the previous large pipeline timings. The tests add
+known/unknown JIDs, owner-set changes, shared-row removal, offline interrupted retry, cross-chat
+reply routing and encrypted cold restoration of header freshness. All 511 cumulative tests,
+Ruff and mypy passed. Large end-to-end media/remote/energy acceptance remains incomplete.
+
+Reproduce with the new-capture profiler command above. Raw results include
+[the 100,000-message profile](incremental-header-reuse-profile.json) and
+[the small encrypted pipeline](incremental-header-reuse-pipeline-smoke.json).

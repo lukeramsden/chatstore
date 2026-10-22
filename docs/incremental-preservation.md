@@ -1139,8 +1139,8 @@ captures currently recapture auxiliary rows and cannot use the same evidence ref
 
 Tests count adapter and alias-reader calls, verify unchanged adapter checkpoints and observation
 freshness, and prove source-title changes still extract while canonical edits force full
-reconciliation. Header materialization for changed captures and incremental auxiliary deltas
-remain open. These tests do not replace the representative end-to-end performance/energy audit.
+reconciliation. Header materialization for captures that change header inputs and incremental
+auxiliary deltas remain open. Message-only reuse is described below. These tests do not replace the representative end-to-end performance/energy audit.
 
 ## Pending capture recovery after policy upgrades
 
@@ -1180,3 +1180,37 @@ both policies. It cannot invent source fields absent from the retained schema or
 unknown media representation. Such incompatibilities preserve the pending point and report a
 migration requirement rather than silently dropping the capture. Full source compatibility and
 the broader performance/energy acceptance audit remain separate requirements.
+
+
+## Reuse proven headers across message-only WhatsApp captures
+
+With retained auxiliary monitoring, selective captures can now keep their exact prior header
+coverage when ChatStorage header inputs are unchanged. The proof reads the exact pending
+mirror point and rejects changes outside message/media/data-item tables. It compares distinct
+raw sender JIDs, recipient JIDs and incoming recipient JIDs before and after the delta. The
+last set drives owner detection and alias closure. Indexed membership seeks touch only JIDs
+contributed by changed message rows. To reconstruct prior membership, they exclude changed
+row IDs from the current table and include the preserved beforeimages. Missing private JID
+indexes require normal header extraction; the proof never builds a full-history index itself.
+
+Auxiliary alias evidence must match the completed parent capture and current point-bound alias
+state. Canonical coverage still requires its exact parent and source epoch. A changed JID set,
+owner set, header table, alias evidence, explicit full request or canonical drift requires
+header extraction or full reconciliation. This permits safe text edits, new messages from
+already represented JIDs and deletions that leave the distinct sets unchanged. It does not
+assume a known sender alone proves unchanged owner or recipient identities.
+
+Eligible runs skip alias JSON loading and identity/chat/membership/alias/event materialization.
+The adapter seeks just the chat rows needed by selected messages and their parents, including
+cross-chat replies. Selected stanza groups still rebuild normally. Exact retained header
+record/observation ranges receive new freshness evidence in the same receipt/checkpoint
+transaction. Counts report `prepared_headers_reused: 1`; unchanged header bodies are not emitted.
+This requires the retained auxiliary monitor; a restarted standalone capture still recaptures
+auxiliary evidence. File-backed WhatsApp media retains the ordinary-capture gate.
+
+Tests cover indexed JID/owner membership changes, new known and unknown JIDs, shared-row
+removal, title changes, exact-point rejection and missing-index fallback. A message edit with
+a cross-chat reply is interrupted, retried with source databases offline, then cold-restored
+from encrypted baseline/delta archives. Superseded text and exact header observation freshness
+survive. The cumulative suite passes 511 tests. Genuine header/auxiliary changes still rebuild
+complete headers, so fully incremental header emission remains open.

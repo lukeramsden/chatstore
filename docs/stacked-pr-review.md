@@ -42,7 +42,9 @@ These are draft PRs. They preserve the original scope of
 Media watcher resource auditing, incremental auxiliary routing, bounded WAL
 reset discovery and the complete end-to-end
 workload/energy audit remain open. Header materialization and resource-limit
-behavior also need the final acceptance audit.
+behavior also need the final acceptance audit. Message-only WhatsApp captures now reuse exact
+header coverage when indexed JID/owner-set proofs and retained auxiliary evidence permit it;
+genuine header/auxiliary changes still materialize complete headers.
 
 [Preservation implementation and limits](incremental-preservation.md) records the
 current guarantees and gaps. [Benchmark evidence](incremental-benchmark.md) separates
