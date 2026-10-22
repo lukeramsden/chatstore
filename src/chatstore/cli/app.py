@@ -14,6 +14,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .. import __version__
+from ..adapters.media_capture import MediaUnavailable
+from ..adapters.monitor import MonitoringUnavailable
 from ..config import (
     Config,
     Identity,
@@ -536,7 +538,15 @@ def main(argv: list[str] | None = None) -> int:
         polls = 0
         while True:
             began = time.monotonic()
-            res = args.fn(ctx)
+            try:
+                res = args.fn(ctx)
+            except (MediaUnavailable, MonitoringUnavailable) as exc:
+                if interval is None:
+                    raise
+                res = Result(None, EXIT_FAIL, errors=[{
+                    'code': 'capture_retry_required',
+                    'message': f'{type(exc).__name__}: {exc}; another capture is required',
+                }])
             fresh = freshness(ctx) if args.json and args.command not in ("doctor", "init", "version") and ctx.data_dir.exists() else None
             code = emit(args, command, res, fresh)
             polls += 1

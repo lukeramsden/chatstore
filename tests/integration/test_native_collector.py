@@ -213,3 +213,73 @@ def test_session_collector_routes_file_only_changes_without_unrelated_messages(c
         assert cache.get(attachment['urn'])['availability'] == 'missing'
         assert len(cache.revisions_of(attachment['urn'])) == 3
     assert watcher._monitor is None
+
+
+@pytest.mark.parametrize('failure', ['mutation', 'monitor'])
+def test_watch_cli_retries_rejected_media_without_advancing_point(collector, capsys, monkeypatch, failure):
+    from chatstore.adapters import media_watch
+    from chatstore.adapters.media_capture import MediaUnavailable
+    from chatstore.adapters.monitor import MonitoringUnavailable
+
+    dd, root, writer = collector
+    filename = root / 'Attachments' / 'retry.bin'
+    filename.write_bytes(b'bytes retained after retry')
+    writer.execute("INSERT INTO attachment(ROWID,guid,filename,total_bytes) VALUES(1,'retry-guid',?,25)", (str(filename),))
+    writer.execute('INSERT INTO message_attachment_join(message_id,attachment_id) VALUES(1,1)')
+    writer.commit()
+    cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
+    original = media_watch.prepare_media
+    calls = 0
+    def fail_after_retention(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        original(*args, **kwargs)
+        if calls == 1:
+            error = MediaUnavailable if failure == 'mutation' else MonitoringUnavailable
+            raise error('injected rejected media capture')
+    monkeypatch.setattr(media_watch, 'prepare_media', fail_after_retention)
+    sleeps = []
+    def between_polls(seconds):
+        sleeps.append(seconds)
+        mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+        with NativeMirror(mirror_path) as mirror, closing(Cache(dd.cache)) as cache:
+            assert mirror.pending() is None
+            assert mirror.continuation() is None
+            assert cache.get_checkpoint('messages', load_identity(dd).scope_for('messages'), 'native_capture') is None
+    monkeypatch.setattr('chatstore.cli.app.time.sleep', between_polls)
+    code = main(['--json', 'sync', '--source', 'messages', '--watch-interval', '900', '--max-polls', '2'])
+    results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert code == 0 and calls == 2 and len(sleeps) == 1
+    assert len(results) == 2
+    assert not results[0]['ok'] and results[0]['errors'][0]['code'] == 'capture_retry_required'
+    assert results[1]['ok'] and results[1]['data'][0]['status'] == 'complete'
+    with closing(Cache(dd.cache)) as cache:
+        assert next(cache.iter_records('attachments'))['availability'] == 'available'
+
+
+def test_watch_cli_reports_failure_when_media_remains_unavailable(collector, capsys, monkeypatch):
+    from chatstore.adapters import media_watch
+    from chatstore.adapters.monitor import MonitoringUnavailable
+
+    dd, root, _ = collector
+    cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
+    monitors = []
+    original = media_watch.SourceMonitor
+    def track_monitor():
+        monitor = original()
+        monitors.append(monitor)
+        return monitor
+    def unavailable(*args, **kwargs):
+        raise MonitoringUnavailable('descriptor coverage unavailable')
+    monkeypatch.setattr(media_watch, 'SourceMonitor', track_monitor)
+    monkeypatch.setattr(media_watch, 'prepare_media', unavailable)
+    monkeypatch.setattr('chatstore.cli.app.time.sleep', lambda seconds: None)
+    code = main(['--json', 'sync', '--source', 'messages', '--watch-interval', '900', '--max-polls', '2'])
+    results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert code == 1 and len(results) == 2
+    assert all(not result['ok'] and result['data'] is None for result in results)
+    assert all(result['errors'][0]['code'] == 'capture_retry_required' for result in results)
+    assert len(monitors) == 2 and all(monitor._closed for monitor in monitors)
+    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+    with NativeMirror(mirror_path) as mirror:
+        assert mirror.pending() is None and mirror.continuation() is None
