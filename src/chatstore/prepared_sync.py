@@ -93,13 +93,20 @@ class PreparedSync:
         path = self.mirror.path
         at = self.observed_at_ms
         probe = None
+        alias_pairs = None
+        if 'whatsapp_aliases' in self.capture.context:
+            from .adapters.whatsapp.aliases import read
+            if self.capture.context['whatsapp_aliases'] != {'format': 1}:
+                raise MirrorUnavailable('unsupported prepared WhatsApp alias evidence format')
+            alias_pairs = read(self.mirror.conn, self.capture.token)
         if 'messages_media' in self.capture.context:
             from .adapters.prepared_media import read_media
             if self.capture.context['messages_media'] != {'format': 1}:
                 raise MirrorUnavailable('unsupported prepared media evidence format')
             probe = partial(read_media, self.mirror.conn, self.capture.token)
         return BorrowedSnapshot(path.parent, {self.file_name: SnapshotFile(self.file_name,
-            str(path), path, path.stat().st_size, '', 0, False, at, at)}, attachment_probe=probe)
+            str(path), path, path.stat().st_size, '', 0, False, at, at)}, attachment_probe=probe,
+            whatsapp_alias_pairs=alias_pairs)
 
     def validate(self, adapter: SourceAdapter, cfg: Config, scope: str) -> None:
         if self.mirror.pending() != self.capture:

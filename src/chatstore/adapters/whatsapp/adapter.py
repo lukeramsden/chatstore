@@ -6,6 +6,7 @@ import hashlib
 import os
 import sqlite3
 from collections.abc import Iterator
+from contextlib import ExitStack, closing
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,9 @@ from ..base import (
     native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
+from . import aliases
+
+POLICY_MODULES = (aliases,)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -295,26 +299,12 @@ class WhatsAppAdapter:
 
     def _alias_pairs(self, snap: Snapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
         """(lid_jid, phone_jid) -> evidence, from LID.sqlite and ContactsV2.sqlite."""
-        pairs: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        if "LID" in snap.files:
-            c = sqlite3.connect(snap.files["LID"].snapshot_path)
-            try:
-                if {"ZWAZACCOUNT"} <= {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
-                    for lid, phone in c.execute("SELECT ZIDENTIFIER, ZPHONENUMBER FROM ZWAZACCOUNT WHERE ZIDENTIFIER IS NOT NULL AND ZPHONENUMBER IS NOT NULL"):
-                        digits = "".join(ch for ch in str(phone) if ch.isdigit())
-                        if digits and "@lid" in lid:
-                            pairs.setdefault((U.whatsapp_jid(lid), f"{digits}@s.whatsapp.net"), []).append({"type": "lid_phone_pair", "detail": "LID.sqlite/ZWAZACCOUNT"})
-            finally:
-                c.close()
-        if "ContactsV2" in snap.files:
-            c = sqlite3.connect(snap.files["ContactsV2"].snapshot_path)
-            try:
-                if {"ZWAADDRESSBOOKCONTACT"} <= {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
-                    for lid, wa in c.execute("SELECT ZLID, ZWHATSAPPID FROM ZWAADDRESSBOOKCONTACT WHERE ZLID IS NOT NULL AND ZWHATSAPPID IS NOT NULL"):
-                        pairs.setdefault((U.whatsapp_jid(lid), U.whatsapp_jid(wa)), []).append({"type": "address_book", "detail": "ContactsV2.sqlite/ZWAADDRESSBOOKCONTACT"})
-            finally:
-                c.close()
-        return pairs
+        if snap.whatsapp_alias_pairs is not None:
+            return snap.whatsapp_alias_pairs
+        with ExitStack() as stack:
+            sources = {name: stack.enter_context(closing(sqlite3.connect(snap.files[name].snapshot_path)))
+                       if name in snap.files else None for name in aliases.SOURCES}
+            return aliases.pairs(aliases.collect(sources))
 
     def _aliases(self, pairs: dict[tuple[str, str], list[dict[str, Any]]], scope: str, stats: ExtractStats,
                  urn: Any) -> Iterator[Emit]:

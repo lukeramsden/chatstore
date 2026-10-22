@@ -46,6 +46,7 @@ class Snapshot:
     directory: Path
     files: dict[str, SnapshotFile] = field(default_factory=dict)
     attachment_probe: Callable[[dict[str, Any]], tuple[str, str | None, int | None, str | None]] | None = None
+    whatsapp_alias_pairs: dict[tuple[str, str], list[dict[str, Any]]] | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {"files": [f.manifest() for f in self.files.values()]}
