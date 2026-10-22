@@ -1,0 +1,58 @@
+{
+  "messages": 2000,
+  "repeats": 10,
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "Isolated journal table populated from real adapter-produced synthetic journal templates. Repeats preserve representative per-event structure but are not distinct source histories. FULL durability, 64 MiB cache, 5,000-row commits, no automatic checkpoints, final truncate checkpoint. Includes codec cost and exact UTF-8/sequence roundtrip checks. Excludes production triggers, canonical/index writes, archive/encryption/import, network and energy. RSS is process lifetime peak including template setup. This experimental encoding is not used by application caches.",
+  "results": [
+    {
+      "encoding": "plain",
+      "events": 100700,
+      "database_bytes": 121757696,
+      "stored_payload_bytes": 96543160,
+      "roundtrip_sha256": "e4394477570aa761d95e09d1f625e6423f5d20113846da0527fe7bd17352ef8a",
+      "write_and_checkpoint": {
+        "wall_seconds": 0.5359132080047857,
+        "cpu_seconds": 0.46176400000000006,
+        "storage_read_bytes": 602112,
+        "storage_written_bytes": 244981760,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0,
+        "lifetime_peak_rss_bytes": 140869632
+      },
+      "read_and_exact_roundtrip": {
+        "wall_seconds": 0.1733170420047827,
+        "cpu_seconds": 0.17331000000000008,
+        "storage_read_bytes": 0,
+        "storage_written_bytes": 0,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0,
+        "lifetime_peak_rss_bytes": 140902400
+      }
+    },
+    {
+      "encoding": "compressed",
+      "events": 100700,
+      "database_bytes": 64233472,
+      "stored_payload_bytes": 57974890,
+      "roundtrip_sha256": "e4394477570aa761d95e09d1f625e6423f5d20113846da0527fe7bd17352ef8a",
+      "write_and_checkpoint": {
+        "wall_seconds": 1.7220423749968177,
+        "cpu_seconds": 1.680117,
+        "storage_read_bytes": 479232,
+        "storage_written_bytes": 129683456,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0,
+        "lifetime_peak_rss_bytes": 141131776
+      },
+      "read_and_exact_roundtrip": {
+        "wall_seconds": 0.6922696659967187,
+        "cpu_seconds": 0.6921089999999999,
+        "storage_read_bytes": 0,
+        "storage_written_bytes": 0,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0,
+        "lifetime_peak_rss_bytes": 141164544
+      }
+    }
+  ]
+}

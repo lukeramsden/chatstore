@@ -526,3 +526,37 @@ checkpoint and filesystem work still need analysis.
 Reproduce with `.venv/bin/python scripts/benchmark_native_whatsapp.py --messages 30000
 --aliases 100 --pipeline --sqlite-stats --database-layout`.
 [Full table/index layout, journal sizes and stage counters](incremental-database-layout.json).
+
+
+## Isolated journal compression experiment
+
+The journal layout survey motivated a per-event compression experiment. The script creates
+2,000 synthetic WhatsApp messages through the real adapter and repeats their journal templates
+ten times, producing 100,700 events. Repeated templates are not distinct source histories.
+Each database uses FULL durability, a 64 MiB cache, 5,000-event commits and a final truncate
+checkpoint. The compressed variant uses zlib level 1 only when it saves at least 64 bytes after
+its length/checksum header. Small and incompressible events remain plain text.
+
+| Measurement | Plain | Compressed |
+| --- | ---: | ---: |
+| Database allocation | 121,757,696 bytes | 64,233,472 bytes |
+| Stored payloads | 96,543,160 bytes | 57,974,890 bytes |
+| Write + checkpoint wall / CPU | 0.536 / 0.462 s | 1.722 / 1.680 s |
+| Read + exact roundtrip wall / CPU | 0.173 / 0.173 s | 0.692 / 0.692 s |
+| Write-stage attributed storage writes | 244,981,760 bytes | 129,683,456 bytes |
+
+Compression reduced allocated journal storage by 47.2%, but write CPU rose 3.6 times and read
+CPU rose 4.0 times. Both variants reconstructed identical operation names, sequence numbers
+and exact original UTF-8 JSON text, with matching whole-stream SHA-256 hashes. Separate checks
+rejected truncated headers/streams, trailing bytes, oversized or incorrect decoded lengths,
+and checksum corruption; Unicode and plain-text roundtrips passed.
+
+This measures an isolated table. It excludes production triggers, canonical tables and indexes,
+archive creation, encryption, verified import, remote transfer and energy. It is one ordered
+plain-then-compressed run, not a randomized comparison. Cached reads reported zero attributed
+storage reads. Peak RSS includes template setup and preceding measurements. No production
+cache encoding changed. The disk savings alone do not establish lower background cost;
+integrating a codec requires end-to-end measurements and schema/recovery compatibility work.
+
+Reproduce with `.venv/bin/python scripts/benchmark_journal_encoding.py`.
+[Raw journal encoding measurements](incremental-journal-encoding.json).
