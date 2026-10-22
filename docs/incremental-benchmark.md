@@ -346,8 +346,38 @@ in those eligible continuation stages.
 This benchmark uses actual canonical receipts and mirror acknowledgement. It excludes archive
 creation/encryption, verification/import/delivery, file-backed media, WhatsApp, source setup and
 mutation, kernel I/O and energy. WAL byte counters exclude SQLite/index/WAL-index reads. The
-CLI collector has not enabled this path, and conservative fallback cases are documented; this
-is not proof that the full issue is complete.
+CLI collector now dispatches eligible Messages captures through this path; file-backed media
+requires a retained watch session. Conservative fallback cases are documented. These component
+measurements do not prove that the full issue is complete.
 
 [Prepared canonical counters](incremental-prepared-messages-benchmark.json) ·
 [Durability, eligibility and remaining work](incremental-preservation.md#durable-selective-messages-capture).
+
+## Live media watcher resource limits
+
+`scripts/benchmark_media_watch.py` creates synthetic files and measures only path-to-attachment
+routing through the real macOS vnode monitor. Setup, file mutation, media retention, SQLite,
+canonical sync and archive delivery are excluded. Clean values are medians of 100 polls;
+sparse values are single polls after ten fsynced file writes. RSS is the lifetime process peak,
+including fixture setup. Kernel I/O and energy were not measured.
+
+| Files | Registration wall / CPU | Additional descriptors | Clean wall | Ten-file routing wall | Peak RSS |
+| --- | --- | --- | --- | --- | --- |
+| 1,000 | 117 / 117 ms | 1,009 | 27.9 µs | 67.2 µs | 33.7 MiB |
+| 10,000 | 1,352 / 1,297 ms | 10,009 | 26.1 µs | 130.5 µs | 87.5 MiB |
+| 100,000 | registration failed after 8.13 s | incomplete | unavailable | unavailable | 343 MiB |
+
+The shell soft descriptor limit was 1,048,575, but `kern.maxfilesperproc` was 61,440 and
+`kern.maxfiles` was 122,880. The 100,000-file case failed closed; it did not authorize clean
+coverage. A separate run with a 256-descriptor process limit also failed closed after 27.7 ms.
+Every run returned to its initial descriptor count after monitor shutdown.
+
+These results establish bounded clean/sparse routing for the tested successful populations,
+but expose a linear descriptor/memory cost and a hard large-history failure. The current
+one-descriptor-per-file design does not satisfy large-population resource acceptance. A scalable
+replacement must retain detection of writes through open handles, replacement, deletion and
+late downloads; directory notifications alone do not prove unchanged file contents.
+
+Reproduce with `.venv/bin/python scripts/benchmark_media_watch.py --files 10000`, then use
+`--files 100000` or `--files 1000 --fd-limit 256` for the failure cases.
+[Raw measurements and environment](incremental-media-watch-benchmark.json).

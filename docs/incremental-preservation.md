@@ -954,7 +954,10 @@ SQLite evidence and point; already retained content-addressed bytes may remain u
 Tests cover recovery on the next poll and repeated failures, including closed monitor handles
 and no native/canonical checkpoint advance. A finite `--max-polls` run returns the final poll's
 exit code, so an unresolved final capture failure remains a failure. Other exceptions retain
-their existing CLI behavior. Large attachment populations still need resource measurements.
+their existing CLI behavior. [Resource measurements](incremental-benchmark.md#live-media-watcher-resource-limits)
+show successful sparse routing at 10,000 files but failed registration at 100,000 files.
+One descriptor per file and linear watch memory remain an acceptance gap; no clean coverage
+is accepted after resource exhaustion, and failed attempts close their monitor handles.
 
 
 The routed monitor also exposed a collector boundary condition: an unrelated directory
