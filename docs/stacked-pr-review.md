@@ -39,12 +39,14 @@ verification, rather than current test totals.
 
 These are draft PRs. They preserve the original scope of
 [issue #10](https://github.com/lukeramsden/chatstore/issues/10) and do not close it.
-Media watcher resource auditing, incremental auxiliary routing, bounded WAL
+Media watcher resource scaling, incremental auxiliary routing, bounded WAL
 reset discovery and the complete end-to-end
 workload/energy audit remain open. Header materialization and resource-limit
 behavior also need the final acceptance audit. Message-only WhatsApp captures now reuse exact
 header coverage when indexed JID/owner-set proofs and retained auxiliary evidence permit it;
-genuine header/auxiliary changes still materialize complete headers.
+genuine header/auxiliary changes still materialize complete headers. Persistent watch sessions
+now retain WhatsApp file bytes and route file-only changes; standalone file-bearing captures
+still use ordinary collection. The per-file descriptor ceiling remains unresolved.
 
 [Preservation implementation and limits](incremental-preservation.md) records the
 current guarantees and gaps. [Benchmark evidence](incremental-benchmark.md) separates

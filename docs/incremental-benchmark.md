@@ -724,3 +724,52 @@ Ruff and mypy passed. Large end-to-end media/remote/energy acceptance remains in
 Reproduce with the new-capture profiler command above. Raw results include
 [the 100,000-message profile](incremental-header-reuse-profile.json) and
 [the small encrypted pipeline](incremental-header-reuse-pipeline-smoke.json).
+
+
+## File-bearing WhatsApp history through the encrypted pipeline
+
+`benchmark_native_whatsapp.py --file-media` retains a source attachment path and supplies the
+persistent media watcher. The fixture file has 256 KiB of deterministic random bytes. File-only
+edit, missing-file, re-download and clean-after-file stages run in addition to the existing
+message/context cases. They assert one selected message and retained header coverage.
+`--archive-media available-media` can additionally include retained attachment bytes; the
+ordinary benchmark default remains text-only.
+
+A 100,000-message / 1,000-extra-alias text-only pipeline completed with one watched file.
+Baseline sync took 52.525 s wall / 45.135 s CPU, encrypted verified export 54.665 / 51.863 s,
+and verified import 127.155 / 96.402 s. The baseline exported 509,111 events in 102 archives,
+30,631,393 ciphertext bytes. Initial history work remains substantial.
+
+| Operation | Sync wall / CPU ms | Verified export wall / CPU ms | Verified import wall / CPU ms | Export events | Ciphertext bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| clean-after-new | 48.55 / 46.12 | 4.59 / 4.31 | 3.07 / 2.72 | 6 | 2,369 |
+| new-message | 66.11 / 54.27 | 4.92 / 4.88 | 4.50 / 3.88 | 12 | 3,181 |
+| old-edit | 66.68 / 56.29 | 4.94 / 4.89 | 6.74 / 4.43 | 12 | 3,277 |
+| file-only-edit | 55.42 / 49.60 | 4.93 / 4.79 | 4.32 / 3.88 | 14 | 3,103 |
+| clean-after-file | 48.08 / 46.29 | 4.09 / 4.07 | 2.93 / 2.84 | 6 | 2,420 |
+| file-missing | 53.66 / 51.12 | 4.70 / 4.54 | 4.67 / 4.45 | 12 | 2,942 |
+| file-download | 52.30 / 48.78 | 4.75 / 4.71 | 4.74 / 4.52 | 14 | 3,122 |
+
+For the file-only edit, sync reported 647,168 read bytes and 2,080,768 written bytes; these
+include retention of the new file version. The clean-after-file sync reported 102,400 reads
+and 1,036,288 writes. Counters are Darwin process attribution, not logical query or device
+bytes; buffered attribution can cross stage boundaries. Lifetime RSS ended at 299.7 MiB and
+includes baseline/setup, so it is not an isolated incremental peak. No network or joules were
+measured. This validates one watched file, not the unresolved large-file-population descriptor
+ceiling. Genuine header/auxiliary changes still materialize headers.
+
+A separate 100-message / 10-extra-alias pipeline included available media and verified the
+final imported blob bytes. The native media integration tests additionally cold-restore all
+three byte versions and four attachment revisions after source and producer blobs disappear.
+An isolated CLI check performs two watch polls at the configured 900-second cadence, replacing
+the sleep for verification, and checks the second file-only change has no SQL row changes.
+
+Reproduce the large text-only run with `.venv/bin/python scripts/benchmark_native_whatsapp.py
+--messages 100000 --aliases 1000 --file-media --pipeline`. Add `--archive-media available-media`
+for attachment bytes; the recorded byte-including smoke used 100 messages and 10 aliases.
+Run `PYTHONPATH=src:. .venv/bin/python scripts/verify_whatsapp_media_watch.py` for the CLI check.
+The cumulative suite passed 525 tests, Ruff and mypy.
+
+[Large file-bearing text-only pipeline](incremental-whatsapp-file-media.json),
+[byte-including pipeline smoke](incremental-whatsapp-media-archive-smoke.json),
+[CLI verification](incremental-whatsapp-media-cli.json).

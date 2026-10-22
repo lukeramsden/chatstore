@@ -2,8 +2,10 @@
 """Measure the production native WhatsApp collector and optional encrypted pipeline."""
 
 import argparse
+import hashlib
 import json
 import platform
+import random
 import resource
 import sqlite3
 import subprocess
@@ -34,6 +36,8 @@ def main():
     parser.add_argument('--messages', type=int, default=100000)
     parser.add_argument('--aliases', type=int, default=1000)
     parser.add_argument('--pipeline', action='store_true')
+    parser.add_argument('--file-media', action='store_true')
+    parser.add_argument('--archive-media', choices=('text', 'available-media'), default='text')
     parser.add_argument('--batch-limit', type=int, default=5000)
     parser.add_argument('--sqlite-stats', action='store_true')
     parser.add_argument('--disable-cache-spill', action='store_true')
@@ -81,6 +85,9 @@ def main():
             subprocess.run(['/usr/bin/cc', '-dynamiclib', '-Wall', '-Wextra', '-Werror',
                             str(Path(__file__).with_name('sqlite_benchmark_stats.c')), '-o', str(extension)], check=True)
         native = build_whatsapp(root / 'source', extra_messages=args.messages - 8)
+        media_path = native / 'Message/Media/x/pic.jpg'
+        if args.file_media:
+            media_path.write_bytes(random.Random(7).randbytes(256 * 1024))
         dd, restored = DataDir(root / 'data'), DataDir(root / 'restored')
         dd.create()
         restored.create()
@@ -102,7 +109,10 @@ def main():
                     connection.execute('PRAGMA cache_spill=OFF')
             writer.execute('PRAGMA journal_mode=WAL')
             writer.execute('PRAGMA wal_autocheckpoint=0')
-            writer.execute('UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH=NULL')
+            if args.file_media:
+                writer.execute('UPDATE ZWAMEDIAITEM SET ZFILESIZE=?', (media_path.stat().st_size,))
+            else:
+                writer.execute('UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH=NULL')
             writer.commit()
             lid.executemany('INSERT INTO ZWAZACCOUNT VALUES(?,?,?)',
                             ((100 + row, f'{800000000 + row}@lid', f'+1556{row:07d}') for row in range(args.aliases)))
@@ -112,7 +122,10 @@ def main():
                 ('new-message', 'new-message'), ('clean-after-new', None),
                 ('old-edit', "UPDATE ZWAMESSAGE SET ZTEXT='benchmark historical edit' WHERE Z_PK=1"),
                 ('chat-title', "UPDATE ZWACHATSESSION SET ZPARTNERNAME='benchmark title' WHERE Z_PK=1"),
-                ('auxiliary-edit', 'auxiliary'), ('old-delete', 'DELETE FROM ZWAMESSAGE WHERE Z_PK=1'),
+                ('auxiliary-edit', 'auxiliary'),
+                *([('file-only-edit', 'file-edit'), ('clean-after-file', None),
+                   ('file-missing', 'file-missing'), ('file-download', 'file-download')] if args.file_media else []),
+                ('old-delete', 'DELETE FROM ZWAMESSAGE WHERE Z_PK=1'),
                 ('clean-after-changes', None),
             ]
             for label, mutation in stages:
@@ -130,15 +143,24 @@ def main():
                 elif mutation == 'auxiliary':
                     lid.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+15550009900' WHERE Z_PK=1")
                     lid.commit()
+                elif mutation == 'file-edit':
+                    media_path.write_bytes(random.Random(8).randbytes(256 * 1024))
+                elif mutation == 'file-missing':
+                    media_path.unlink()
+                elif mutation == 'file-download':
+                    media_path.write_bytes(random.Random(9).randbytes(256 * 1024))
                 elif mutation:
                     writer.execute(mutation)
                     writer.commit()
                 def capture(label=label):
-                    outcome = collect_native(adapter, dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg))
+                    outcome = collect_native(adapter, dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg),
+                        media_watch=session.native_media(cfg, dd, source='whatsapp') if args.file_media else None)
                     assert outcome is not None and outcome.exit_code == 0, outcome
                     counts = outcome.run['counts']
                     if label.startswith('clean'):
                         assert counts.get('prepared_coverage_reused') == 1
+                    if label in ('file-only-edit', 'file-missing', 'file-download'):
+                        assert counts.get('messages') == 1 and counts.get('prepared_headers_reused') == 1, counts
                     if label == 'new-message':
                         assert outcome.run['mode'] == 'incremental'
                         assert counts.get('messages') == 1 and counts.get('canonical_units_rebuilt') == 1, counts
@@ -151,7 +173,7 @@ def main():
                     journal_events = 0
                     while True:
                         result = export_changes(cache, dd, cfg, ident, consumer='benchmark', output=dd.exports,
-                                                password=PASSWORD, limit=args.batch_limit)
+                                                password=PASSWORD, limit=args.batch_limit, media=args.archive_media)
                         if result['action'] == 'written':
                             paths.append(Path(result['path']))
                             journal_events += result['counts']['changes']
@@ -171,6 +193,13 @@ def main():
             if args.pipeline:
                 assert any(row['text'] == 'benchmark newly arrived message' for row in target.iter_records('messages'))
                 assert any(row['text'] == 'benchmark historical edit' for row in target.iter_records('messages'))
+            if args.file_media and args.pipeline:
+                attachment = next(row for row in target.iter_records('attachments') if row['availability'] == 'available')
+                digest = hashlib.sha256(media_path.read_bytes()).hexdigest()
+                assert attachment['blob_sha256'] == digest
+                if args.archive_media == 'available-media':
+                    from chatstore.paths import blob_path
+                    assert blob_path(restored, digest).read_bytes() == media_path.read_bytes()
             if args.database_layout:
                 for name, database in connections.items():
                     layouts[name] = {
@@ -187,8 +216,9 @@ def main():
                             FROM changes GROUP BY operation ORDER BY encoded_data_bytes DESC''')],
                     }
     print(json.dumps({'messages': args.messages, 'additional_aliases': args.aliases, 'batch_limit': args.batch_limit,
+        'file_media': args.file_media, 'archive_media': args.archive_media,
         'sqlite_stats': args.sqlite_stats, 'cache_spill_disabled': args.disable_cache_spill, 'platform': platform.platform(),
-        'scope': 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
+        'scope': ('Synthetic source includes one watched 256 KiB deterministic binary file. ' if args.file_media else 'Synthetic source has no file-backed media. ') + 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, representative large media populations and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
         'measurements': measurements, 'database_layout': layouts,
         'layout_scope': 'Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll.'}, indent=2))
 

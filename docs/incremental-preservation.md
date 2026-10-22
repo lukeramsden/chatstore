@@ -1206,7 +1206,7 @@ cross-chat replies. Selected stanza groups still rebuild normally. Exact retaine
 record/observation ranges receive new freshness evidence in the same receipt/checkpoint
 transaction. Counts report `prepared_headers_reused: 1`; unchanged header bodies are not emitted.
 This requires the retained auxiliary monitor; a restarted standalone capture still recaptures
-auxiliary evidence. File-backed WhatsApp media retains the ordinary-capture gate.
+auxiliary evidence. Standalone WhatsApp captures retain the ordinary media gate; watched file evidence is described below.
 
 Tests cover indexed JID/owner membership changes, new known and unknown JIDs, shared-row
 removal, title changes, exact-point rejection and missing-index fallback. A message edit with
@@ -1214,3 +1214,44 @@ a cross-chat reply is interrupted, retried with source databases offline, then c
 from encrypted baseline/delta archives. Superseded text and exact header observation freshness
 survive. The cumulative suite passes 511 tests. Genuine header/auxiliary changes still rebuild
 complete headers, so fully incremental header emission remains open.
+
+
+## Watched native WhatsApp media
+
+Persistent `sync --source whatsapp --watch-interval 900` sessions now provide native file
+coverage as well as guarded auxiliary coverage. File-bearing histories can use prepared
+capture instead of ordinary full snapshots. Standalone capture without a retained media
+watcher keeps the ordinary fallback. Poll cadence and archive attachment policy are unchanged.
+
+The media layer captures each media item's relative path, availability, hash and actual size
+inside the native mirror writer transaction. Available bytes are copied/hashed once into the
+fsynced content-addressed store before the point is published. Absolute and parent-traversal
+paths remain unknown and are never opened by this capture. Frozen reads require the exact
+native token and relative path; extraction never falls back to live files for prepared items.
+Deleted media rows retire their frozen observation while all prior blob bytes remain retained.
+
+A process-local watcher binds file ownership to the mirror path and parent point. It registers
+paths before capture and accepts evidence only after a stable monitoring token. File-only
+changes route through current media owners to complete stanza groups. SQL changes also route
+old and new owners through the existing dependency proof. Shared paths route every owner,
+missing paths watch for later downloads, and retired paths are unwatched after the last owner
+leaves. Changed bytes can therefore create attachment revisions without any SQL change.
+A restart, failed file capture or rolled-back parent binding requires complete file
+reconciliation. The canonical controller then reconciles full coverage instead of assuming
+unchanged files. Failures preserve the previous native/canonical point and use normal retry;
+they do not authorize a weaker fallback.
+
+Pending points retry before source discovery, using retained bytes even after source expiry.
+Compatible policy recovery rebinds frozen WhatsApp media state and marks its coverage full,
+preserves the original observation time and forces the following live native rebase. Tests
+cover file-only writes through existing descriptors, shared files, disappearance/re-download,
+new filenames, retired watches, failed capture, offline canonical retry and policy upgrades.
+An encrypted archive-only cold restore retains all four availability/content revisions and
+three captured byte versions after source and producer blobs are unavailable.
+
+The cumulative suite passes 525 tests. This uses the existing per-file vnode design and
+inherits its measured descriptor ceiling; it does not solve large-media-population scaling.
+Retained media bytes are captured even for a text-only archive, whose payload still excludes
+attachment bytes. Full media archives explicitly include the retained bytes. Native WAL reset
+work, auxiliary deltas, genuine header changes and the complete remote/energy acceptance audit
+remain open.
