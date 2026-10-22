@@ -251,7 +251,9 @@ def _check_and_parse(payload: Payload, validate_schema: bool) -> tuple[dict[str,
             continue
         entity = name.removeprefix("records/").removesuffix(".jsonl")
         rows: list[dict[str, Any]] = []
-        for lineno, line in enumerate(data.splitlines(), 1):
+        # Keep only the current line copy while parsed records accumulate.
+        for lineno, match in enumerate(re.finditer(rb"[^\r\n]*(?:\r\n?|\n|$)", data), 1):
+            line = match.group()
             if not line.strip():
                 continue
             try:

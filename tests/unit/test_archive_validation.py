@@ -59,3 +59,22 @@ def test_duplicate_claimed_digest_does_not_bypass_row_or_envelope_checks(mutatio
     counts, problems, errors = verify.check_records(payload([revision_event(rec), event]))
     assert counts['changes'] == 1 and errors == 1
     assert any(expected in problem for problem in problems), problems
+
+
+@pytest.mark.parametrize('ending', [b'\n', b'\r\n', b'\r'])
+@pytest.mark.parametrize('trailing', [False, True])
+def test_record_lines_preserve_blank_lines_and_error_locations(ending, trailing):
+    rec = dict(msg(1, 'Unicode é🙂 and escaped\nnewline', None, None, 1), observed_at=1, sync_run=None)
+    events = [revision_event(rec), record_event(rec)]
+    archive = payload(events)
+    name = 'records/changes.jsonl'
+    lines = [json.dumps(events[0], ensure_ascii=False).encode(), b'  ',
+             json.dumps(events[1], ensure_ascii=False).encode()]
+    archive.members[name] = ending.join(lines) + (ending if trailing else b'')
+    counts, problems, errors, parsed = verify._check_and_parse(archive, True)
+    assert counts == {'changes': 2} and not problems and not errors
+    assert parsed['changes'] == events
+    archive.members[name] = ending.join([lines[0], b'  ', b'{invalid', lines[2]])
+    counts, problems, errors = verify.check_records(archive)
+    assert counts['changes'] == 1 and errors == 0
+    assert f'{name}:3: invalid JSON' in problems
