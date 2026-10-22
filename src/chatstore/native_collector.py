@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
+from . import native_whatsapp
 from .adapters.base import SourceAdapter, check_schema
 from .adapters.media_watch import PreparedMediaWatch
 from .adapters.messages.adapter import REQUIRED, MessagesAdapter, find_helper
@@ -16,11 +17,14 @@ from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
+from .adapters.whatsapp.adapter import WhatsAppAdapter
 from .cache import Cache
 from .config import Config, Identity
 from .paths import DataDir
 from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
 from .sync import SyncOutcome
+
+POLICY_MODULES = (native_whatsapp,)
 
 
 class MediaCaptureRequired(Exception):
@@ -40,7 +44,11 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
     A pending point is always handled before opening the source. Errors after
     prepare never authorize fallback to another capture or advance its cursor.
     """
-    if type(adapter) is not MessagesAdapter or sys.platform != 'darwin':
+    if sys.platform != 'darwin':
+        return None
+    if type(adapter) is WhatsAppAdapter:
+        return native_whatsapp.collect(adapter, dd, cfg, ident, cache, full=full)
+    if type(adapter) is not MessagesAdapter:
         return None
     scope = ident.scope_for(adapter.source)
     namespace = f'{adapter.source}/{scope}'
