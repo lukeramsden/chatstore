@@ -27,11 +27,12 @@ from .adapters import (
     wal,
     wal_image,
 )
-from .adapters.base import SourceAdapter, check_schema
+from .adapters.base import IncompatibleSource, SourceAdapter, check_schema
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.native_mirror import MirrorUnavailable, NativeMirror, PreparedCapture
 from .adapters.snapshot import Snapshot, SnapshotFile
 from .adapters.whatsapp import dependencies as whatsapp_dependencies
+from .adapters.whatsapp import events as whatsapp_events
 from .adapters.whatsapp.adapter import WhatsAppAdapter
 from .cache import Cache
 from .cache.extraction import code_signature
@@ -399,13 +400,21 @@ def _whatsapp_coverage(adapter, cache, prepared, scope, full):
             elif prepared.mirror.conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                 return CaptureCoverage.restart_full(cache, **args), None, False, False
             selection = whatsapp_dependencies.route_changes(prepared.mirror, capture, media_message_ids=media_ids)
+            event_keys = None
+            if capture.context.get('whatsapp_events') == {'format': 1}:
+                try:
+                    _, event_keys = whatsapp_events.selection(prepared.mirror, capture.token)
+                except IncompatibleSource:
+                    event_keys = None
             headers_reused = (_whatsapp_aliases_unchanged(cache, prepared)
-                and whatsapp_dependencies.headers_unchanged(prepared.mirror, capture))
+                and whatsapp_dependencies.headers_unchanged(prepared.mirror, capture, selected_events=event_keys is not None))
             unchanged = (headers_reused and not selection.rowids
                 and not prepared.mirror.conn.execute('SELECT 1 FROM cs_native_mirror_changes LIMIT 1').fetchone())
             if state is None:
                 proof = UnitWithdrawal.take(cache, adapter.source, scope, selection.old_unit_keys,
                     expected_epoch=read_source(cache.conn, adapter.source, scope))
+                if headers_reused and event_keys:
+                    proof = proof.with_headers(cache, [], keyed_tables={'ZWAGROUPMEMBERSCHANGE': event_keys})
                 if not headers_reused:
                     proof = proof.with_headers(cache,
                         ['ZWACHATSESSION', 'ZWAGROUPMEMBER', 'ZWAGROUPMEMBERSCHANGE', 'jid', 'me', 'lid_phone_pair'])
@@ -454,8 +463,11 @@ def _run_prepared_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: 
         capture_state, selected = _messages_coverage(adapter, cfg, cache, prepared, scope, full)
     elif type(adapter) is WhatsAppAdapter:
         capture_state, selected, reuse_coverage, reuse_headers = _whatsapp_coverage(adapter, cache, prepared, scope, full)
+    selected_events = None
+    if reuse_headers and prepared.capture.context.get('whatsapp_events') == {'format': 1}:
+        selected_events, _ = whatsapp_events.selection(prepared.mirror, prepared.capture.token)
     outcome = run_sync(adapter, dd, cfg, ident, cache, full=full, prepared=prepared,
-                       capture_state=capture_state, selected_message_rowids=selected, reuse_prepared_coverage=reuse_coverage, reuse_prepared_headers=reuse_headers)
+                       capture_state=capture_state, selected_message_rowids=selected, reuse_prepared_coverage=reuse_coverage, reuse_prepared_headers=reuse_headers, selected_whatsapp_event_rowids=selected_events)
     if outcome.exit_code == 0:
         receipt = prepared.receipt(cache, adapter.source, scope)
         if receipt is None:

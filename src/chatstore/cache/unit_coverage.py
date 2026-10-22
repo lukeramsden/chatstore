@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Self
 
@@ -99,11 +99,14 @@ class UnitWithdrawal:
                    tuple((lo, hi) for lo, hi in merge(observations)), epoch)
 
     def with_headers(self, cache: Cache, complete_tables: Iterable[str], *,
-                     inferred_keys: Iterable[str] = ()) -> Self:
+                     inferred_keys: Iterable[str] = (), keyed_tables: Mapping[str, Iterable[str]] | None = None) -> Self:
         if not cache.conn.in_transaction or read_source(cache.conn, self.source, self.scope) != self.epoch:
             raise CoverageUnavailable('header withdrawal requires the original writer epoch')
         records, observations = [], []
-        for table, keys in [(table, None) for table in sorted(set(complete_tables))] + [('message.ck_chat_id', sorted(set(inferred_keys)))]:
+        selections: list[tuple[str, list[str] | None]] = [(table, None) for table in sorted(set(complete_tables))]
+        selections += [('message.ck_chat_id', sorted(set(inferred_keys)))]
+        selections += [(table, sorted(set(keys))) for table, keys in (keyed_tables or {}).items()]
+        for table, keys in selections:
             batches = [None] if keys is None else [keys[start:start + 400] for start in range(0, len(keys), 400)]
             for batch in batches:
                 sql = """SELECT o.observation_id,k.id FROM source_observations o

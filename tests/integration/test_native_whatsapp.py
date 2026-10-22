@@ -2,6 +2,7 @@ import json
 import sqlite3
 import sys
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 
@@ -340,3 +341,149 @@ def test_auxiliary_commits_with_identical_evidence_reuse_headers(collector, caps
         actual_change = poll()
         assert not actual_change['counts'].get('prepared_coverage_reused')
         assert actual_change['counts']['aliases'] > 0
+
+
+@pytest.mark.parametrize('mutation', [
+    "UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='new@s.whatsapp.net' WHERE Z_PK=1",
+    "UPDATE ZWAGROUPMEMBERSCHANGE SET ZCHANGEDATE=700000091 WHERE Z_PK=1",
+    'DELETE FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1',
+])
+@pytest.mark.parametrize('duplicate', [False, True])
+def test_group_event_changes_skip_unrelated_headers_and_preserve_history(collector, capsys, monkeypatch, mutation, duplicate):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.archive.import_ import import_archive
+    from chatstore.archive.incremental import export_changes
+    from chatstore.config import Identity
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    writer.executemany('INSERT INTO ZWAGROUPMEMBERSCHANGE VALUES(?,?,?,?,?)',
+        ((100 + i, 5, 800000000 + i, 'unrelated@g.us', 'member@s.whatsapp.net') for i in range(1000)))
+    # Same canonical key after normalization: deleting one native owner must not
+    # withdraw the surviving event, and extraction must preserve native row order.
+    if duplicate:
+        writer.execute("INSERT INTO ZWAGROUPMEMBERSCHANGE SELECT 2,ZCHANGETYPE,ZCHANGEDATE,upper(ZGROUPJID),'duplicate@s.whatsapp.net' FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1")
+    writer.commit()
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    forbid_headers = False
+    original = aliases.read
+    def read(*args, **kwargs):
+        if forbid_headers:
+            pytest.fail('selected group events rebuilt unrelated headers')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(aliases, 'read', read)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                    auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        first = poll()
+        before = {row['urn']: row for row in cache.iter_records('events')}
+        def export():
+            return export_changes(cache, dd, cfg, ident, consumer='events', output=dd.exports, password='test-password')
+        baseline = export()
+        writer.execute(mutation)
+        writer.commit()
+        forbid_headers = True
+        changed = poll()
+        assert changed['counts']['prepared_headers_reused'] == 1
+        assert changed['counts'].get('messages', 0) == 0
+        assert changed['counts'].get('events', 0) <= 2
+        after = {row['urn']: row for row in cache.iter_records('events')}
+        assert len(after) >= len(before)
+        unchanged = next(row for row in before.values() if row['target_native'] == 'unrelated@g.us')
+        observation = cache.observations_of(unchanged['urn'])[0]
+        assert observation['sync_run'] != unchanged['sync_run']
+        assert observation['present'] == 'present'
+        expected_absent = int(not duplicate and ('DELETE' in mutation or 'ZCHANGEDATE=' in mutation))
+        assert changed['counts'].get('absent_from_source:withdrawn', 0) == expected_absent
+        delta = export()
+        restored = DataDir(dd.root.parent / 'event-restore')
+        restored.create()
+        with closing(Cache(restored.cache)) as target:
+            for batch in (baseline, delta):
+                assert import_archive(target, restored, Identity(), Path(batch['path']), 'test-password').action == 'imported'
+            for urn, row in after.items():
+                assert target.get(urn)['revision_digest'] == row['revision_digest']
+                assert {r['revision_digest'] for r in target.revisions_of(urn)} == {r['revision_digest'] for r in cache.revisions_of(urn)}
+                assert [(o['native_table'], o['present']) for o in target.observations_of(urn)] == [(o['native_table'], o['present']) for o in cache.observations_of(urn)]
+        assert first['counts']['events'] >= 1001
+
+
+def test_selected_group_event_retries_from_retained_point_after_source_expiry(collector, capsys, monkeypatch):
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
+                                    auxiliary_session=session.native_auxiliary(cfg))
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        poll()
+        writer.execute("UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='offline@s.whatsapp.net' WHERE Z_PK=1")
+        writer.commit()
+        def interrupt(*args, **kwargs):
+            raise RuntimeError('interrupt selected event canonical write')
+        with monkeypatch.context() as patch:
+            patch.setattr(cache, 'upsert_many', interrupt)
+            with pytest.raises(RuntimeError, match='interrupt selected event'):
+                poll()
+        mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+        with NativeMirror(mirror_path) as mirror:
+            pending = mirror.pending()
+            assert pending is not None
+            assert mirror.conn.execute('SELECT point FROM cs_wa_event_state').fetchone()[0] == pending.token
+        for name in ('ChatStorage', 'LID'):
+            (root / f'{name}.sqlite').rename(root / f'expired-{name}.sqlite')
+        retried = poll()
+        assert retried['snapshot']['prepared_native']['capture']['token'] == pending.token
+        assert retried['counts']['prepared_headers_reused'] == 1
+        assert retried['counts']['events'] == 1
+        from chatstore.identity import urn as U
+        expected = U.derive_urn('whatsapp', ident.scope_for('whatsapp'), 'identity', 'offline@s.whatsapp.net')
+        assert any(expected in row['payload'].get('member_identity_urns', []) for row in cache.iter_records('events'))
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.pending() is None
+
+
+def test_failed_native_event_preparation_rolls_back_ownership_with_source_point(collector, capsys, monkeypatch):
+    from chatstore.sync_session import SyncSession
+
+    root, dd, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        auxiliary = session.native_auxiliary(cfg)
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=auxiliary)
+            assert result is not None and result.exit_code == 0, result
+            return result.run
+        first = poll()['snapshot']['prepared_native']['capture']
+        mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+        with NativeMirror(mirror_path) as mirror:
+            before = list(map(tuple, mirror.conn.execute('SELECT * FROM cs_wa_event_keys ORDER BY row_id')))
+        writer.execute('UPDATE ZWAGROUPMEMBERSCHANGE SET ZCHANGEDATE=700000091 WHERE Z_PK=1')
+        writer.commit()
+        original = auxiliary.prepare
+        def reject(*args, **kwargs):
+            original(*args, **kwargs)
+            raise RuntimeError('reject after event ownership preparation')
+        with monkeypatch.context() as patch:
+            patch.setattr(auxiliary, 'prepare', reject)
+            with pytest.raises(RuntimeError, match='reject after event ownership'):
+                poll()
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.pending() is None
+            assert mirror.continuation().token == first['token']
+            assert mirror.conn.execute('SELECT point FROM cs_wa_event_state').fetchone()[0] == first['token']
+            assert list(map(tuple, mirror.conn.execute('SELECT * FROM cs_wa_event_keys ORDER BY row_id'))) == before
+            assert not mirror.conn.execute('SELECT 1 FROM cs_wa_event_changes').fetchone()
+        changed = poll()
+        assert changed['counts']['events'] == 1
+        assert changed['counts']['prepared_headers_reused'] == 1
+        assert changed['counts']['absent_from_source:withdrawn'] == 1

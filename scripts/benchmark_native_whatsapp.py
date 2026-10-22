@@ -123,6 +123,7 @@ def main():
                 ('new-message', 'new-message'), ('clean-after-new', None),
                 *([('wal-reset-clean', 'reset-clean'), ('wal-reset-old-edit', 'reset-edit')] if args.wal_resets else []),
                 ('old-edit', "UPDATE ZWAMESSAGE SET ZTEXT='benchmark historical edit' WHERE Z_PK=1"),
+                ('group-event', "UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='benchmark@s.whatsapp.net' WHERE Z_PK=1"),
                 ('chat-title', "UPDATE ZWACHATSESSION SET ZPARTNERNAME='benchmark title' WHERE Z_PK=1"),
                 ('auxiliary-noop', 'auxiliary-noop'), ('auxiliary-edit', 'auxiliary'),
                 *([('file-only-edit', 'file-edit'), ('clean-after-file', None),
@@ -178,6 +179,9 @@ def main():
                         assert counts.get('messages', 0) == (0 if label == 'wal-reset-clean' else 1), counts
                     if label in ('file-only-edit', 'file-missing', 'file-download'):
                         assert counts.get('messages') == 1 and counts.get('prepared_headers_reused') == 1, counts
+                    if label == 'group-event':
+                        assert counts.get('events') == 1 and counts.get('prepared_headers_reused') == 1, counts
+                        assert counts.get('messages', 0) == 0, counts
                     if label == 'new-message':
                         assert outcome.run['mode'] == 'incremental'
                         assert counts.get('messages') == 1 and counts.get('canonical_units_rebuilt') == 1, counts

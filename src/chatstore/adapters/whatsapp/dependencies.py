@@ -113,9 +113,11 @@ def route_changes(mirror: NativeMirror, capture: PreparedCapture, *,
                                  frozenset(new_keys), frozenset(headers))
 
 
-def headers_unchanged(mirror: NativeMirror, capture: PreparedCapture) -> bool:
+def headers_unchanged(mirror: NativeMirror, capture: PreparedCapture, *, selected_events: bool = False) -> bool:
     """Prove unchanged ChatStorage header inputs; caller must also bind auxiliary evidence.
 
+    Group events may be excluded only when the caller separately proves and
+    withdraws their exact point-bound key coverage.
     Message-derived headers depend on distinct sender/recipient JIDs and incoming
     recipient JIDs. Seek only values contributed by changed rows, excluding those
     rows when reconstructing prior membership. No source tables are scanned.
@@ -128,6 +130,8 @@ def headers_unchanged(mirror: NativeMirror, capture: PreparedCapture) -> bool:
         columns = None
         before, after = [], []
         for change in mirror.changes(capture.token, reader=reader):
+            if selected_events and change.table == 'ZWAGROUPMEMBERSCHANGE':
+                continue
             if change.table not in ('ZWAMESSAGE', 'ZWAMEDIAITEM', 'ZWAMESSAGEDATAITEM'):
                 return False
             if change.table != 'ZWAMESSAGE':

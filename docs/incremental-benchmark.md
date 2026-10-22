@@ -865,3 +865,14 @@ stages inherit that high-water mark; it is not their isolated memory peak. Stora
 counters cover the parent process and can include deferred writes from prior stages;
 helper I/O is not included. Ciphertext sizes are potential traffic, not observed
 remote network traffic. No direct energy result is available.
+
+
+## Selective group-event pipeline
+
+[incremental-group-event-pipeline.json](incremental-group-event-pipeline.json) is a
+focused 1,000-message / 1,000-alias encrypted pipeline run with a native group-event
+member edit. Capture emits one event and no messages, reuses unrelated headers, and
+takes 52 ms wall / 51 ms CPU. Verified export/import take 5 / 4 ms. This fixture has
+one native group-change row; separate integration tests verify bounded extraction
+against 1,000 unrelated events and normalized duplicate owners. It is not a large
+event-history timing or real-network measurement.

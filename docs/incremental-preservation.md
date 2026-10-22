@@ -1287,3 +1287,24 @@ rebuild affected canonical headers as before. Transaction rollback covers both p
 Tests cover optional database version changes, identical-value writes, unrelated table
 creation and subsequent real alias changes. This reduces canonical work after irrelevant
 commits; it does not implement incremental discovery inside the optional databases.
+
+
+## Selective WhatsApp group events
+
+Native capture now retains a point-bound index from group-change row identities to
+canonical event keys. Initial capture builds it; later captures update only changed
+rows in the native writer transaction. Canonical selection seeks every surviving
+owner of changed keys, including keys shared after Unicode/case normalization.
+Changing or deleting one native owner cannot withdraw an event supplied by another.
+
+When other header inputs and alias evidence remain unchanged, extraction emits only
+the selected group-event owners and any independently selected messages. Coverage
+withdraws exact old event keys and advances retained header freshness. Missing or
+mismatched event ownership requires full header extraction. Source restart/rebase
+rebuilds ownership; no durable index alone authorizes skipping source discovery.
+
+Tests use 1,000 unrelated events and cover member edits, key changes, deletion,
+normalized duplicate owners, native rollback, interrupted canonical writes, offline
+retry and encrypted import retaining revisions and source presence. The archive
+format is unchanged. Genuine identity, chat and other header changes still require
+complete header reconstruction.

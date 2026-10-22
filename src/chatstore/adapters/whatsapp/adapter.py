@@ -28,9 +28,9 @@ from ..base import (
     native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
-from . import aliases, media
+from . import aliases, events, media
 
-POLICY_MODULES = (aliases, media)
+POLICY_MODULES = (aliases, events, media)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -177,6 +177,8 @@ class WhatsAppAdapter:
             stats.bump('prepared_headers_reused')
             try:
                 yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
+                if stats.selected_whatsapp_event_rowids is not None:
+                    yield from self._events(conn, scope, stats, urn, stats.selected_whatsapp_event_rowids)
             finally:
                 conn.close()
             return
@@ -277,10 +279,20 @@ class WhatsAppAdapter:
         # --- messages ---------------------------------------------------------------------
         yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
 
-        # --- group membership change events ---------------------------------------------
-        for r in conn.execute("SELECT Z_PK, ZCHANGETYPE, ZCHANGEDATE, ZGROUPJID, ZMEMBERJIDS FROM ZWAGROUPMEMBERSCHANGE"):
+        yield from self._events(conn, scope, stats, urn)
+        conn.close()
+
+    def _events(self, conn, scope, stats, urn, selected=None):
+        fields = 'Z_PK,ZCHANGETYPE,ZCHANGEDATE,ZGROUPJID,ZMEMBERJIDS'
+        if selected is None:
+            rows = conn.execute(f'SELECT {fields} FROM ZWAGROUPMEMBERSCHANGE')
+        else:
+            identity = events.rowid_alias(conn)
+            rows = (row for pk in sorted(selected) for row in conn.execute(
+                f'SELECT {fields} FROM ZWAGROUPMEMBERSCHANGE WHERE {identity}=?', (pk,)))
+        for r in rows:
             gj = U.whatsapp_jid(r["ZGROUPJID"] or "")
-            key = U.composite_key("groupchange", gj, str(r["ZCHANGEDATE"]), str(r["ZCHANGETYPE"]))
+            key = events.key(r)
             members = [U.whatsapp_jid(m) for m in str(r["ZMEMBERJIDS"] or "").replace(";", ",").split(",") if m.strip()]
             rec = record("events", urn("event", key), SOURCE, scope, kind=f"unknown:{r['ZCHANGETYPE']}",
                          target_urn=urn("chat", gj) if gj else None, target_native=gj or None, actor_urn=None,
@@ -289,7 +301,6 @@ class WhatsAppAdapter:
             yield Emit(rec, Observation("ZWAGROUPMEMBERSCHANGE", [r["Z_PK"]], key, fingerprint(gj, r["ZCHANGEDATE"], r["ZCHANGETYPE"], members)))
             stats.unsupported_bump(f"group_change_type:{r['ZCHANGETYPE']}")
             stats.bump("events")
-        conn.close()
 
     def _owner_jids(self, conn: sqlite3.Connection, alias_pairs: dict[tuple[str, str], list[dict[str, Any]]],
                     stats: ExtractStats) -> set[str]:

@@ -9,7 +9,7 @@ PRs are superseded. Review these areas in dependency order:
 4. Adapter dependency routing and retained media: historical changes and point-bound bytes.
 5. Prepared sync and persistent sessions: canonical publication, acknowledgement and retry.
 
-The full suite passes 538 tests. Ruff and mypy are the repository static checks. See
+The full suite passes 546 tests. Ruff and mypy are the repository static checks. See
 [incremental-preservation.md](incremental-preservation.md) for implementation details and
 [incremental-benchmark.md](incremental-benchmark.md) for measurements and their limits.
 
@@ -20,7 +20,8 @@ The full suite passes 538 tests. Ruff and mypy are the repository static checks.
 - Implemented with synthetic evidence: lightweight clean polls and selective message changes
   during valid monitored sessions; identity/context and media-availability preservation.
 - Open: scalable file monitoring above the measured vnode descriptor ceiling.
-- Open: fully incremental auxiliary/header changes and bounded source recovery after WAL loss.
+- Implemented: selective group-event changes, including duplicate-owner coverage, rollback and offline retry.
+- Open: fully incremental auxiliary/identity/chat-header changes and bounded source recovery after WAL loss.
   Compatible fresh-WAL recovery avoids canonical rebuilding but still compares the source image.
 - Measured: 100,000-message text-only capture/encrypted export/verified import pipelines for both adapters.
 - Open: complete representative end-to-end acceptance measurements, including remote transfer
