@@ -945,7 +945,16 @@ Mutation during retention rejects the native transaction; a rolled-back candidat
 authorize reuse on the next attempt. Session shutdown closes all media descriptors. Tests
 exercise the production coordinator with clean, file-only edit and deletion polls, preserving
 the prior attachment revisions. Descriptor exhaustion and incomplete symlink coverage fail
-closed; retry behavior and large attachment populations still need the final resource audit.
+closed; large attachment populations still need the final resource audit.
+
+The watch loop reports media retention or monitoring failures with the JSON error code
+`capture_retry_required`, then waits for the normal poll interval and attempts capture again.
+It does not fall back to unmonitored media reuse. The rejected preparation rolls back its
+SQLite evidence and point; already retained content-addressed bytes may remain unreferenced.
+Tests cover recovery on the next poll and repeated failures, including closed monitor handles
+and no native/canonical checkpoint advance. A finite `--max-polls` run returns the final poll's
+exit code, so an unresolved final capture failure remains a failure. Other exceptions retain
+their existing CLI behavior. Large attachment populations still need resource measurements.
 
 
 The routed monitor also exposed a collector boundary condition: an unrelated directory
