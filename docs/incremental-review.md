@@ -23,8 +23,11 @@ The full suite passes 557 tests. Ruff and mypy are the repository static checks.
 - Open: scalable file monitoring above the measured vnode descriptor ceiling.
 - Implemented: selective group-event changes, including duplicate-owner coverage, rollback and offline retry.
 - Implemented: selective chat archive/removal flags and group titles, with full-extraction parity and duplicate-owner coverage.
-- Open: fully incremental auxiliary/identity/structural-chat and direct-name changes and bounded source recovery after WAL loss.
-  Compatible fresh-WAL recovery avoids canonical rebuilding but still compares the source image.
+- Open: fully incremental auxiliary/identity/structural-chat and direct-name changes.
+- Accepted source limitation: WAL loss/reset may require full-source reconciliation to preserve
+  historical edits and deletions. The user explicitly accepted this fallback on 22 October 2026.
+  Source databases remain read-only; recovery work scales with source size. Compatible fresh-WAL
+  recovery avoids canonical rebuilding but still compares the source image.
 - Measured: 100,000-message text-only capture/encrypted export/verified import pipelines for both adapters.
 - Open: complete representative end-to-end acceptance measurements, including remote transfer
   and energy where available. Existing CPU/I/O/ciphertext counters do not measure energy.
