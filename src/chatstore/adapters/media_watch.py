@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
+from ..paths import DataDir
+from .media_capture import MediaUnavailable
 from .monitor import MonitoringUnavailable, SourceMonitor
+from .prepared_media import prepare_media
 
 
 class MediaWatch:
@@ -50,3 +54,57 @@ class MediaWatch:
         if paths is None:
             raise MonitoringUnavailable(self.monitor.failure or 'media monitoring unavailable')
         return frozenset(row_id for path in paths for row_id in self._owners.get(path, ()))
+
+
+class PreparedMediaWatch:
+    """Bind live file coverage to one private mirror and retained page point.
+
+    A new instance reconciles all files. Failed or rolled-back publication cannot
+    lend its coverage to a different parent point on the next attempt.
+    """
+
+    def __init__(self, root: Path, dd: DataDir) -> None:
+        self.root = root
+        self.dd = dd
+        self._monitor: SourceMonitor | None = None
+        self._watch: MediaWatch | None = None
+        self._binding: tuple[str, str] | None = None
+
+    def prepare(self, conn: sqlite3.Connection, *, full: bool = False) -> None:
+        if not conn.in_transaction:
+            raise MediaUnavailable('media watcher requires the native writer transaction')
+        database = str(conn.execute('PRAGMA database_list').fetchone()[2])
+        parent = conn.execute('SELECT token FROM cs_native_mirror_state WHERE id=1').fetchone()
+        point = conn.execute('SELECT point FROM cs_native_page_state WHERE id=1').fetchone()
+        if point is None:
+            raise MediaUnavailable('media watcher requires a candidate page point')
+        reconcile = full or parent is None or self._binding != (database, parent[0])
+        try:
+            if reconcile:
+                self.close()
+                self._monitor = SourceMonitor()
+                self._watch = MediaWatch(self._monitor)
+                rows = conn.execute('SELECT ROWID,filename FROM attachment')
+            else:
+                rows = conn.execute("""SELECT changes.row_id,attachment.filename
+                    FROM cs_native_mirror_changes changes LEFT JOIN attachment
+                    ON attachment.ROWID=changes.row_id WHERE changes.name='attachment'""")
+            assert self._watch is not None and self._monitor is not None
+            self._watch.update((row[0], row[1]) for row in rows)
+            dirty = self._watch.dirty_ids()
+            before = self._monitor.token()
+            dirty |= self._watch.dirty_ids()
+            prepare_media(conn, self.root, self.dd, full=reconcile, dirty_ids=dirty)
+            if not self._monitor.accept_capture(before):
+                raise MediaUnavailable('attachment files changed during media preparation')
+            self._binding = (database, point[0])
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self._monitor is not None:
+            self._monitor.close()
+        self._monitor = None
+        self._watch = None
+        self._binding = None

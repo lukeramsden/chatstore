@@ -203,3 +203,82 @@ def test_delta_requires_explicit_file_change_coverage(media_history):
             context={'messages_media': {'format': 1}},
             validate_rows=partial(prepare_media, root=cfg.source_root('messages'), dd=dd, full=False))
     assert mirror.pending() is None and mirror.continuation() == parent
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS vnode monitoring')
+def test_live_media_watch_tracks_file_only_changes_and_recovers_rejected_point(media_history, monkeypatch):
+    from chatstore.adapters import prepared_media
+    from chatstore.adapters.media_watch import PreparedMediaWatch
+
+    _, dd, cfg, _, _, mirror, _, path, filename, parent = media_history
+    assert sync(media_history, parent).exit_code == 0
+    watcher = PreparedMediaWatch(cfg.source_root('messages'), dd)
+    def prepare(previous, validator):
+        with view(path, previous.cursor) as source, WalPages(path.with_name(path.name + '-wal'), source.changes) as pages:
+            return mirror.prepare(source, pages, expected_token=previous.token, namespace=previous.namespace,
+                policy_tag=previous.policy_tag, observed_at='2026-10-18T10:15:00Z',
+                context={'messages_media': {'format': 1}}, validate_rows=validator)
+    try:
+        child = prepare(parent, watcher.prepare)
+        assert sync(media_history, child).exit_code == 0
+        original = prepared_media.capture_attachment
+        captured = []
+        def record(*args, **kwargs):
+            captured.append(args[0]['filename'])
+            return original(*args, **kwargs)
+        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
+        clean = prepare(child, watcher.prepare)
+        assert captured == []
+        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
+        assert sync(media_history, clean).exit_code == 0
+        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
+        filename.write_bytes(b'file-only event')
+        changed = prepare(clean, watcher.prepare)
+        assert captured == [str(filename)]
+        assert read_media(mirror.conn, changed.token, {'rowid': 1, 'filename': str(filename)})[1] == hashlib.sha256(b'file-only event').hexdigest()
+        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
+        assert sync(media_history, changed).exit_code == 0
+        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
+        def reject(conn):
+            watcher.prepare(conn)
+            raise RuntimeError('publication rejected')
+        with pytest.raises(RuntimeError, match='publication rejected'):
+            prepare(changed, reject)
+        captured.clear()
+        recovered = prepare(changed, watcher.prepare)
+        assert str(filename) in captured  # Rolled-back point forces full file reconciliation.
+        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
+        assert sync(media_history, recovered).exit_code == 0
+    finally:
+        watcher.close()
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS vnode monitoring')
+def test_live_media_change_during_retention_rejects_native_publication(media_history, monkeypatch):
+    from chatstore.adapters import prepared_media
+    from chatstore.adapters.media_capture import MediaUnavailable
+    from chatstore.adapters.media_watch import PreparedMediaWatch
+
+    _, dd, cfg, _, _, mirror, _, path, filename, parent = media_history
+    assert sync(media_history, parent).exit_code == 0
+    watcher = PreparedMediaWatch(cfg.source_root('messages'), dd)
+    original = prepared_media.capture_attachment
+    def change_after_copy(attachment, *args, **kwargs):
+        captured = original(attachment, *args, **kwargs)
+        if attachment['filename'] == str(filename):
+            filename.write_bytes(b'changed after retained copy')
+        return captured
+    monkeypatch.setattr(prepared_media, 'capture_attachment', change_after_copy)
+    try:
+        with (view(path, parent.cursor) as source,
+              WalPages(path.with_name(path.name + '-wal'), source.changes) as pages,
+              pytest.raises(MediaUnavailable, match='changed during')):
+            mirror.prepare(source, pages, expected_token=parent.token, namespace=parent.namespace,
+                policy_tag=parent.policy_tag, observed_at='2026-10-18T10:15:00Z',
+                context={'messages_media': {'format': 1}}, validate_rows=watcher.prepare)
+        assert mirror.pending() is None
+        assert mirror.continuation() == parent
+        assert mirror.conn.execute('SELECT point FROM cs_native_media_state').fetchone()[0] == parent.token
+        assert watcher._binding is None
+    finally:
+        watcher.close()
