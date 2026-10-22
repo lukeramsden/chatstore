@@ -982,6 +982,20 @@ stanza, parent and dependent lookups; no source indexes or triggers are installe
 Tests exercise WAL-backed edits, deletion, duplicate stanza rows, key changes, replies, media
 reparenting, data-only changes, chat identity/title changes and file-only selection. Baselines,
 a mismatched pending token, and unclassified table changes reject selective reuse. This is a
-routing primitive: WhatsApp selected extraction, atomic auxiliary-database capture and collector
-handoff still require integration. It does not authorize a SQL-only point to skip media checks,
-or prove end-to-end proportional work for WhatsApp.
+routing primitive; atomic auxiliary-database capture and collector handoff still require
+integration. It does not authorize a SQL-only point to skip media checks, or prove end-to-end
+proportional work for WhatsApp.
+
+The WhatsApp adapter now accepts `ExtractStats.selected_message_rowids` for message extraction.
+A private temporary selection drives indexed stanza lookups, including unselected duplicate
+rows in each affected stanza. Selected groups produce the same canonical revisions as full
+extraction. An empty selection or a deleted ID emits no unrelated messages; selected extraction
+does not declare the message/media tables fully scanned or infer a source reset from a deleted
+high ID. Explicit full adapter reconciliation continues to visit all groups.
+
+Tests compare selected duplicate-group output with full output and count SQLite VM work while
+unselected history grows from 100 to 10,000 rows. That bound covers message grouping and its
+dependencies only. Header identity discovery still queries message history, and the collector
+does not yet dispatch WhatsApp through prepared selective coverage. Header work, joint auxiliary
+capture, frozen media evidence, canonical withdrawal/coverage and collector integration remain
+necessary before the WhatsApp end-to-end efficiency claim can be made.
