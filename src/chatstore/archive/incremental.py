@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import uuid
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -53,12 +54,25 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
         if cursor['policy'] != policy:
             raise ValueError('consumer policy changed; use a new consumer name to create a new baseline')
         start = cursor['sequence']
-        rows = cache.conn.execute('SELECT seq,operation,data FROM changes WHERE seq>? ORDER BY seq LIMIT ?',
-                                  (start, limit)).fetchall()
-        if not rows:
+        events: list[dict[str, Any]] = []
+        encoded: list[bytes] = []
+        size = 0
+        with closing(cache.conn.execute('SELECT seq,operation,data FROM changes WHERE seq>? ORDER BY seq LIMIT ?',
+                                       (start, limit))) as rows:
+            for row in rows:
+                event = {'seq': row['seq'], 'operation': row['operation'], 'data': json.loads(row['data'])}
+                line = (_j(event) + '\n').encode('utf-8')
+                if size + len(line) > container.DEFAULT_LIMITS['max_member_bytes']:
+                    if not events:
+                        raise ValueError(f'journal event {row["seq"]} exceeds archive member byte limit; checkpoint retained')
+                    break
+                events.append(event)
+                encoded.append(line)
+                size += len(line)
+        if not events:
             return {'kind': 'delta', 'action': 'unchanged', 'consumer': consumer,
                     'sequence': start, 'has_more': False}
-        end = rows[-1]['seq']
+        end = events[-1]['seq']
         stream = cursor['feed_id']
         producer = cache.conn.execute("SELECT value FROM meta WHERE key='feed_id'").fetchone()[0]
         output.mkdir(parents=True, exist_ok=True)
@@ -68,7 +82,6 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
         work.mkdir(mode=0o700, parents=True)
         try:
             receipt: dict[str, Any] | None
-            events = [{'seq': r['seq'], 'operation': r['operation'], 'data': json.loads(r['data'])} for r in rows]
             if dst.exists():
                 # Recovery after durable publication and before SQLite cursor commit.
                 from .verify import load_archive, verification_receipt
@@ -81,8 +94,7 @@ def export_changes(cache: Cache, dd: DataDir, cfg: Config, ident: Identity, *, c
                 } or m.get('attachment_policy') != media or m.get('export_set') != export_set:
                     raise RuntimeError(f'existing batch failed recovery validation: {dst}')
             else:
-                body = (_j(e) + '\n' for e in events)
-                data = ''.join(body).encode('utf-8')
+                data = b''.join(encoded)
                 export_id = uuid.uuid4().urn
                 m = M.build_manifest(
                     export_id=export_id, export_set=export_set, created_at=now_ms(),

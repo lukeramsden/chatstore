@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -599,3 +600,42 @@ def test_clean_sighting_import_uses_intervals_without_reading_entity_mappings(fe
         assert dst.conn.execute("SELECT observed_at FROM freshness_ranges WHERE kind='observation'").fetchone()[0] == 300
     finally:
         dst.close()
+
+
+def test_large_event_limit_splits_on_utf8_member_bytes_without_sequence_gaps(feed, monkeypatch):
+    cache, dd, _, _, _ = feed
+    with cache.write():
+        for number in range(10, 20):
+            cache.upsert(msg(number, '字' * 500, None, None, number))
+    monkeypatch.setitem(I.container.DEFAULT_LIMITS, 'max_member_bytes', 8192)
+    sequences = []
+    batches = 0
+    while True:
+        result = export(feed, limit=100000)
+        assert result['action'] == 'written'
+        batches += 1
+        loaded = load_archive(Path(result['path']), 'test-password', dd.staging)
+        try:
+            events = loaded.records['changes']
+            assert sum(len((I._j(event) + '\n').encode('utf-8')) for event in events) <= 8192
+            sequences.extend(event['seq'] for event in events)
+        finally:
+            shutil.rmtree(loaded.tar_path.parent)
+        if not result['has_more']:
+            break
+    assert batches > 1
+    assert sequences == [row[0] for row in cache.conn.execute('SELECT seq FROM changes ORDER BY seq')]
+    assert export(feed, limit=100000)['action'] == 'unchanged'
+
+
+def test_single_oversized_event_retains_consumer_checkpoint(feed, monkeypatch):
+    cache, dd, _, _, _ = feed
+    baseline = export(feed)
+    checkpoint = cache.conn.execute("SELECT sequence FROM export_consumers WHERE consumer='remote'").fetchone()[0]
+    with cache.write():
+        cache.upsert(msg(10, '字' * 2000, None, None, 10))
+    monkeypatch.setitem(I.container.DEFAULT_LIMITS, 'max_member_bytes', 4096)
+    with pytest.raises(ValueError, match='exceeds archive member byte limit'):
+        export(feed, limit=100000)
+    assert cache.conn.execute("SELECT sequence FROM export_consumers WHERE consumer='remote'").fetchone()[0] == checkpoint
+    assert list(dd.exports.glob('*.zip')) == [Path(baseline['path'])]
