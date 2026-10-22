@@ -982,8 +982,8 @@ stanza, parent and dependent lookups; no source indexes or triggers are installe
 Tests exercise WAL-backed edits, deletion, duplicate stanza rows, key changes, replies, media
 reparenting, data-only changes, chat identity/title changes and file-only selection. Baselines,
 a mismatched pending token, and unclassified table changes reject selective reuse. This is a
-routing primitive; atomic auxiliary-database capture and collector handoff still require
-integration. It does not authorize a SQL-only point to skip media checks, or prove end-to-end
+routing primitive used by the eligible collector handoff described below. It does not
+authorize a SQL-only point to skip media checks, or prove end-to-end
 proportional work for WhatsApp.
 
 The WhatsApp adapter now accepts `ExtractStats.selected_message_rowids` for message extraction.
@@ -995,8 +995,9 @@ high ID. Explicit full adapter reconciliation continues to visit all groups.
 
 Tests compare selected duplicate-group output with full output and count SQLite VM work while
 unselected history grows from 100 to 10,000 rows. That bound covers message grouping and its
-dependencies only. The collector does not yet dispatch WhatsApp through prepared selective coverage. Header work, joint auxiliary
-capture, frozen media evidence and collector integration remain
+dependencies only. The collector now dispatches eligible file-free WhatsApp sources through
+prepared selective coverage. Incremental header emission, efficient auxiliary deltas and
+frozen file-backed media evidence remain
 necessary before the WhatsApp end-to-end efficiency claim can be made.
 
 WhatsApp header JID discovery now uses private indexes and successive greater-than seeks for
@@ -1032,8 +1033,8 @@ This is atomic publication of evidence gathered from separate source read transa
 proof of a simultaneous cross-database source instant. The caller still needs to establish and
 monitor the optional-file presence and source views, bind their discovery/checkpoints, and
 coordinate retries with the main capture. Auxiliary row collection is currently a full pass;
-there is no incremental auxiliary page mirror yet. WhatsApp collector dispatch remains
-unconnected. This handoff alone does not authorize skipping source
+there is no incremental auxiliary page mirror yet. The guarded collector below supplies optional
+source views and records their capture evidence. This handoff alone does not authorize skipping source
 or media discovery.
 
 ## Selective WhatsApp canonical coverage
@@ -1047,12 +1048,36 @@ coverage or unclassified dependencies require full reconciliation.
 
 Prepared WhatsApp sync requires frozen auxiliary alias evidence. File-backed media still forces
 full canonical extraction until durable WhatsApp file evidence is integrated; an indexed private
-path lookup avoids scanning all media rows merely to establish that gate. This is not production
-collector dispatch or proof of complete media coverage.
+path lookup avoids scanning all media rows merely to establish that gate. Eligible production
+dispatch uses this controller; complete file-backed media coverage remains unproved.
 
 Tests run baseline, clean, old edit, historical backfill, deletion and auxiliary-only alias
 deletion through native preparation, canonical selection and mirror acknowledgement. They verify
 unrelated re-sighting, retained historical revisions and absence evidence. An interrupted write
 does not advance the canonical checkpoint; retry succeeds from the same prepared point after
-ChatStorage, LID and Contacts disappear. Auxiliary discovery/checkpoint coordination, efficient
-auxiliary deltas, media capture and CLI dispatch remain to be integrated.
+ChatStorage, LID and Contacts disappear. Efficient auxiliary deltas and file-backed media
+capture remain to be integrated.
+
+## Guarded WhatsApp collector dispatch
+
+The ordinary CLI now dispatches eligible WAL-backed WhatsApp sources through `native_whatsapp`.
+Pending points are resumed before source discovery, so a committed candidate can finish with
+its source databases offline. Baseline, schema/policy reset and validated continuation use the
+same native mirror and canonical acknowledgement protocol as Messages. File-backed media still
+uses ordinary capture; a newly introduced path rejects and rolls back the native candidate
+before fallback, preserving the previous cursor and alias evidence.
+
+`AuxiliaryViews` watches both optional database paths and their WAL paths, including missing
+files. It opens present sources read-only, pins SQL read transactions, and verifies stable
+monitor tokens while pinning and again in the native pre-publication hook. The bound capture
+context records presence, file identities, schema versions and process-local monitor/SQLite
+version evidence. These values describe that capture; they are not durable auxiliary WAL
+cursors and do not authorize skipping auxiliary rows after restart. Alias collection still
+reads the relevant auxiliary rows on each capture. Source commits after final validation
+remain for the following poll; separate SQLite databases do not share a global read instant.
+
+Tests exercise the CLI with clean polls, historical edits/deletions, later Contacts creation,
+offline pending retry and media-path fallback. Coordinator tests verify read-only access,
+pinned old rows during later WAL commits, creation/replacement rejection, symlink failure and
+closed connections/monitors. Source changes detected during preparation reject publication;
+the watch loop reports the existing retry-required error and retains the collection cadence.
