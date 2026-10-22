@@ -26,6 +26,14 @@ explicitly without advancing that consumer; it is never skipped. Large-event fra
 not implemented. Tests exercise UTF-8 size splitting, gap-free batch sequences and that failure
 boundary. This does not bound the sum of optional attachment blob sizes.
 
+Within one archive parse, exact duplicate canonical bodies share their JSON Schema result.
+The memo key hashes the complete JSON body, including provenance fields excluded from the
+canonical revision digest. Digest checks and event/revision envelope checks still run for each
+row. Only successful schema checks enter the memo, and every archive load starts with an empty
+memo, including the import boundary after export verification. This adds exact-body hashing
+to avoid much more expensive duplicate schema passes; it does not reuse an earlier ciphertext's
+validation or change cryptographic verification.
+
 Export is a local durability checkpoint, separate from upload/delivery. Keep the SQLite cache,
 its WAL and all committed batches until delivery succeeds. Discover committed pending work,
 including after losing an export command's stdout, with:

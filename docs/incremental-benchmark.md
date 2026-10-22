@@ -424,3 +424,36 @@ The run also exposed an oversized journal member when requesting 100,000 events;
 now splits by encoded UTF-8 member size as well as event count, with regression tests for
 gap-free sequences and oversized-single-event checkpoint retention.
 [Raw production-path measurements](incremental-native-whatsapp-benchmark.json).
+
+## Archive validation profile and exact-body deduplication
+
+The 100,000-row run above predates archive-local schema deduplication. To identify its CPU
+bottleneck, run the same production-path harness under cProfile with 10,000 message rows and
+1,000 additional alias pairs. Before the change, 36 archive loads spent 34.0 cumulative seconds
+parsing/validating records, including 29.6 seconds in 92,160 canonical JSON Schema checks.
+Revision and current-head events often carried the identical canonical body.
+
+The verifier now memoizes successful schema checks by a hash of the complete body within that
+single parse. It still validates digests and envelopes for every occurrence. Complete-body
+keys distinguish invalid provenance even when the claimed canonical digest is unchanged.
+The memo is discarded between archive loads, so export and import perform independent checks.
+
+| Profile counter | Before | After |
+| --- | ---: | ---: |
+| Canonical schema checks | 92,160 | 46,088 |
+| Schema validation cumulative seconds | 29.60 | 16.43 |
+| Archive parsing/validation cumulative seconds | 34.03 | 21.90 |
+| Complete profiled run seconds | 50.04 | 40.69 |
+| Baseline export CPU seconds | 18.83 | 11.97 |
+| Baseline import CPU seconds | 22.09 | 16.21 |
+
+Both runs used the same synthetic parameters with separate fixtures and full encryption,
+digest, schema and import checks. These are cProfile-instrumented timings, not uninstrumented
+performance estimates. Source/cache timing varied between runs, and the storage write
+amplification remains unresolved. The 100,000-row production measurements should not be read
+as post-optimization results. Tests verify fresh validation on another parse and rejection of
+changed provenance, corrupted content and mismatched revision wrappers.
+
+Reproduce the current profile with `.venv/bin/python -m cProfile -o /tmp/chatstore-wa.pstats
+scripts/benchmark_native_whatsapp.py --messages 10000 --aliases 1000 --pipeline` on one line.
+[Before/after counters and stage measurements](incremental-verification-profile.json).
