@@ -50,3 +50,10 @@ not proof of the full performance requirement.
 
 Measured synthetic performance and preservation tests are separate evidence. Neither
 substitutes for the requested representative full-workload audit.
+
+## Platform checks
+
+The macOS CI job builds the source decoder and runs all checks. A separate Linux
+job runs archive round trips, incremental preservation/recovery, archive validation
+and real HTTPS delivery tests without source apps or the macOS decoder. It exercises
+the importer/delivery platform directly; source collection remains macOS-specific.

@@ -17,3 +17,18 @@ jobs:
       - run: .venv/bin/ruff check src tests scripts
       - run: .venv/bin/mypy src
       - run: .venv/bin/pytest -q
+  preservation-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m venv .venv && .venv/bin/pip install -e '.[dev]'
+      - name: Verify archive preservation and delivery on Linux
+        run: >-
+          .venv/bin/pytest -q
+          tests/integration/test_archive.py
+          tests/integration/test_incremental.py
+          tests/integration/test_delivery_https.py
+          tests/unit/test_archive_validation.py
