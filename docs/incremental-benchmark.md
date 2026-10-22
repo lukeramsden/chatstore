@@ -560,3 +560,30 @@ integrating a codec requires end-to-end measurements and schema/recovery compati
 
 Reproduce with `.venv/bin/python scripts/benchmark_journal_encoding.py`.
 [Raw journal encoding measurements](incremental-journal-encoding.json).
+
+
+## Release export buffers before verification
+
+The exporter retained both its per-event encoded lines and their joined JSONL member after
+writing the TAR. Both copies stayed live through encryption and authenticated verification.
+It now clears the line list after joining and releases the joined bytes after writing the TAR
+member. Recovery also clears its encoded lines before loading the existing archive. Parsed
+events remain available for exact recovery comparison and attachment discovery.
+
+A separate-process before/after run exported 200 synthetic messages with deterministic random
+base64 text, 16,000 characters each, through real encrypted archive creation and verification.
+The resulting batch contained 401 events. `tracemalloc` started immediately before export.
+
+| Python traced allocation | Before | After |
+| --- | ---: | ---: |
+| Live at verification entry | 21,750,766 bytes | 8,183,464 bytes |
+| Peak during the entire export | 46,315,855 bytes | 32,748,255 bytes |
+
+Peak traced allocations fell 29.3%. These figures exclude native allocations and setup before
+export; they are not process RSS or an estimate for every source history. This changes buffer
+lifetimes only. Event bytes, authentication, archive retention and checkpoint order are
+unchanged. The archive layer's 23 incremental integration tests passed, including cold restore,
+publication recovery, byte bounds and consumer lineage.
+
+Reproduce with `PYTHONPATH=src:. .venv/bin/python scripts/benchmark_export_memory.py`.
+[Raw allocation measurements](incremental-export-memory.json).

@@ -1,0 +1,18 @@
+{
+  "before": {
+    "verification_entry_current_bytes": 21750766,
+    "verification_entry_peak_bytes": 25127112,
+    "export_peak_bytes": 46315855,
+    "events": 401,
+    "scope": "Python traced allocations during actual encrypted export; synthetic 200 messages with deterministic base64 random 16000-character text. Excludes allocations before export and native-library memory. One run per variant."
+  },
+  "after": {
+    "verification_entry_current_bytes": 8183464,
+    "verification_entry_peak_bytes": 21709314,
+    "export_peak_bytes": 32748255,
+    "events": 401,
+    "scope": "Python traced allocations during actual encrypted export; synthetic 200 messages with deterministic base64 random 16000-character text. Excludes allocations before export and native-library memory. One run per variant."
+  },
+  "before_commit": "c34ba55e741485a6f005ea13e8095d76d67af05c",
+  "after_commit": "c22f347"
+}
