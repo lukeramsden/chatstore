@@ -195,3 +195,19 @@ def test_interrupted_selected_whatsapp_capture_retries_after_sources_expire(hist
     assert result.exit_code == 0, result.run
     assert any(row['text'] == 'retained interrupted WhatsApp edit' for row in cache.iter_records('messages'))
     assert mirror.pending() is None and mirror.continuation() == child
+
+
+def test_policy_upgrade_migrates_legacy_alias_binding_without_source_databases(history, monkeypatch):
+    from chatstore import prepared_sync
+
+    root, dd, adapter, cfg, ident, _, _, mirror, cache, original, expected = history
+    mirror.conn.execute('DROP TABLE cs_native_wa_alias_state')
+    for name in ('ChatStorage', 'LID', 'ContactsV2'):
+        (root / f'{name}.sqlite').rename(root / f'offline-{name}.sqlite')
+    monkeypatch.setattr(prepared_sync, 'policy_signature', lambda *args: 'upgraded-alias-policy')
+    result = run_prepared_sync(adapter, dd, cfg, ident, cache, PreparedSync(mirror, original, 'ChatStorage'))
+    assert result.exit_code == 0, result.run
+    recovered = mirror.continuation()
+    assert recovered.token != original.token
+    assert aliases.read(mirror.conn, recovered.token) == expected
+    assert recovered.observed_at == original.observed_at

@@ -46,7 +46,7 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
         policy = policy_signature(adapter, cfg)
         source_path = adapter.discover(cfg)['ChatStorage']
         for continuation in (True, False):
-            after = previous.cursor if continuation and previous and previous.policy_tag == policy else None
+            after = previous.cursor if continuation and previous and previous.policy_tag == policy and not previous.context.get('native_rebase_required') else None
             try:
                 with WalSource(source_path) as source, source.view(after) as view:
                     if check_schema(view.connection, REQUIRED):

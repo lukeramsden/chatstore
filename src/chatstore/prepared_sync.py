@@ -27,7 +27,7 @@ from .adapters import (
     wal,
     wal_image,
 )
-from .adapters.base import SourceAdapter
+from .adapters.base import SourceAdapter, check_schema
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.native_mirror import MirrorUnavailable, NativeMirror, PreparedCapture
 from .adapters.snapshot import Snapshot, SnapshotFile
@@ -55,6 +55,11 @@ def policy_signature(adapter: SourceAdapter, cfg: Config) -> str:
     return hashlib.sha256(json.dumps(policy).encode()).hexdigest()
 
 
+def _capture_binding(capture: dict[str, Any], file_name: str) -> str:
+    return hashlib.sha256(json.dumps({'capture': capture, 'file_name': file_name},
+        sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class PreparedSync:
     mirror: NativeMirror
@@ -67,8 +72,7 @@ class PreparedSync:
 
     @property
     def binding(self) -> str:
-        return hashlib.sha256(json.dumps({'capture': asdict(self.capture), 'file_name': self.file_name},
-            sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        return _capture_binding(asdict(self.capture), self.file_name)
 
     @property
     def observed_at_ms(self) -> int:
@@ -162,6 +166,103 @@ class PreparedSync:
             (self.capture.token, self.binding, source, scope, self.run_urn, receipt))
         cache.set_checkpoint(source, scope, 'native_capture', self.manifest()['prepared_native'])
         return receipt
+
+
+def _recover_pending_policy(adapter, cfg, scope, prepared):
+    from .adapters.messages.adapter import REQUIRED as messages_required
+    from .adapters.whatsapp.adapter import REQUIRED as whatsapp_required
+
+    capture, mirror = prepared.capture, prepared.mirror
+    if mirror.pending() != capture:
+        raise MirrorUnavailable('policy recovery requires the exact pending native capture')
+    if capture.namespace != f'{adapter.source}/{scope}':
+        raise MirrorUnavailable('policy recovery source/scope mismatch')
+    expected_file = 'chat' if type(adapter) is MessagesAdapter else 'ChatStorage'
+    if prepared.file_name != expected_file:
+        raise MirrorUnavailable('policy recovery file binding mismatch')
+    _ = prepared.observed_at_ms
+    required = messages_required if type(adapter) is MessagesAdapter else whatsapp_required
+    if problems := check_schema(mirror.conn, required):
+        raise MirrorUnavailable('retained native rows need a schema migration: ' + '; '.join(problems))
+    policy = policy_signature(adapter, cfg)
+    if policy == capture.policy_tag:
+        raise MirrorUnavailable('prepared capture validation failed without a recoverable policy change')
+
+    def rebind(conn, token):
+        if type(adapter) is MessagesAdapter:
+            media = capture.context.get('messages_media')
+            if media is not None and media != {'format': 1}:
+                raise MirrorUnavailable('policy recovery cannot reinterpret this retained media format')
+            if media is None and conn.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
+                raise MirrorUnavailable('policy recovery requires frozen evidence for file-backed media')
+            if media is not None:
+                state = conn.execute('SELECT point,format FROM cs_native_media_state WHERE id=1').fetchone()
+                if state is None or tuple(state) != (capture.token, 1):
+                    raise MirrorUnavailable('policy recovery retained media point mismatch')
+                conn.execute('UPDATE cs_native_media_state SET point=? WHERE id=1', (token,))
+                if conn.execute("SELECT 1 FROM sqlite_schema WHERE name='cs_native_media_coverage'").fetchone():
+                    conn.execute('UPDATE cs_native_media_coverage SET point=?,full=1 WHERE id=1', (token,))
+        else:
+            if capture.context.get('whatsapp_aliases') != {'format': 1}:
+                raise MirrorUnavailable('policy recovery requires frozen WhatsApp alias evidence')
+            if conn.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
+                raise MirrorUnavailable('policy recovery requires frozen WhatsApp file evidence')
+            if not conn.execute("SELECT 1 FROM sqlite_schema WHERE name='cs_native_wa_alias_state'").fetchone():
+                row = conn.execute('SELECT point,format FROM cs_native_wa_aliases WHERE id=1').fetchone()
+                if row is None or tuple(row) != (capture.token, 1):
+                    raise MirrorUnavailable('policy recovery retained alias format mismatch')
+                conn.execute('CREATE TABLE cs_native_wa_alias_state(id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,evidence_point TEXT NOT NULL)')
+                conn.execute('INSERT INTO cs_native_wa_alias_state VALUES(1,?,?)', (capture.token, capture.token))
+            valid = conn.execute('''SELECT 1 FROM cs_native_wa_alias_state state CROSS JOIN cs_native_wa_aliases aliases
+                WHERE state.id=1 AND state.point=? AND aliases.id=1 AND aliases.format=1
+                AND aliases.point=state.evidence_point''', (capture.token,)).fetchone()
+            if valid is None:
+                raise MirrorUnavailable('policy recovery retained alias point mismatch')
+            conn.execute('UPDATE cs_native_wa_alias_state SET point=? WHERE id=1', (token,))
+
+    recovered = mirror.recover_pending_policy(capture, policy_tag=policy,
+        metadata={'file_name': prepared.file_name, 'binding': prepared.binding}, rebind=rebind)
+    return PreparedSync(mirror, recovered, prepared.file_name)
+
+
+def _retire_recovered_attempts(cache, prepared, source, scope):
+    from .canonical.records import now_ms, restamp
+
+    proof = prepared.capture.context.get('policy_recovery')
+    ancestors = {}
+    while proof is not None:
+        if not isinstance(proof, dict) or not isinstance(proof.get('capture'), dict) or not isinstance(proof.get('metadata'), dict):
+            raise MirrorUnavailable('invalid policy recovery provenance')
+        original, metadata = proof['capture'], proof['metadata']
+        if (metadata.get('file_name') != prepared.file_name or original.get('namespace') != f'{source}/{scope}'
+                or not isinstance(original.get('token'), str)
+                or metadata.get('binding') != _capture_binding(original, prepared.file_name)):
+            raise MirrorUnavailable('policy recovery provenance binding mismatch')
+        ancestors[original['token']] = metadata['binding']
+        proof = original.get('context', {}).get('policy_recovery')
+    if not ancestors:
+        return
+    with cache.write():
+        row = cache.conn.execute('SELECT token,binding FROM capture_coverage_attempts WHERE source=? AND scope=?', (source, scope)).fetchone()
+        if row is not None and row['token'] in ancestors:
+            if row['binding'] != ancestors[row['token']]:
+                raise MirrorUnavailable('superseded canonical coverage binding mismatch')
+            cache.conn.execute('DELETE FROM capture_coverage_attempts WHERE token=?', (row['token'],))
+        for token, binding in ancestors.items():
+            urn = uuid.uuid5(uuid.NAMESPACE_URL, 'chatstore-native-capture/' + token).urn
+            run = cache.get(urn)
+            if run is None or run.get('status') == 'complete':
+                continue
+            if ((run.get('source'), run.get('account_scope')) != (source, scope)
+                    or (run.get('snapshot') is not None and (run.get('snapshot') or {}).get('prepared_native', {}).get('binding') != binding)):
+                raise MirrorUnavailable('superseded canonical run binding mismatch')
+            message = f'prepared capture {token} recovered as {prepared.capture.token}'
+            if any(error.get('code') == 'policy_recovered' and error.get('sample') == message for error in run.get('errors', [])):
+                continue
+            finished = now_ms()
+            errors = [*run.get('errors', []), {'code': 'policy_recovered', 'count': 1, 'sample': message}]
+            cache.upsert(restamp(dict(run, status='failed', finished_at=finished, errors=errors)),
+                         observed_at=finished, sync_run=prepared.run_urn)
 
 
 @contextmanager
@@ -314,7 +415,14 @@ def _run_prepared_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: 
         if run is None:
             raise MirrorUnavailable('canonical native capture run is missing')
         return SyncOutcome(run, 0)
-    prepared.validate(adapter, cfg, scope)
+    try:
+        prepared.validate(adapter, cfg, scope)
+    except MirrorUnavailable:
+        if type(adapter) not in (MessagesAdapter, WhatsAppAdapter):
+            raise
+        prepared = _recover_pending_policy(adapter, cfg, scope, prepared)
+        prepared.validate(adapter, cfg, scope)
+    _retire_recovered_attempts(cache, prepared, adapter.source, scope)
     if type(adapter) is WhatsAppAdapter and prepared.capture.context.get('whatsapp_aliases') != {'format': 1}:
         raise MirrorUnavailable('prepared WhatsApp capture requires frozen auxiliary alias evidence')
     prepared.check_parent(cache, adapter.source, scope)

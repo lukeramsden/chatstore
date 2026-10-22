@@ -282,3 +282,23 @@ def test_live_media_change_during_retention_rejects_native_publication(media_his
         assert watcher._binding is None
     finally:
         watcher.close()
+
+
+def test_policy_upgrade_rebinds_retained_media_after_source_expiry(media_history, tmp_path, monkeypatch):
+    from chatstore import prepared_sync
+
+    adapter, dd, cfg, ident, cache, mirror, _, path, filename, original = media_history
+    content = filename.read_bytes()
+    filename.unlink()
+    path.rename(tmp_path / 'offline-policy-source.sqlite')
+    monkeypatch.setattr(prepared_sync, 'policy_signature', lambda *args: 'upgraded-media-policy')
+    result = run_prepared_sync(adapter, dd, cfg, ident, cache, PreparedSync(mirror, original, 'chat'))
+    assert result.exit_code == 0, result.run
+    recovered = mirror.continuation()
+    assert recovered.token != original.token and recovered.context['native_rebase_required']
+    assert recovered.context['policy_recovery']['capture']['token'] == original.token
+    attachment = next(cache.iter_records('attachments'))
+    assert attachment['availability'] == 'available'
+    assert attachment['blob_sha256'] == hashlib.sha256(content).hexdigest()
+    assert blob_path(dd, attachment['blob_sha256']).read_bytes() == content
+    assert mirror.conn.execute('SELECT point FROM cs_native_media_state').fetchone()[0] == recovered.token

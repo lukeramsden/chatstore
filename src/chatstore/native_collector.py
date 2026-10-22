@@ -71,7 +71,7 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
         # A rejected continuation may still permit a pinned fresh baseline.
         # No prepared point exists at this stage, so fallback cannot lose one.
         for continuation in (True, False):
-            after = previous.cursor if continuation and previous and previous.policy_tag == policy else None
+            after = previous.cursor if continuation and previous and previous.policy_tag == policy and not previous.context.get('native_rebase_required') else None
             try:
                 with WalSource(path) as source, source.view(after) as view:
                     if check_schema(view.connection, REQUIRED):
