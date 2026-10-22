@@ -14,6 +14,7 @@ from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
 from .adapters.whatsapp import auxiliary
+from .adapters.whatsapp import media_watch as whatsapp_media_watch
 from .adapters.whatsapp.adapter import REQUIRED, WhatsAppAdapter
 from .cache import Cache
 from .config import Config, Identity
@@ -21,7 +22,7 @@ from .paths import DataDir
 from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
 from .sync import SyncOutcome
 
-POLICY_MODULES = (auxiliary,)
+POLICY_MODULES = (auxiliary, whatsapp_media_watch)
 
 
 class MediaCaptureRequired(Exception):
@@ -30,7 +31,8 @@ class MediaCaptureRequired(Exception):
 
 def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
             cache: Cache, *, full: bool = False,
-            auxiliary_session: auxiliary.AuxiliarySession | None = None) -> SyncOutcome | None:
+            auxiliary_session: auxiliary.AuxiliarySession | None = None,
+            media_watch: whatsapp_media_watch.PreparedWhatsAppMediaWatch | None = None) -> SyncOutcome | None:
     namespace = f'whatsapp/{ident.scope_for(adapter.source)}'
     directory = dd.root / 'native'
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -52,15 +54,19 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     if check_schema(view.connection, REQUIRED):
                         return None
                     baseline = previous is None or after is None or previous.schema_version != view.schema_version
-                    if baseline and view.connection.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
+                    if baseline and media_watch is None and view.connection.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                         return None
                     with auxiliary_session.views() as optional:
                         context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
                                    'whatsapp_auxiliary': optional.evidence}
+                        if media_watch is not None:
+                            context['whatsapp_media'] = {'format': 1}
                         def validate(conn: sqlite3.Connection, baseline: bool = baseline,
                                      context: dict[str, Any] = context) -> None:
-                            if not baseline and conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
+                            if not baseline and media_watch is None and conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                                 raise MediaCaptureRequired
+                            if media_watch is not None:
+                                media_watch.prepare(conn, full=baseline)
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
                             context['whatsapp_alias_evidence_point'] = conn.execute(

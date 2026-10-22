@@ -100,11 +100,17 @@ class PreparedSync:
         at = self.observed_at_ms
         probe = None
         alias_pairs = None
+        whatsapp_probe = None
         if include_auxiliary and 'whatsapp_aliases' in self.capture.context:
             from .adapters.whatsapp.aliases import read
             if self.capture.context['whatsapp_aliases'] != {'format': 1}:
                 raise MirrorUnavailable('unsupported prepared WhatsApp alias evidence format')
             alias_pairs = read(self.mirror.conn, self.capture.token)
+        if 'whatsapp_media' in self.capture.context:
+            from .adapters.whatsapp.media import read as read_whatsapp_media
+            if self.capture.context['whatsapp_media'] != {'format': 1}:
+                raise MirrorUnavailable('unsupported prepared WhatsApp media evidence format')
+            whatsapp_probe = partial(read_whatsapp_media, self.mirror.conn, self.capture.token)
         if 'messages_media' in self.capture.context:
             from .adapters.prepared_media import read_media
             if self.capture.context['messages_media'] != {'format': 1}:
@@ -112,7 +118,7 @@ class PreparedSync:
             probe = partial(read_media, self.mirror.conn, self.capture.token)
         return BorrowedSnapshot(path.parent, {self.file_name: SnapshotFile(self.file_name,
             str(path), path, path.stat().st_size, '', 0, False, at, at)}, attachment_probe=probe,
-            whatsapp_alias_pairs=alias_pairs)
+            whatsapp_alias_pairs=alias_pairs, whatsapp_media_probe=whatsapp_probe)
 
     def validate(self, adapter: SourceAdapter, cfg: Config, scope: str) -> None:
         if self.mirror.pending() != self.capture:
@@ -205,8 +211,17 @@ def _recover_pending_policy(adapter, cfg, scope, prepared):
         else:
             if capture.context.get('whatsapp_aliases') != {'format': 1}:
                 raise MirrorUnavailable('policy recovery requires frozen WhatsApp alias evidence')
-            if conn.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
+            media = capture.context.get('whatsapp_media')
+            if media is not None and media != {'format': 1}:
+                raise MirrorUnavailable('policy recovery cannot reinterpret WhatsApp media format')
+            if media is None and conn.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                 raise MirrorUnavailable('policy recovery requires frozen WhatsApp file evidence')
+            if media is not None:
+                state = conn.execute('SELECT point,format FROM cs_native_wa_media_state WHERE id=1').fetchone()
+                if state is None or tuple(state) != (capture.token, 1):
+                    raise MirrorUnavailable('policy recovery retained WhatsApp media point mismatch')
+                conn.execute('UPDATE cs_native_wa_media_state SET point=? WHERE id=1', (token,))
+                conn.execute('UPDATE cs_native_wa_media_coverage SET point=?,full=1 WHERE id=1', (token,))
             if not conn.execute("SELECT 1 FROM sqlite_schema WHERE name='cs_native_wa_alias_state'").fetchone():
                 row = conn.execute('SELECT point,format FROM cs_native_wa_aliases WHERE id=1').fetchone()
                 if row is None or tuple(row) != (capture.token, 1):
@@ -373,10 +388,17 @@ def _whatsapp_coverage(adapter, cache, prepared, scope, full):
                 return CaptureCoverage.begin(cache, **args, full=True), None, False, False
             if capture.context.get('whatsapp_aliases') != {'format': 1}:
                 return CaptureCoverage.restart_full(cache, **args), None, False, False
-            # No file-backed unit can be re-sighted from a SQL-only point.
-            if prepared.mirror.conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
+            media_ids = ()
+            if capture.context.get('whatsapp_media') == {'format': 1}:
+                coverage = prepared.mirror.conn.execute('SELECT point,full FROM cs_native_wa_media_coverage WHERE id=1').fetchone()
+                if coverage is None or coverage['point'] != capture.token or coverage['full']:
+                    return CaptureCoverage.restart_full(cache, **args), None, False, False
+                media_ids = tuple(row[0] for row in prepared.mirror.conn.execute("""SELECT media.ZMESSAGE
+                    FROM cs_native_wa_media_changes changes JOIN ZWAMEDIAITEM media ON media.Z_PK=changes.row_id
+                    WHERE media.ZMESSAGE IS NOT NULL"""))
+            elif prepared.mirror.conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
                 return CaptureCoverage.restart_full(cache, **args), None, False, False
-            selection = whatsapp_dependencies.route_changes(prepared.mirror, capture)
+            selection = whatsapp_dependencies.route_changes(prepared.mirror, capture, media_message_ids=media_ids)
             headers_reused = (_whatsapp_aliases_unchanged(cache, prepared)
                 and whatsapp_dependencies.headers_unchanged(prepared.mirror, capture))
             unchanged = (headers_reused and not selection.rowids

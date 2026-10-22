@@ -19,6 +19,7 @@ from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
 from .adapters.whatsapp.adapter import WhatsAppAdapter
 from .adapters.whatsapp.auxiliary import AuxiliarySession
+from .adapters.whatsapp.media_watch import PreparedWhatsAppMediaWatch
 from .cache import Cache
 from .config import Config, Identity
 from .paths import DataDir
@@ -39,7 +40,7 @@ def _validate_text_only(conn: sqlite3.Connection) -> None:
 
 
 def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity,
-                   cache: Cache, *, full: bool = False, media_watch: PreparedMediaWatch | None = None,
+                   cache: Cache, *, full: bool = False, media_watch: PreparedMediaWatch | PreparedWhatsAppMediaWatch | None = None,
                    auxiliary_session: AuxiliarySession | None = None) -> SyncOutcome | None:
     """Return None only when ordinary snapshot capture is required.
 
@@ -49,9 +50,14 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
     if sys.platform != 'darwin':
         return None
     if type(adapter) is WhatsAppAdapter:
-        return native_whatsapp.collect(adapter, dd, cfg, ident, cache, full=full, auxiliary_session=auxiliary_session)
+        if media_watch is not None and not isinstance(media_watch, PreparedWhatsAppMediaWatch):
+            raise ValueError('WhatsApp capture requires its own media watcher')
+        return native_whatsapp.collect(adapter, dd, cfg, ident, cache, full=full,
+                                       auxiliary_session=auxiliary_session, media_watch=media_watch)
     if type(adapter) is not MessagesAdapter:
         return None
+    if media_watch is not None and not isinstance(media_watch, PreparedMediaWatch):
+        raise ValueError('Messages capture requires its own media watcher')
     scope = ident.scope_for(adapter.source)
     namespace = f'{adapter.source}/{scope}'
     directory = dd.root / 'native'

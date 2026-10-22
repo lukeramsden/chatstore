@@ -158,7 +158,7 @@ def cmd_sync(ctx: Ctx) -> Result:
             print(f"[{_s}] {msg}", file=sys.stderr)
 
         session = ctx._sync_sessions.get(s)
-        media_watch = session.native_media(ctx.cfg, ctx.data_dir) if session is not None and s == 'messages' else None
+        media_watch = session.native_media(ctx.cfg, ctx.data_dir, source=s) if session is not None and s in ('messages', 'whatsapp') else None
         auxiliary_session = session.native_auxiliary(ctx.cfg) if session is not None and s == 'whatsapp' else None
         out = collect_native(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
                              media_watch=media_watch, auxiliary_session=auxiliary_session)

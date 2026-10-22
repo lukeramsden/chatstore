@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, closing
 from functools import partial
 from pathlib import Path
@@ -28,9 +28,9 @@ from ..base import (
     native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
-from . import aliases
+from . import aliases, media
 
-POLICY_MODULES = (aliases,)
+POLICY_MODULES = (aliases, media)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -176,7 +176,7 @@ class WhatsAppAdapter:
             selected_chats = {row[0]: (U.whatsapp_jid(row[1]), urn('chat', U.whatsapp_jid(row[1]))) for row in chats}
             stats.bump('prepared_headers_reused')
             try:
-                yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full)
+                yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
             finally:
                 conn.close()
             return
@@ -275,7 +275,7 @@ class WhatsAppAdapter:
         yield from self._aliases(alias_pairs, scope, stats, urn)
 
         # --- messages ---------------------------------------------------------------------
-        yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full)
+        yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
 
         # --- group membership change events ---------------------------------------------
         for r in conn.execute("SELECT Z_PK, ZCHANGETYPE, ZCHANGEDATE, ZGROUPJID, ZMEMBERJIDS FROM ZWAGROUPMEMBERSCHANGE"):
@@ -346,7 +346,8 @@ class WhatsAppAdapter:
 
     def _messages(self, conn: sqlite3.Connection, scope: str, stats: ExtractStats, urn: Any,
                   chat_by_pk: dict[int, tuple[str, str]], me_urn: str, media_root: Path,
-                  checkpoints: dict[str, Any] | None, full: bool) -> Iterator[Emission]:
+                  checkpoints: dict[str, Any] | None, full: bool,
+                  probe: Callable[[dict[str, Any]], tuple[str, str | None, int | None]] | None = None) -> Iterator[Emission]:
         max_pk = conn.execute("SELECT max(Z_PK) FROM ZWAMESSAGE").fetchone()[0] or 0
         selected = None if full else stats.selected_message_rowids
         since_pk = 0
@@ -401,7 +402,7 @@ class WhatsAppAdapter:
                 rel = media['ZMEDIALOCALPATH']
                 if not rel.startswith('/') and '..' not in rel.split('/'):
                     stats.watch_path(media_root / rel)
-            media_probe = _probe_media(media_root, media)
+            media_probe = probe(dict(media)) if probe is not None and media is not None else _probe_media(media_root, media)
             key = str(g['ZCHATSESSION']) + ':' + str(g['ZSTANZAID'])
             digest = native_fingerprint(
                 [dict(r) for r in native_rows], dict(media) if media else None,
