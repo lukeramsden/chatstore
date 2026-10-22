@@ -995,7 +995,17 @@ high ID. Explicit full adapter reconciliation continues to visit all groups.
 
 Tests compare selected duplicate-group output with full output and count SQLite VM work while
 unselected history grows from 100 to 10,000 rows. That bound covers message grouping and its
-dependencies only. Header identity discovery still queries message history, and the collector
-does not yet dispatch WhatsApp through prepared selective coverage. Header work, joint auxiliary
+dependencies only. The collector does not yet dispatch WhatsApp through prepared selective coverage. Header work, joint auxiliary
 capture, frozen media evidence, canonical withdrawal/coverage and collector integration remain
 necessary before the WhatsApp end-to-end efficiency claim can be made.
+
+WhatsApp header JID discovery now uses private indexes and successive greater-than seeks for
+sender, recipient and incoming-recipient values. Unlike stepping a `SELECT DISTINCT` index
+scan, each lookup jumps past all repeated occurrences of the preceding value. The incoming
+recipient index is partial on `ZISFROMME=0`, preserving the owner-identity rule and alias closure.
+Tests compare the complete results with `DISTINCT` across null/empty/Unicode values, old edits
+and deletions. Warm SQLite VM work remains bounded with fixed distinct keys while history grows
+from 100 to 100,000 messages. Building those indexes still requires a baseline pass. Ordinary
+snapshot collection rebuilds private indexes; only a retained native mirror can amortize that
+cost. Header emission still scales with distinct identities and other header rows, so this
+change does not establish fully incremental header materialization.
