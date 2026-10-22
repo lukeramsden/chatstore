@@ -1330,3 +1330,18 @@ their schema. All writes stay in the private mirror transaction. Source restart,
 schema/policy change or a mismatched ownership point still requires reconciliation.
 This does not yet make direct-chat renames, new/deleted chats or identity changes
 selective.
+
+
+## Bulk WAL scratch-space budget
+
+Bulk sync/import retains `synchronous=FULL` and the existing page-cache limit. It
+now requests automatic checkpoints after approximately 64 MiB of WAL pages instead
+of disabling checkpointing for an entire history capture. Successful batch commits
+remain durable. Individual transactions and pinned readers can exceed this soft
+budget; SQLite keeps the frames needed by readers. Exit restores the caller's
+checkpoint setting and attempts the existing final truncate checkpoint.
+
+Tests verify actual WAL reuse across committed batches, rollback of an interrupted
+batch without losing prior commits, unchanged durability/cache settings, and pinned
+readers retaining their snapshot until release. This controls temporary WAL growth;
+it does not compress or prune the canonical journal, revisions or ciphertext.

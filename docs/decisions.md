@@ -102,11 +102,15 @@ Every non-obvious choice, what was decided, and the evidence behind it. Grouped 
   `Cache.bulk()` (no WAL autocheckpoint during a run, checkpoint+truncate on exit) took a full
   WhatsApp sync from 282 s to 119 s. Preservation checkpoints now use `synchronous=FULL` and a
   64 MiB page-cache cap, since a successful capture may be unavailable to recapture after a crash.
-- **WhatsApp reconciliation**: all logical groups are checked every poll. The former 5,000-row
-  look-back missed historical changes. Checkpoint going backwards still reports a source reset;
-  bounded source-side change detection remains unresolved.
-- **Messages incremental** re-decodes every row and relies on fingerprints (~10 s) because edits,
-  receipts and tapbacks mutate old rows. A row-id checkpoint would miss them.
+  Bulk writes now checkpoint at a 64 MiB soft WAL budget: deferring every checkpoint
+  accumulated 44.9 GB of temporary WAL in the larger synthetic fixture.
+- **WhatsApp reconciliation**: monitored native captures route old/new dependencies to complete
+  affected stanza groups. Ordinary snapshot fallback reconciles all groups. The former recent-row
+  window remains removed because it missed historical changes. WAL loss or unavailable monitoring
+  can require source reconciliation; limitations are explicit in the preservation documentation.
+- **Messages incremental** uses native dependency routing and selected helper decoding where
+  source coverage is proven. Ordinary reconciliation retains full decoding when that proof is
+  unavailable. A message-row-id high-water mark alone would miss historical edits and receipts.
 - **Source absence is evidence, not deletion.** Full reconcile marks
   `source_observations.present = absent_from_source`; records stay current and searchable.
 - **Adapters report `scanned_tables`**, because reconciling only tables that emitted a row meant a

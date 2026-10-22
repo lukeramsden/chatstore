@@ -909,7 +909,7 @@ The larger acceptance command is:
 .venv/bin/python scripts/benchmark_native_whatsapp.py \
   --messages 500000 --aliases 1000 --chats 1000 \
   --media-items 475000 --media-files 5000 --media-bytes 4096 \
-  --file-media --checkpoint-setup --wal-resets --pipeline
+  --file-media --checkpoint-setup --wal-resets --sample-resources --pipeline
 ```
 
 `--checkpoint-setup` checkpoints fixture construction and commits a fresh WAL frame
@@ -919,3 +919,25 @@ File bytes are deterministic synthetic binary data. Counts approximate a larger
 source shape but do not establish real-media content diversity, throughput for larger
 attachments, direct energy cost or actual remote-host transfer. The large command's
 results are not claimed until its complete JSON output and final assertions pass.
+
+
+## Large-fixture WAL failure and checkpoint correction
+
+The first 500,000-message / 475,000-media-row / 5,000-file attempt was terminated
+before initial capture completed. Its canonical cache WAL reached **44,924,360,552
+bytes** while bulk checkpointing was disabled. The
+[external observation](incremental-large-wal-failure.json) records this failed run;
+it is not a completed stage measurement or a successful large-history benchmark.
+The terminated fixture was removed and its disk space reclaimed.
+
+Bulk writes now request automatic checkpoints at a 64 MiB soft WAL budget.
+[The sampled smoke run](incremental-bounded-wal-smoke.json) validates the harness
+and small encrypted pipeline. The larger acceptance run still needs to complete
+under the corrected policy before a large-scale resource improvement is claimed.
+
+`--sample-resources` samples parent resident memory/physical footprint and producer/
+importer WAL file sizes on a 10 ms interval. These are sampled per-stage maxima,
+not guaranteed instantaneous peaks; retained allocations from previous stages remain
+part of the process. Sampling overhead is included while active. Native-mirror WAL
+size and helper memory are outside these counters. The separate lifetime RSS metric
+is retained and must not be mistaken for isolated stage memory.

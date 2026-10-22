@@ -32,3 +32,4 @@ jobs:
           tests/integration/test_incremental.py
           tests/integration/test_delivery_https.py
           tests/unit/test_archive_validation.py
+          tests/unit/test_bulk_wal.py

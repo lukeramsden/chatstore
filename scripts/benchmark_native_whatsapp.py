@@ -7,10 +7,12 @@ import json
 import platform
 import random
 import resource
+import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from contextlib import closing
 from pathlib import Path
@@ -46,6 +48,7 @@ def main():
     parser.add_argument('--archive-media', choices=('text', 'available-media'), default='text')
     parser.add_argument('--batch-limit', type=int, default=5000)
     parser.add_argument('--sqlite-stats', action='store_true')
+    parser.add_argument('--sample-resources', action='store_true', help='Sample parent resident memory, footprint and canonical WAL file sizes every 10 ms.')
     parser.add_argument('--disable-cache-spill', action='store_true')
     parser.add_argument('--database-layout', action='store_true')
     args = parser.parse_args()
@@ -72,9 +75,45 @@ def main():
     def measure(stage, operation):
         sqlite_before = sqlite_stats()
         before = io_counters()
+        peaks = {}
+        stop = threading.Event()
+        sampler = None
+        def sample():
+            values = io_counters(include_memory=True) or {}
+            for name in ('resident_bytes', 'physical_footprint_bytes'):
+                if name in values:
+                    peaks[name] = max(peaks.get(name, 0), values[name])
+            for name, cache in connections.items():
+                wal = cache.path.with_name(cache.path.name + '-wal')
+                try:
+                    size = wal.stat().st_size
+                except FileNotFoundError:
+                    size = 0
+                key = name + '_wal_bytes'
+                peaks[key] = max(peaks.get(key, 0), size)
+            peaks['samples'] = peaks.get('samples', 0) + 1
+        def sampling():
+            try:
+                while not stop.wait(0.01):
+                    sample()
+            except OSError as exc:
+                peaks['error'] = type(exc).__name__
+        if args.sample_resources:
+            sample()
+            sampler = threading.Thread(target=sampling, daemon=True)
+            sampler.start()
         wall, cpu = time.perf_counter(), time.process_time()
-        result, details = operation()
-        elapsed = {'wall_seconds': time.perf_counter() - wall, 'cpu_seconds': time.process_time() - cpu}
+        try:
+            result, details = operation()
+            elapsed = {'wall_seconds': time.perf_counter() - wall, 'cpu_seconds': time.process_time() - cpu}
+        finally:
+            stop.set()
+            if sampler is not None:
+                sampler.join()
+        if args.sample_resources:
+            sample()
+            elapsed['sampled_peaks'] = peaks
+
         after = io_counters()
         if before is not None and after is not None:
             elapsed.update({key: after[key] - before[key] for key in before})
@@ -291,12 +330,16 @@ def main():
         'media_items': args.media_items, 'media_files': args.media_files if args.file_media else 0, 'media_bytes': args.media_bytes, 'chats': args.chats,
         'setup_checkpointed': args.checkpoint_setup,
         'file_media': args.file_media, 'archive_media': args.archive_media, 'wal_resets': args.wal_resets,
+        'resource_sampling': args.sample_resources,
         'sqlite_stats': args.sqlite_stats, 'cache_spill_disabled': args.disable_cache_spill, 'platform': platform.platform(),
         'scope': (f'Synthetic source includes {args.media_files} watched deterministic files of {args.media_bytes} bytes each. ' if args.file_media else 'Synthetic source has no file-backed media. ') + 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof and energy. File population and byte sizes are explicit fixture parameters; synthetic file bytes do not establish real-media type/content diversity. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
+        'resource_sampling_scope': 'Optional 10 ms sampling records parent resident memory/physical footprint and producer/importer WAL file-size maxima, not a guaranteed instantaneous peak or native-mirror WAL size. Sampling overhead is included in stage CPU/wall while active; resident gauges include allocations retained from earlier stages. Lifetime peak RSS remains a separate high-water mark.',
         'measurements': measurements, 'database_layout': layouts,
         'reset_scope': 'Optional reset stages checkpoint/truncate the source WAL and commit a fresh frame before capture; these source-writer mutations are outside timings. Capture includes a full image backup, native page-graph rebuild and ordered raw-row comparison. This is not bounded reset discovery. Empty or invalid WALs retain ordinary fallback.',
         'layout_scope': 'Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll.'}, indent=2))
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     main()

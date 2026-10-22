@@ -98,14 +98,19 @@ Two rules make the revision model coherent:
 
 ## Sync
 
-`chatstore sync` runs per source:
+`chatstore sync` uses prepared native captures where supported: pinned WAL views,
+changed-page/row routing, retained coverage and canonical acknowledgement. See
+[incremental preservation](incremental-preservation.md). The ordinary snapshot path
+runs per source as follows:
 
 1. `diagnose` – path found, readable, schema compatible, helper present. Incompatible schema fails
    closed (exit 4) rather than emitting misleading records.
 2. Snapshot the database(s) with the SQLite backup API into `snapshots/` (captures committed WAL
    data; the source is opened `mode=ro`; lock waits are bounded).
-3. Extract canonical records in batches of 5,000 within `Cache.bulk()` (WAL autocheckpoint off,
-   `synchronous=FULL`, a 64 MiB page-cache limit, checkpoint+truncate on exit).
+3. Extract canonical records in batches of 5,000 within `Cache.bulk()` (`synchronous=FULL`, a 64 MiB page-cache limit,
+   automatic checkpoints at a 64 MiB soft WAL budget, checkpoint+truncate on exit).
+   Pinned readers and individual transactions may exceed the WAL budget; their
+   required frames remain retained. The caller's checkpoint setting is restored on exit.
 4. `upsert_many` compares fingerprints: `unchanged`, `updated` (new revision), `created`.
    `observe_many` records native keys.
 5. Reconcile: for `initial`, `--mode full`, or an adapter-detected source reset (max row id went

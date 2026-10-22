@@ -38,7 +38,7 @@ from tests.fixtures.synthetic import build_messages, build_whatsapp
 PASSWORD = 'synthetic-benchmark-only'
 
 
-def io_counters() -> dict[str, int] | None:
+def io_counters(*, include_memory: bool = False) -> dict[str, int] | None:
     if sys.platform == 'darwin':
         class Usage(ctypes.Structure):
             _fields_ = [('uuid', ctypes.c_uint8 * 16)] + [(n, ctypes.c_uint64) for n in (
@@ -49,8 +49,11 @@ def io_counters() -> dict[str, int] | None:
         import os
         lib = ctypes.CDLL('/usr/lib/libproc.dylib')
         if lib.proc_pid_rusage(os.getpid(), 2, ctypes.byref(usage)) == 0:
-            return {'storage_read_bytes': usage.read, 'storage_written_bytes': usage.written,
-                    'package_idle_wakeups': usage.idle_wakeups, 'interrupt_wakeups': usage.interrupt_wakeups}
+            values = {'storage_read_bytes': usage.read, 'storage_written_bytes': usage.written,
+                      'package_idle_wakeups': usage.idle_wakeups, 'interrupt_wakeups': usage.interrupt_wakeups}
+            if include_memory:
+                values.update(resident_bytes=usage.resident, physical_footprint_bytes=usage.footprint)
+            return values
     if sys.platform.startswith('linux'):
         entries = dict(line.split(':', 1) for line in Path('/proc/self/io').read_text().splitlines())
         return {'storage_read_bytes': int(entries['read_bytes']), 'storage_written_bytes': int(entries['write_bytes'])}

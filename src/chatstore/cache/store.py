@@ -18,6 +18,8 @@ from ..identity.urn import revision_digest
 from . import freshness, fts
 from .migrations import migrate
 
+_BULK_WAL_BYTES = 64 * 1024 * 1024
+
 
 def _j(o: Any) -> str:
     return json.dumps(o, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
@@ -88,16 +90,21 @@ class Cache:
 
     @contextmanager
     def bulk(self) -> Iterator[None]:
-        """Tune for a long run of large write transactions (sync, import): defer WAL checkpoints
-        while retaining the normal page-cache limit; checkpoint and truncate the WAL on exit."""
+        """Checkpoint committed bulk batches before their WAL grows without limit.
+
+        Readers and individual transactions can exceed this soft budget. SQLite
+        retains every frame they still need; committed data stays durable.
+        """
         if self.readonly:
             raise RuntimeError("cache opened read-only")
-        self.conn.execute("PRAGMA wal_autocheckpoint=0")
+        previous = self.conn.execute('PRAGMA wal_autocheckpoint').fetchone()[0]
+        page_size = self.conn.execute('PRAGMA page_size').fetchone()[0]
+        pages = max(1, _BULK_WAL_BYTES // page_size)
+        self.conn.execute(f'PRAGMA wal_autocheckpoint={pages}')
         try:
             yield
         finally:
-            self.conn.execute("PRAGMA wal_autocheckpoint=1000")
-            self.conn.execute("PRAGMA cache_size=-65536")
+            self.conn.execute(f'PRAGMA wal_autocheckpoint={previous}')
             with contextlib.suppress(sqlite3.OperationalError):
                 self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
