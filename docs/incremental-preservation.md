@@ -787,13 +787,12 @@ page index, WAL page image, native mirror and vnode monitor implementations. Ext
 signature format 6 additionally includes function defaults, keyword defaults, property
 accessors and each declared decorator's wrapped function body. It continues to hash loaded
 code rather than replacement files on disk, and excludes the schema validator runtime cache.
-Tests change each of the seven raw projection layers after prepare: canonical capture
+Generic-adapter tests change each of the seven raw projection layers after prepare: capture
 refuses the policy mismatch, leaves the pending mirror point intact, and succeeds after
 the implementation is restored. Completed receipt recovery remains before policy checking,
 so an already committed capture can still finish acknowledgement after an upgrade.
-Policy mismatch requires a safe rebase before production dispatch; the explicit operation below
-now supports acknowledged points, while automatic dispatch and pending-upgrade recovery remain
-outstanding.
+Policy mismatch requires a safe rebase before native continuation. Acknowledged points use
+collector rebase; compatible pending Messages/WhatsApp captures can use the recovery below.
 
 
 `NativeMirror.rebase` now rebuilds an acknowledged projection in one transaction, replacing
@@ -1142,3 +1141,42 @@ Tests count adapter and alias-reader calls, verify unchanged adapter checkpoints
 freshness, and prove source-title changes still extract while canonical edits force full
 reconciliation. Header materialization for changed captures and incremental auxiliary deltas
 remain open. These tests do not replace the representative end-to-end performance/energy audit.
+
+## Pending capture recovery after policy upgrades
+
+A compatible pending Messages/WhatsApp point can now finish after its extraction policy
+changes, using retained native rows rather than rereading source apps. Recovery creates a new
+full-capture token in one mirror transaction. It preserves the original cursor, parent and
+observation time, and embeds the complete old descriptor plus its file/binding metadata in
+`policy_recovery`. Supported frozen Messages media and WhatsApp alias state are rebound in that
+same transaction. The legacy alias layout can be upgraded without reopening LID/Contacts.
+Unsupported raw schemas, missing retained evidence and unknown adapters still fail closed.
+
+Recovery does not acknowledge the superseded point or advance its source cursor. Before new
+canonical work, matching old coverage attempts can be retired using the recorded binding
+proof; already captured canonical records, revisions and observations remain retained. An
+unfinished old run is marked failed with a `policy_recovered` pointer. The new point performs
+full canonical coverage, committing its receipt/checkpoints only on complete success. A crash
+between mirror recovery and canonical takeover is retryable, including another policy upgrade
+before takeover: the provenance chain identifies the earlier attempt without deleting its
+captured data. A completed old receipt is still acknowledged before policy checking.
+
+The retained page graph remains an artifact of the old raw projection policy. Recovery marks
+`native_rebase_required`, and both collectors force a fresh source baseline before another
+native continuation. The mirror API also rejects direct delta preparation until rebase. That
+baseline is a one-time upgrade cost; recovery itself can finish with source databases offline.
+The recovered observation time remains the original capture time, not the upgrade time.
+
+Tests cover staged canonical writes, two-database interruption, repeated upgrades, offline
+Messages/WhatsApp recovery, encrypted restore of exact recovery provenance, retained attachment
+bytes, legacy aliases and mandatory next-poll rebase. Missing newly required source columns or
+corrupted ancestry bindings cannot retire old coverage or falsely commit a checkpoint. A
+rebind-hook failure rolls back the mirror point and private evidence together. Library callers
+must fetch the mirror's current pending descriptor after interrupted recovery; an old prepared
+object is no longer the current token. Collector retry already does this before source discovery.
+
+This interprets the originally captured rows with the current compatible adapter and records
+both policies. It cannot invent source fields absent from the retained schema or migrate an
+unknown media representation. Such incompatibilities preserve the pending point and report a
+migration requirement rather than silently dropping the capture. Full source compatibility and
+the broader performance/energy acceptance audit remain separate requirements.

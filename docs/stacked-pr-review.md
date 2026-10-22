@@ -40,7 +40,7 @@ verification, rather than current test totals.
 These are draft PRs. They preserve the original scope of
 [issue #10](https://github.com/lukeramsden/chatstore/issues/10) and do not close it.
 Media watcher resource auditing, incremental auxiliary routing, bounded WAL
-reset discovery, pending-policy upgrade recovery and the complete end-to-end
+reset discovery and the complete end-to-end
 workload/energy audit remain open. Header materialization and resource-limit
 behavior also need the final acceptance audit.
 
