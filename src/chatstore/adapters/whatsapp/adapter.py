@@ -53,6 +53,26 @@ ATTACHMENT_KIND = {"image": "image", "video": "video", "audio": "audio", "docume
                    "sticker": "image", "contact": "contact", "location": "location"}
 
 
+def _message_jids(conn: sqlite3.Connection, field: str, *, incoming: bool = False) -> Iterator[str]:
+    """Seek past duplicate JIDs instead of stepping every message's index entry."""
+    if field not in ('ZFROMJID', 'ZTOJID'):
+        raise ValueError('unsupported message JID field')
+    name = 'cs_jid_' + field.lower() + ('_incoming' if incoming else '')
+    condition = ' AND ZISFROMME=0' if incoming else ''
+    conn.execute(f'CREATE INDEX IF NOT EXISTS {name} ON ZWAMESSAGE({field})' +
+                 (' WHERE ZISFROMME=0' if incoming else ''))
+    last = None
+    while True:
+        bound = f' AND {field}>?' if last is not None else ''
+        row = conn.execute(f'SELECT {field} FROM ZWAMESSAGE INDEXED BY {name} '
+                           f'WHERE {field} IS NOT NULL{condition}{bound} ORDER BY {field} LIMIT 1',
+                           (last,) if last is not None else ()).fetchone()
+        if row is None:
+            return
+        last = row[0]
+        yield last
+
+
 def jid_kind(jid: str | None) -> str:
     if not jid:
         return "unknown"
@@ -207,10 +227,10 @@ class WhatsAppAdapter:
         alias_pairs = self._alias_pairs(snap)
         all_jids = set(names) | member_jids | {j for j, _ in chat_by_pk.values()}
         all_jids |= {j for pair in alias_pairs for j in pair}
-        for r in conn.execute("SELECT DISTINCT ZFROMJID FROM ZWAMESSAGE WHERE ZFROMJID IS NOT NULL"):
-            all_jids.add(U.whatsapp_jid(r[0]))
-        for r in conn.execute("SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZTOJID IS NOT NULL"):
-            all_jids.add(U.whatsapp_jid(r[0]))
+        for jid in _message_jids(conn, 'ZFROMJID'):
+            all_jids.add(U.whatsapp_jid(jid))
+        for jid in _message_jids(conn, 'ZTOJID'):
+            all_jids.add(U.whatsapp_jid(jid))
         # The owner's real JIDs (phone + LID) appear as group members and as the counterpart of the
         # "message yourself" chat; flag them is_me so consumers do not treat the owner as a third
         # party (issue #7). The synthetic `me` identity below stays the sender of outgoing messages.
@@ -254,8 +274,7 @@ class WhatsAppAdapter:
         member and its LID is the self-chat's ZCONTACTJID). Nothing else in ChatStorage names the
         owner. The set is closed over LID<->phone alias pairs so both forms are flagged."""
         owners: set[str] = set()
-        for (jid,) in conn.execute(
-                "SELECT DISTINCT ZTOJID FROM ZWAMESSAGE WHERE ZISFROMME = 0 AND ZTOJID IS NOT NULL AND ZTOJID != ''"):
+        for jid in _message_jids(conn, 'ZTOJID', incoming=True):
             j = U.whatsapp_jid(jid)
             if jid_kind(j) in ("jid_phone", "jid_lid"):
                 owners.add(j)
