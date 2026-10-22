@@ -968,3 +968,20 @@ This both restores immediate clean reuse after an old source edit and prevents a
 created auxiliary database from being covered only by a main-file vnode while its later
 commits stay in WAL. A dedicated integration test creates that database between session
 preparation and capture and confirms that a subsequent WAL commit invalidates coverage.
+
+## WhatsApp ChatStorage dependency routing
+
+`adapters.whatsapp.dependencies.route_changes` classifies the exact pending native mirror point.
+It routes changed messages to complete `(ZCHATSESSION, ZSTANZAID)` groups, retains old unit keys
+for deletions and key changes, and includes replies whose parent identity may have changed.
+Media and data-item reparenting selects both old and new message owners. Chat JID changes select
+that chat's message groups; title-only changes require header work without selecting unrelated
+messages. File discovery can supply explicit message IDs separately. Private indexes support
+stanza, parent and dependent lookups; no source indexes or triggers are installed.
+
+Tests exercise WAL-backed edits, deletion, duplicate stanza rows, key changes, replies, media
+reparenting, data-only changes, chat identity/title changes and file-only selection. Baselines,
+a mismatched pending token, and unclassified table changes reject selective reuse. This is a
+routing primitive: WhatsApp selected extraction, atomic auxiliary-database capture and collector
+handoff still require integration. It does not authorize a SQL-only point to skip media checks,
+or prove end-to-end proportional work for WhatsApp.
