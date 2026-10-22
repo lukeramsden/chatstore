@@ -491,3 +491,38 @@ every possible large-transaction problem. No energy measurement is available her
 Reproduce with `.venv/bin/python scripts/benchmark_native_whatsapp.py --messages 30000
 --aliases 100 --pipeline --sqlite-stats`, adding `--disable-cache-spill` for the second case.
 [Raw counter comparison](incremental-sqlite-spill-benchmark.json).
+
+## Retained database layout
+
+`--database-layout` adds a post-run `dbstat` survey and journal-operation byte counts to the
+native WhatsApp harness. This inspection runs after all timed stages and reads database pages;
+it is diagnostic work, not a collector operation. The 30,000-row / 100-extra-alias pipeline
+completed with the default spill setting, full encryption and verified import.
+
+| Object | Producer bytes | Importer bytes |
+| --- | ---: | ---: |
+| Journal (`changes`) | 182,681,600 | 182,681,600 |
+| Current records | 82,432,000 | 82,432,000 |
+| Retained revisions | 82,419,712 | 82,419,712 |
+| Source observations | 11,313,152 | 11,313,152 |
+| Applied-event ledger | absent | 20,017,152 |
+| Producer observation-ID mapping | absent | 15,560,704 |
+| Entire database page allocation | 471,031,808 | 502,992,896 |
+
+Neither database had freelist pages. The journal alone occupies about 39% of the producer
+database. Its revision events contain 69.64 MB of encoded data, head events 58.74 MB, and
+observations 16.85 MB. Current heads, retained revisions and event payloads each carry canonical
+body data. The earlier exact-body validation profile demonstrates duplicate head/revision
+bodies, but the layout totals do not measure their exact deduplication potential: provenance
+and historical-head metadata can differ even when canonical content digests match.
+
+This points to logical payload/storage duplication as a more concrete next target than
+disabling spills. A storage change must preserve expanded event bodies, producer sequence
+hashes, independent consumer checkpoints, orphan recovery and historical provenance. No
+journal rows, revisions or ciphertext were pruned, and no database tuning changed in this
+inspection. Occupied bytes do not by themselves explain every attributed physical write;
+checkpoint and filesystem work still need analysis.
+
+Reproduce with `.venv/bin/python scripts/benchmark_native_whatsapp.py --messages 30000
+--aliases 100 --pipeline --sqlite-stats --database-layout`.
+[Full table/index layout, journal sizes and stage counters](incremental-database-layout.json).

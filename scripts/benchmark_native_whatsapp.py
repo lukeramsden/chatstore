@@ -37,10 +37,12 @@ def main():
     parser.add_argument('--batch-limit', type=int, default=5000)
     parser.add_argument('--sqlite-stats', action='store_true')
     parser.add_argument('--disable-cache-spill', action='store_true')
+    parser.add_argument('--database-layout', action='store_true')
     args = parser.parse_args()
     if sys.platform != 'darwin' or args.messages < 8 or args.aliases < 0 or not 1 <= args.batch_limit <= 100000:
         parser.error('requires macOS, at least eight messages, nonnegative aliases, and batch limit 1..100000')
     measurements = []
+    layouts = {}
     connections = {}
     def sqlite_stats():
         if not args.sqlite_stats:
@@ -149,10 +151,26 @@ def main():
             assert any(row['text'] == 'benchmark historical edit' for row in cache.iter_records('messages'))
             if args.pipeline:
                 assert any(row['text'] == 'benchmark historical edit' for row in target.iter_records('messages'))
+            if args.database_layout:
+                for name, database in connections.items():
+                    layouts[name] = {
+                        'page_size': database.conn.execute('PRAGMA page_size').fetchone()[0],
+                        'page_count': database.conn.execute('PRAGMA page_count').fetchone()[0],
+                        'freelist_count': database.conn.execute('PRAGMA freelist_count').fetchone()[0],
+                        'objects': [dict(row) for row in database.conn.execute('''
+                            SELECT d.name,coalesce(s.type,'system') AS type,count(*) AS pages,
+                                   sum(d.pgsize) AS bytes,sum(d.payload) AS payload_bytes,sum(d.unused) AS unused_bytes
+                            FROM dbstat d LEFT JOIN sqlite_schema s ON s.name=d.name
+                            GROUP BY d.name,s.type ORDER BY bytes DESC''')],
+                        'journal_operations': [dict(row) for row in database.conn.execute('''
+                            SELECT operation,count(*) AS events,sum(length(CAST(data AS BLOB))) AS encoded_data_bytes
+                            FROM changes GROUP BY operation ORDER BY encoded_data_bytes DESC''')],
+                    }
     print(json.dumps({'messages': args.messages, 'additional_aliases': args.aliases, 'batch_limit': args.batch_limit,
         'sqlite_stats': args.sqlite_stats, 'cache_spill_disabled': args.disable_cache_spill, 'platform': platform.platform(),
         'scope': 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
-        'measurements': measurements}, indent=2))
+        'measurements': measurements, 'database_layout': layouts,
+        'layout_scope': 'Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll.'}, indent=2))
 
 
 if __name__ == '__main__':
