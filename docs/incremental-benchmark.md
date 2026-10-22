@@ -587,3 +587,23 @@ publication recovery, byte bounds and consumer lineage.
 
 Reproduce with `PYTHONPATH=src:. .venv/bin/python scripts/benchmark_export_memory.py`.
 [Raw allocation measurements](incremental-export-memory.json).
+
+
+## Parse record lines without a second member-sized list
+
+Verification used `bytes.splitlines()`, which copied every line of a record member before
+parsing the first record. It now iterates line matches and copies only the current line.
+LF, CRLF and CR separators retain their previous behavior, including blank-line handling and
+line numbers in invalid-JSON errors. All row, schema, digest and feed-contiguity checks still run.
+
+Using the same 200-message / 401-event encrypted export allocation benchmark, peak Python-traced
+allocations fell from 32,749,076 to 25,972,311 bytes, another 20.7%. The baseline already includes
+the export-buffer lifetime fix above. Live allocations at verification entry were about 8.18 MB
+in both runs; the saving occurs during parsing. Six new compatibility cases cover each line
+separator with and without a final separator, Unicode/escaped text, blank lines and malformed
+JSON. The focused incremental and record-validation suites passed all 33 tests.
+
+This remains a single synthetic allocation comparison, not a process RSS, CPU or energy result.
+It uses the same `scripts/benchmark_export_memory.py` reproduction command. Raw allocations
+include only work after export starts and exclude native-library allocations.
+[Raw record-line allocation measurements](incremental-record-line-memory.json).
