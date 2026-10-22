@@ -22,6 +22,7 @@ The full suite passes 538 tests. Ruff and mypy are the repository static checks.
 - Open: scalable file monitoring above the measured vnode descriptor ceiling.
 - Open: fully incremental auxiliary/header changes and bounded source recovery after WAL loss.
   Compatible fresh-WAL recovery avoids canonical rebuilding but still compares the source image.
+- Measured: 100,000-message text-only capture/encrypted export/verified import pipelines for both adapters.
 - Open: complete representative end-to-end acceptance measurements, including remote transfer
   and energy where available. Existing CPU/I/O/ciphertext counters do not measure energy.
 

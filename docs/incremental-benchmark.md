@@ -828,3 +828,40 @@ coverage. Verified export/import take 5 / 3 ms. A following real alias edit take
 284 ms wall / 219 ms CPU and rebuilds headers. Full optional-source evidence is
 still read on a changed database; the comparison only avoids unnecessary canonical
 materialization. This fixture is a focused check, not large-history acceptance.
+
+
+## Messages encrypted pipeline at 100,000 messages
+
+Run `.venv/bin/python scripts/benchmark_prepared_messages.py --messages 100000 --pipeline`.
+[Raw results](incremental-messages-pipeline.json) include native preparation, selected
+canonical capture and acknowledgement, encrypted text-only export with built-in
+verification, and verified import into a separate cache. Setup and source mutations
+are outside timings. This fixture has no attachment files. Capture uses the prepared
+controller directly; CLI discovery and source-dispatch overhead are excluded.
+
+| Stage | Capture wall ms | Parent + helper CPU ms | Verified export wall ms | Verified import wall ms | Ciphertext bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Clean poll | 98.6 | 60.9 + 6.3 | 5.8 | 3.6 | 2,279 |
+| Historical edit | 85.6 | 61.8 + 5.0 | 5.7 | 9.7 | 3,142 |
+| New arrival | 73.2 | 58.5 + 4.3 | 5.8 | 6.2 | 2,992 |
+| Chat title | 60.6 | 51.0 + 5.1 | 5.6 | 4.4 | 2,678 |
+| Historical deletion | 63.1 | 54.7 + 4.5 | 4.8 | 3.8 | 2,478 |
+
+The new arrival retains the historical fixture timestamp, exercising discovery
+independently of message date. Historical edit and new-arrival captures each emit
+one message. Deletion withdraws one observation. The importer checks the retained
+revision set, source absence and new arrival after applying the encrypted batches.
+A clean poll emits 11 bounded freshness/run events rather than rewriting history.
+
+Initial capture, export and import take 79.507, 59.772 and 177.795 seconds wall time.
+Their parent CPU times are 53.412, 52.595 and 101.516 seconds; capture also uses
+0.524 seconds helper CPU. Baseline export contains 101 archives / 29,971,162
+ciphertext bytes. Initial attributed writes remain substantial: 6.84 GB capture,
+1.01 GB export and 21.65 GB import. This confirms the baseline write-amplification
+limit rather than resolving it.
+
+Parent lifetime peak RSS reaches 325,238,784 bytes during baseline import. Later
+stages inherit that high-water mark; it is not their isolated memory peak. Storage
+counters cover the parent process and can include deferred writes from prior stages;
+helper I/O is not included. Ciphertext sizes are potential traffic, not observed
+remote network traffic. No direct energy result is available.

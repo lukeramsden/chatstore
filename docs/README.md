@@ -16,3 +16,5 @@ these pages explain the system as built.
 | [history.md](history.md) | Delivery phases, review and corrections, publication, plan corrections |
 
 See [incremental preservation](incremental-preservation.md) for changefeed export, delivery proofs, cold restore, and source-performance limitations.
+
+See [incremental review](incremental-review.md) for issue #10 requirements, validation evidence and remaining acceptance gaps.
