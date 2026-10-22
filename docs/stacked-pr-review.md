@@ -5,11 +5,12 @@ Review the stack from bottom to top. Every PR targets the preceding branch, with
 managed through the official `github/gh-stack` extension (`gh stack`).
 
 The bottom PR preserves the unpublished sync-reporting commit that was already on
-local master. The remaining layers split the issue #10 implementation without
-changing its final source/test contents. Cross-layer tests arrive with the layer
-that provides their dependencies.
+local master. The remaining layers initially split the issue #10 implementation
+without changing its source/test contents. Follow-up work stays in its owning layer,
+including collector integration and archive byte limits. Cross-layer tests arrive
+with the layer that provides their dependencies.
 
-| Order | Branch | Responsibility | Cumulative tests |
+| Order | Branch | Responsibility | Cumulative tests at initial split |
 | --- | --- | --- | ---: |
 | 1 | `codex/00-sync-reporting` | Existing mode and write-outcome reporting | 79 |
 | 2 | `codex/01-preservation-cache` | Transactional journal, freshness, scoped epochs and coverage | 113 |
@@ -30,14 +31,15 @@ Validation for each cumulative layer uses the repository checks:
 ```
 
 The Rust helper was rebuilt from the repository source, including after the
-selected-decoding changes. The final source/test tree matches the pre-split
-implementation; the review map is additional documentation.
+selected-decoding changes. The original split preserved the pre-split source/test
+tree; subsequent commits extend the implementation. Counts above record that initial
+verification, rather than current test totals.
 
 ## Acceptance remains incomplete
 
 These are draft PRs. They preserve the original scope of
 [issue #10](https://github.com/lukeramsden/chatstore/issues/10) and do not close it.
-Media watcher resource/retry auditing, WhatsApp page/auxiliary routing, bounded WAL
+Media watcher resource auditing, incremental auxiliary routing, bounded WAL
 reset discovery, pending-policy upgrade recovery and the complete end-to-end
 workload/energy audit remain open. Header materialization and resource-limit
 behavior also need the final acceptance audit.

@@ -12,10 +12,19 @@ chatstore --json --quiet archive export --consumer linux --media text --output /
 ```
 
 Repeat the export while `data.has_more` is true. The default limit is 5,000 journal events per
-invocation; `--batch-size` changes it. This bounds collection and verification memory, including
+invocation; `--batch-size` changes it. The encoded UTF-8 journal member is also capped at the
+container's 64 MiB member limit, so a high event limit can produce smaller batches with
+`has_more: true`. This bounds collection and verification memory, including
 the initial baseline. There is no date filter or separate catalogue: historical changes and
 context changes share the journal. `--consumer` rejects date, catalogue, minimal-context and
 force options. Changing media policy requires a new consumer and its own baseline.
+
+Byte selection happens before archive construction and encryption, with each selected event
+encoded once. The exporter streams the journal query until either limit is reached and advances
+only through the selected event sequence. A single event larger than the member limit fails
+explicitly without advancing that consumer; it is never skipped. Large-event fragmentation is
+not implemented. Tests exercise UTF-8 size splitting, gap-free batch sequences and that failure
+boundary. This does not bound the sum of optional attachment blob sizes.
 
 Export is a local durability checkpoint, separate from upload/delivery. Keep the SQLite cache,
 its WAL and all committed batches until delivery succeeds. Discover committed pending work,

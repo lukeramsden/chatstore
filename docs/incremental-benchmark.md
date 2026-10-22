@@ -381,3 +381,46 @@ late downloads; directory notifications alone do not prove unchanged file conten
 Reproduce with `.venv/bin/python scripts/benchmark_media_watch.py --files 10000`, then use
 `--files 100000` or `--files 1000 --fd-limit 256` for the failure cases.
 [Raw measurements and environment](incremental-media-watch-benchmark.json).
+
+## Native WhatsApp collector, export and import
+
+Run `.venv/bin/python scripts/benchmark_native_whatsapp.py --messages 100000 --aliases 1000 --pipeline`.
+This uses the production collector, a retained auxiliary watch session, 100,000 synthetic native
+message rows and 1,000 additional LID/phone pairs. File-backed media paths are cleared; the
+fixture retains a not-downloaded attachment. The default export batch limit is 5,000 events.
+Setup and mutations are outside timings. Each exported batch is encrypted and verified by the
+exporter, then imported with trust-boundary verification into a separate empty destination.
+The final assertion confirms the captured historical edit remains in both caches after deletion.
+
+The initial baseline took 61.148 s wall / 48.701 s CPU for native/canonical sync, 83.753 / 76.976 s
+for encrypted verified export, and 195.346 / 129.390 s for verified import. Export produced 102
+immutable archives totaling 30,634,148 ciphertext bytes. Initial work is still substantial;
+these timings are not a claim that baseline creation or cold import became faster.
+
+| Subsequent operation | Sync wall / CPU ms | Verified export wall / CPU ms | Verified import wall / CPU ms | Ciphertext bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Clean after baseline | 140.99 / 101.33 | 8.06 / 5.05 | 3.41 / 3.23 | 2,333 |
+| Historical text edit | 798.30 / 257.32 | 6.60 / 6.24 | 8.00 / 5.63 | 3,381 |
+| Chat title | 163.40 / 158.90 | 5.41 / 5.40 | 7.79 / 5.68 | 3,150 |
+| Auxiliary alias edit | 168.02 / 161.96 | 5.57 / 5.51 | 7.14 / 5.42 | 3,251 |
+| Historical deletion | 171.42 / 166.96 | 5.65 / 5.63 | 5.84 / 5.15 | 3,275 |
+| Clean after changes | 48.25 / 47.05 | 5.21 / 4.92 | 4.52 / 3.65 | 2,402 |
+
+Every subsequent export produced one archive. Header work for changed captures still visits
+unrelated header rows, so these measurements do not prove proportional work as alias/header
+cardinality grows. Clean prepared runs skipped extraction, as asserted by the harness.
+
+The raw file includes Darwin process-attributed storage bytes and wakeups per stage. Baseline
+sync reported 7.18 GB of writes, export 1.06 GB and import 22.33 GB: write amplification remains
+an important audit target. The last clean sync reported 81,920 read bytes and 978,944 written
+bytes. Cached reads can report zero and buffered attribution can cross stage boundaries;
+these are not logical SQL byte counts. Lifetime process peak RSS grew from 166.7 MiB after
+baseline sync to 287.6 MiB by the end. It includes fixture/baseline memory and is not an isolated
+steady-poll memory measurement.
+
+No network transfer, remote durability proof, file-backed media, new-message timing or energy
+measurement is included. Ciphertext size is potential transfer volume, not observed traffic.
+The run also exposed an oversized journal member when requesting 100,000 events; the exporter
+now splits by encoded UTF-8 member size as well as event count, with regression tests for
+gap-free sequences and oversized-single-event checkpoint retention.
+[Raw production-path measurements](incremental-native-whatsapp-benchmark.json).
