@@ -178,3 +178,38 @@ def test_private_media_eligibility_lookup_is_bounded_by_index():
         conn.execute("INSERT INTO attachment VALUES('/new-file')")
         with pytest.raises(MediaCaptureRequired):
             _validate_text_only(conn)
+
+
+def test_session_collector_routes_file_only_changes_without_unrelated_messages(collector, capsys):
+    from chatstore.sync_session import SyncSession
+
+    dd, root, writer = collector
+    filename = root / 'Attachments' / 'watched.bin'
+    filename.write_bytes(b'initial retained bytes')
+    writer.execute("INSERT INTO attachment(ROWID,guid,filename,total_bytes) VALUES(1,'watched-guid',?,22)", (str(filename),))
+    writer.execute('INSERT INTO message_attachment_join(message_id,attachment_id) VALUES(1,1)')
+    writer.commit()
+    cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
+    cfg, ident = load_config(dd), load_identity(dd)
+    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
+        watcher = session.native_media(cfg, dd)
+        def poll():
+            outcome = collect_native(MessagesAdapter(), dd, cfg, ident, cache, media_watch=watcher)
+            assert outcome is not None and outcome.exit_code == 0
+            return outcome.run
+        initial = poll()
+        assert initial['snapshot']['prepared_native']['capture']['baseline']
+        clean = poll()
+        assert clean['counts'].get('messages', 0) == 0
+        filename.write_bytes(b'file-only change through collector')
+        changed = poll()
+        assert changed['counts']['messages'] == 1
+        attachment = next(cache.iter_records('attachments'))
+        assert attachment['availability'] == 'available'
+        assert len(cache.revisions_of(attachment['urn'])) == 2
+        filename.unlink()
+        missing = poll()
+        assert missing['counts']['messages'] == 1
+        assert cache.get(attachment['urn'])['availability'] == 'missing'
+        assert len(cache.revisions_of(attachment['urn'])) == 3
+    assert watcher._monitor is None

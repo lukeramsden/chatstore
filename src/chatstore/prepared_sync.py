@@ -17,7 +17,16 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from .adapters import monitor, native_mirror, page_index, pages, source_view, wal, wal_image
+from .adapters import (
+    media_watch,
+    monitor,
+    native_mirror,
+    page_index,
+    pages,
+    source_view,
+    wal,
+    wal_image,
+)
 from .adapters.base import SourceAdapter
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.native_mirror import MirrorUnavailable, NativeMirror, PreparedCapture
@@ -39,7 +48,7 @@ def policy_signature(adapter: SourceAdapter, cfg: Config) -> str:
             raise MirrorUnavailable('prepared Messages capture requires its decoder')
         with helper.open('rb') as binary:
             helper_digest = hashlib.file_digest(binary, 'sha256').hexdigest()
-    projection = (monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector)
+    projection = (media_watch, monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector)
     policy = [code_signature(adapter, cfg, extra_modules=projection), helper_digest, os.getcwd()]
     return hashlib.sha256(json.dumps(policy).encode()).hexdigest()
 
@@ -183,11 +192,18 @@ def _messages_coverage(adapter, cfg, cache, prepared, scope, full):
             prior = cache.get_checkpoint(adapter.source, scope, 'adapter') or {}
             if 'rowids-file-v1' not in (prior.get('helper', {}).get('capabilities') or []):
                 return CaptureCoverage.restart_full(cache, **args), None
-            # File-backed captures need durable file evidence before a SQL-only
-            # point can authorize retained-unit sightings.
-            if prepared.mirror.conn.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
+            media_ids = ()
+            if capture.context.get('messages_media') == {'format': 1}:
+                # Older prepared points may have frozen bytes but no selective
+                # file coverage proof. Reconcile them without assuming clean media.
+                exists = prepared.mirror.conn.execute("SELECT 1 FROM sqlite_schema WHERE name='cs_native_media_coverage' AND type='table'").fetchone()
+                coverage = prepared.mirror.conn.execute('SELECT point,full FROM cs_native_media_coverage WHERE id=1').fetchone() if exists else None
+                if coverage is None or coverage['point'] != capture.token or coverage['full']:
+                    return CaptureCoverage.restart_full(cache, **args), None
+                media_ids = tuple(row[0] for row in prepared.mirror.conn.execute('SELECT row_id FROM cs_native_media_changes'))
+            elif prepared.mirror.conn.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
                 return CaptureCoverage.restart_full(cache, **args), None
-            selection = route_changes(prepared.mirror, capture)
+            selection = route_changes(prepared.mirror, capture, media_attachment_ids=media_ids)
             for key in selection.old_unit_keys | selection.new_unit_keys:
                 if not key.isascii():
                     return CaptureCoverage.restart_full(cache, **args), None

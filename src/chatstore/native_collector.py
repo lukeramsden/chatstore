@@ -6,8 +6,11 @@ import hashlib
 import sqlite3
 import sys
 from datetime import UTC, datetime
+from functools import partial
+from typing import Any
 
 from .adapters.base import SourceAdapter, check_schema
+from .adapters.media_watch import PreparedMediaWatch
 from .adapters.messages.adapter import REQUIRED, MessagesAdapter, find_helper
 from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
@@ -31,7 +34,7 @@ def _validate_text_only(conn: sqlite3.Connection) -> None:
 
 
 def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Identity,
-                   cache: Cache, *, full: bool = False) -> SyncOutcome | None:
+                   cache: Cache, *, full: bool = False, media_watch: PreparedMediaWatch | None = None) -> SyncOutcome | None:
     """Return None only when ordinary snapshot capture is required.
 
     A pending point is always handled before opening the source. Errors after
@@ -66,23 +69,27 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
                     baseline = previous is None or after is None or previous.schema_version != view.schema_version
                     # A full source eligibility scan is limited to full baselines.
                     # Deltas validate the indexed candidate before its commit.
-                    if baseline and view.connection.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
+                    if baseline and media_watch is None and view.connection.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
                         return None
                     tables = list(REQUIRED)
                     if view.connection.execute("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='chat_recoverable_message_join'").fetchone():
                         tables.append('chat_recoverable_message_join')
-                    context = {'collector': 'messages-native-v1'}
+                    context: dict[str, Any] = {'collector': 'messages-native-v1'}
+                    validator = _validate_text_only if media_watch is None and not baseline else None
+                    if media_watch is not None:
+                        context['messages_media'] = {'format': 1}
+                        validator = partial(media_watch.prepare, full=baseline)
                     if previous is None:
                         pending = mirror.initialize(view, tables, namespace=namespace, policy_tag=policy,
-                            observed_at=observed_at, context=context)
+                            observed_at=observed_at, context=context, validate_rows=validator)
                     elif after is None or previous.schema_version != view.schema_version:
                         pending = mirror.rebase(view, tables, expected_token=previous.token,
-                            namespace=namespace, policy_tag=policy, observed_at=observed_at, context=context)
+                            namespace=namespace, policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validator)
                     else:
                         with WalPages(path.with_name(path.name + '-wal'), view.changes) as pages:
                             pending = mirror.prepare(view, pages, expected_token=previous.token,
                                 namespace=namespace, policy_tag=policy, observed_at=observed_at, context=context,
-                                validate_rows=_validate_text_only)
+                                validate_rows=validator)
                 break
             except MediaCaptureRequired:
                 return None

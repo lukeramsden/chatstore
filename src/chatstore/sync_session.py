@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Self
 
 from .adapters.base import ExtractStats, SourceAdapter
+from .adapters.media_watch import PreparedMediaWatch
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.monitor import CaptureToken, MonitoringUnavailable, SourceMonitor
 from .adapters.whatsapp.adapter import WhatsAppAdapter
@@ -17,6 +18,7 @@ from .cache.extraction import code_signature
 from .cache.freshness import stamp
 from .cache.projection_epoch import read_source
 from .config import Config
+from .paths import DataDir
 
 
 class SyncSession:
@@ -34,6 +36,18 @@ class SyncSession:
         self._epoch = 0
         self._eligible = False
         self._source_paths: list[Path] = []
+        self._native_media: PreparedMediaWatch | None = None
+        self._native_media_key: tuple[str, str] | None = None
+
+    def native_media(self, cfg: Config, dd: DataDir) -> PreparedMediaWatch:
+        key = (str(cfg.source_root('messages').absolute()), str(dd.root.absolute()))
+        if self._native_media_key != key:
+            if self._native_media is not None:
+                self._native_media.close()
+            self._native_media = PreparedMediaWatch(cfg.source_root('messages'), dd)
+            self._native_media_key = key
+        assert self._native_media is not None
+        return self._native_media
 
     def prepare(self, adapter: SourceAdapter, cfg: Config, cache: Cache, scope: str) -> None:
         helper_digest = ''
@@ -152,6 +166,10 @@ class SyncSession:
             self._summary = summary
 
     def close(self) -> None:
+        if self._native_media is not None:
+            self._native_media.close()
+        self._native_media = None
+        self._native_media_key = None
         if self._monitor:
             self._monitor.close()
         self._monitor = None

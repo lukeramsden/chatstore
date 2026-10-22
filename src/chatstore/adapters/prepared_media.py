@@ -32,6 +32,9 @@ def prepare_media(conn: sqlite3.Connection, root: Path, dd: DataDir, *, full: bo
         raise IncompatibleSource('media preparation has no candidate page point')
     conn.execute('CREATE TABLE IF NOT EXISTS cs_native_media(row_id INTEGER PRIMARY KEY,observation TEXT NOT NULL)')
     conn.execute('CREATE TABLE IF NOT EXISTS cs_native_media_state(id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,format INTEGER NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS cs_native_media_changes(row_id INTEGER PRIMARY KEY)')
+    conn.execute('CREATE TABLE IF NOT EXISTS cs_native_media_coverage(id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,full INTEGER NOT NULL)')
+    conn.execute('DELETE FROM cs_native_media_changes')
     ids: Iterator[int]
     if full:
         conn.execute('DELETE FROM cs_native_media')
@@ -47,6 +50,8 @@ def prepare_media(conn: sqlite3.Connection, root: Path, dd: DataDir, *, full: bo
         selected.update(row[0] for row in conn.execute("SELECT row_id FROM cs_native_mirror_changes WHERE name='attachment'"))
         ids = iter(sorted(selected))
     for row_id in ids:
+        if not full:
+            conn.execute('INSERT INTO cs_native_media_changes VALUES(?)', (row_id,))
         row = conn.execute('SELECT filename,total_bytes FROM attachment WHERE ROWID=?', (row_id,)).fetchone()
         if row is None:
             conn.execute('DELETE FROM cs_native_media WHERE row_id=?', (row_id,))
@@ -55,6 +60,8 @@ def prepare_media(conn: sqlite3.Connection, root: Path, dd: DataDir, *, full: bo
         conn.execute('INSERT INTO cs_native_media VALUES(?,?) ON CONFLICT(row_id) DO UPDATE SET observation=excluded.observation',
                      (row_id, json.dumps(asdict(captured), sort_keys=True)))
     conn.execute('INSERT INTO cs_native_media_state VALUES(1,?,1) ON CONFLICT(id) DO UPDATE SET point=excluded.point,format=1', (point[0],))
+    conn.execute('INSERT INTO cs_native_media_coverage VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET point=excluded.point,full=excluded.full',
+                 (point[0], int(full)))
 
 
 def read_media(conn: sqlite3.Connection, token: str, attachment: dict[str, Any]) -> tuple[str, str | None, int | None, str | None]:
