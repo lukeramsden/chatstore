@@ -150,6 +150,7 @@ class WhatsAppAdapter:
         # Indexes on our private copy only.
         conn.execute("CREATE INDEX IF NOT EXISTS cs_msg_key ON ZWAMESSAGE(ZCHATSESSION, ZSTANZAID)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_media_msg ON ZWAMEDIAITEM(ZMESSAGE)")
+        conn.execute("CREATE INDEX IF NOT EXISTS cs_wa_media_file ON ZWAMEDIAITEM(ZMEDIALOCALPATH)")
         conn.execute("CREATE INDEX IF NOT EXISTS cs_data_msg ON ZWAMESSAGEDATAITEM(ZMESSAGE)")
         conn.commit()
         media_root = cfg.source_root(SOURCE) / "Message"

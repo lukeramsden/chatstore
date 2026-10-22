@@ -44,6 +44,7 @@ def route_changes(mirror: NativeMirror, capture: PreparedCapture, *,
     groups: set[tuple[int | None, str]] = set()
     chats: set[int] = set()
     headers: set[str] = set()
+    changed_new_ids: set[int] = set()
 
     def group(row):
         chat, stanza = row.get('ZCHATSESSION'), row.get('ZSTANZAID')
@@ -72,6 +73,7 @@ def route_changes(mirror: NativeMirror, capture: PreparedCapture, *,
                     if key is not None:
                         old_keys.add(key)
                 if after is not None:
+                    changed_new_ids.add(after['Z_PK'])
                     group(after)
             elif change.table in ('ZWAMEDIAITEM', 'ZWAMESSAGEDATAITEM'):
                 for value in (before, after):
@@ -101,10 +103,11 @@ def route_changes(mirror: NativeMirror, capture: PreparedCapture, *,
             selected.update(row[0] for row in reader.execute(
                 'SELECT Z_PK FROM ZWAMESSAGE WHERE ZCHATSESSION IS ? AND ZSTANZAID=?', (chat, stanza)))
         new_keys = set()
-        for row in query('SELECT ZCHATSESSION,ZSTANZAID FROM ZWAMESSAGE WHERE Z_PK IN ({})', selected):
+        for row in query('SELECT Z_PK,ZCHATSESSION,ZSTANZAID FROM ZWAMESSAGE WHERE Z_PK IN ({})', selected):
             key = group(dict(row))
             if key is not None:
                 new_keys.add(key)
-        old_keys.update(new_keys)
+                if row['Z_PK'] not in changed_new_ids:
+                    old_keys.add(key)
         return WhatsAppSelection(capture.token, frozenset(selected), frozenset(old_keys),
                                  frozenset(new_keys), frozenset(headers))
