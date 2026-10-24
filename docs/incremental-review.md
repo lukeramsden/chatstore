@@ -29,8 +29,15 @@ The full suite passes 557 tests. Ruff and mypy are the repository static checks.
   Source databases remain read-only; recovery work scales with source size. Compatible fresh-WAL
   recovery avoids canonical rebuilding but still compares the source image.
 - Measured: 100,000-message text-only capture/encrypted export/verified import pipelines for both adapters.
-- Open: complete representative end-to-end acceptance measurements, including remote transfer
-  and energy where available. Existing CPU/I/O/ciphertext counters do not measure energy.
+- Measured: populated 500,000-message WhatsApp pipeline with 475,000 media rows, 1,000 chats
+  and 5,000 watched files; all 57 timed stages and final assertions passed. See
+  [raw results](incremental-whatsapp-population.json). Initial capture/import remain expensive;
+  first post-baseline clean capture and later clean captures are reported separately.
+- Measured locally: representative populated capture, encrypted export and verified import,
+  with wall/CPU, attributed storage and sampled memory for every stage.
+- Unmeasured: large-workload remote-host transfer/import throughput. Ciphertext sizes report
+  potential transfer volume; local HTTPS tests establish verification/retry correctness.
+  Direct energy instrumentation was unavailable; CPU/I/O counters do not measure energy.
 
 The PR must not claim to close #10 until these gaps are resolved or the issue's acceptance
 criteria explicitly accept the documented source limitations. No retention or capture cadence

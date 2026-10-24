@@ -956,3 +956,87 @@ records fixture arguments, `stage_completed` entries record individual measureme
 and `completed` is written only after final assertions and fixture cleanup succeed.
 Partial entries are diagnostic evidence; the final JSON and successful process exit
 remain required for a completed acceptance run.
+
+
+## Completed populated 500,000-message pipeline (24 October 2026)
+
+[Raw results](incremental-whatsapp-population.json) contain all 57 timed stages. The process exited
+successfully after its final message/media assertions and temporary-fixture cleanup. Each completed
+stage also matched the separate JSONL progress log. Production code was `ecf10bd`; the harness
+was `faec757`. This was a shared laptop run with 10 ms resource sampling, not an isolated
+hardware or energy benchmark. Development-cache cleanup ran during initial capture.
+
+The synthetic source had 500,000 native message rows, 475,000 media rows, 1,000 chats,
+1,000 additional aliases and 5,000 watched files of 4,096 bytes each. The text-only archive
+policy still exercised retained local media hashes and availability. Byte-restoring archive
+behavior is covered separately by the populated available-media smoke and preservation tests.
+
+Timings below are **wall / CPU seconds**. Ciphertext size is potential transfer volume; no WAN
+upload or remote-host throughput is measured by this pipeline. Export includes encryption and
+exact-ciphertext verification; import includes its own trust-boundary verification.
+
+| Scenario | Capture wall / CPU | Export + verify wall / CPU | Import + verify wall / CPU | Ciphertext bytes |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 3532.070 / 1273.258 | 361.088 / 303.108 | 2307.174 / 1206.447 | 155,075,847 |
+| clean | 0.733 / 0.441 | 0.006 / 0.006 | 0.005 / 0.003 | 2,351 |
+| clean-after-new | 0.067 / 0.065 | 0.005 / 0.005 | 0.004 / 0.003 | 2,395 |
+| new-message | 0.112 / 0.081 | 0.006 / 0.006 | 0.009 / 0.005 | 3,199 |
+| old-edit | 0.085 / 0.078 | 0.006 / 0.006 | 0.007 / 0.005 | 3,288 |
+| old-delete | 0.081 / 0.078 | 0.005 / 0.005 | 0.006 / 0.004 | 2,617 |
+| group-event | 0.082 / 0.069 | 0.006 / 0.005 | 0.008 / 0.005 | 2,913 |
+| group-title | 0.076 / 0.070 | 0.006 / 0.005 | 0.008 / 0.004 | 2,788 |
+| chat-archive | 0.074 / 0.069 | 0.005 / 0.005 | 0.007 / 0.004 | 2,732 |
+| chat-title | 2.477 / 0.599 | 0.006 / 0.006 | 0.015 / 0.006 | 3,222 |
+| auxiliary-noop | 0.071 / 0.069 | 0.005 / 0.005 | 0.005 / 0.003 | 2,391 |
+| auxiliary-edit | 0.430 / 0.413 | 0.006 / 0.006 | 0.012 / 0.006 | 3,333 |
+| file-only-edit | 0.081 / 0.071 | 0.005 / 0.005 | 0.009 / 0.005 | 3,121 |
+| file-missing | 0.073 / 0.071 | 0.005 / 0.005 | 0.007 / 0.004 | 2,965 |
+| file-download | 0.076 / 0.072 | 0.005 / 0.005 | 0.007 / 0.005 | 3,138 |
+| wal-reset-clean | 10.326 / 9.822 | 0.007 / 0.006 | 0.009 / 0.004 | 2,407 |
+| wal-reset-old-edit | 9.791 / 9.740 | 0.007 / 0.006 | 0.021 / 0.007 | 3,317 |
+
+The initial baseline is expensive: capture, export and import took approximately 59, 6 and
+38 minutes respectively. This does not demonstrate a cheap initial build. The 510 baseline
+archives carried 2,546,435 journal events in 155,075,847 ciphertext bytes.
+
+The first clean capture after baseline import cost 733 ms and substantially more attributed
+I/O than later clean captures (67–68 ms). Keep both observations when assessing a collector
+whose cache may have been displaced while idle. A new message rebuilt one canonical unit;
+group-event/title/archive-flag cases reused unrelated headers. Direct-chat renaming still
+takes the conservative broader-header path (2.477 s wall, 0.599 s CPU). Genuine alias changes
+took 0.430 s wall, 0.413 s CPU. These are single observations, not latency distributions.
+
+WAL-reset captures took 9.79–10.33 seconds for full-source reconciliation. This is the
+explicitly accepted preservation fallback after log loss, not bounded source discovery.
+Their exported deltas remained small. Ordinary historical edits and deletions used selective
+capture without reset reconciliation.
+
+### Attributed storage and sampled memory
+
+The raw file includes read/write counters and sampled memory/WAL maxima for every stage.
+The following values show the initial-build amplification and the first versus later clean
+capture costs. These are Darwin process-attributed storage bytes, not logical payload bytes;
+cached reads and buffered write attribution can move costs across stage boundaries.
+
+| Stage | Read bytes | Written bytes | Sampled resident bytes |
+| --- | ---: | ---: | ---: |
+| sync-baseline | 246,991,818,752 | 132,542,664,704 | 380,387,328 |
+| export-verified-baseline | 7,468,818,432 | 5,341,679,616 | 449,265,664 |
+| import-verified-baseline | 127,260,733,440 | 204,088,799,232 | 431,685,632 |
+| sync-clean | 117,829,632 | 48,795,648 | 433,487,872 |
+| sync-clean-after-new | 266,240 | 1,150,976 | 434,864,128 |
+| sync-new-message | 4,743,168 | 3,735,552 | 434,438,144 |
+| sync-old-edit | 806,912 | 3,092,480 | 418,103,296 |
+| sync-old-delete | 294,912 | 2,408,448 | 334,659,584 |
+| sync-chat-title | 327,704,576 | 1,753,088 | 423,837,696 |
+
+The maximum sampled resident size across stages was 454,361,088 bytes. Samples include
+retained allocations and do not isolate each stage's incremental allocation. The producer
+canonical WAL maximum during baseline capture was 280,456,672 bytes: the 64 MiB checkpoint
+budget is soft and a transaction can exceed it. This completed run avoids the earlier failed
+44.9 GB WAL accumulation, but the large baseline read/write totals remain a limitation.
+
+Direct energy measurement was unavailable without privileged instrumentation. CPU time and
+wakeups do not establish joules or battery impact. The local HTTPS integration test covers
+retrieved receipt/ciphertext verification and truncated-transfer retry; it does not measure
+large-workload WAN performance.
