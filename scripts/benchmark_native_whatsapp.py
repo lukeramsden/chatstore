@@ -51,6 +51,7 @@ def main():
     parser.add_argument('--sample-resources', action='store_true', help='Sample parent resident memory, footprint and canonical WAL file sizes every 10 ms.')
     parser.add_argument('--disable-cache-spill', action='store_true')
     parser.add_argument('--database-layout', action='store_true')
+    parser.add_argument('--progress-jsonl', type=Path, help='Create a new JSONL file recording completed stages; partial output is not a successful full run.')
     args = parser.parse_args()
     if sys.platform != 'darwin' or args.messages < 8 or args.aliases < 0 or not 1 <= args.batch_limit <= 100000:
         parser.error('requires macOS, at least eight messages, nonnegative aliases, and batch limit 1..100000')
@@ -58,6 +59,9 @@ def main():
         parser.error('media rows must fit the extra messages, with 1..media-items file paths')
     if args.media_bytes < 1 or args.chats < 3 or (args.media_files > 1 and not args.file_media):
         parser.error('requires positive media bytes, at least three chats, and --file-media for multiple files')
+    if args.progress_jsonl is not None:
+        with args.progress_jsonl.open('x') as progress:
+            progress.write(json.dumps({'status': 'started', 'arguments': {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}}) + '\n')
     measurements = []
     layouts = {}
     connections = {}
@@ -125,6 +129,9 @@ def main():
             } for name, values in sqlite_after.items()}
         measurements.append({'stage': stage, **elapsed,
                              'lifetime_peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss, **details})
+        if args.progress_jsonl is not None:
+            with args.progress_jsonl.open('a') as progress:
+                progress.write(json.dumps({'status': 'stage_completed', **measurements[-1]}) + '\n')
         print(f'{stage}: {elapsed["wall_seconds"]:.3f}s wall, {elapsed["cpu_seconds"]:.3f}s CPU', file=sys.stderr, flush=True)
         return result
     with tempfile.TemporaryDirectory(prefix='chatstore-native-wa-') as directory:
@@ -326,6 +333,9 @@ def main():
                             SELECT operation,count(*) AS events,sum(length(CAST(data AS BLOB))) AS encoded_data_bytes
                             FROM changes GROUP BY operation ORDER BY encoded_data_bytes DESC''')],
                     }
+    if args.progress_jsonl is not None:
+        with args.progress_jsonl.open('a') as progress:
+            progress.write(json.dumps({'status': 'completed', 'stages': len(measurements)}) + '\n')
     print(json.dumps({'messages': args.messages, 'additional_aliases': args.aliases, 'batch_limit': args.batch_limit,
         'media_items': args.media_items, 'media_files': args.media_files if args.file_media else 0, 'media_bytes': args.media_bytes, 'chats': args.chats,
         'setup_checkpointed': args.checkpoint_setup,

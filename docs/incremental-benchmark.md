@@ -941,3 +941,18 @@ not guaranteed instantaneous peaks; retained allocations from previous stages re
 part of the process. Sampling overhead is included while active. Native-mirror WAL
 size and helper memory are outside these counters. The separate lifetime RSS metric
 is retained and must not be mistaken for isolated stage memory.
+
+
+The corrected large run was stopped at the user's request on 22 October 2026
+for laptop sleep, during baseline import. Its completed stage timing output reported
+initial capture at 2,620.000 seconds wall / 1,044.965 seconds CPU and baseline export
+at 316.026 seconds wall / 294.545 seconds CPU. The process exited with code 130.
+These partial observations do not establish a successful full pipeline, final
+preservation assertions, or complete resource measurements.
+
+Future runs can use `--progress-jsonl <new-path>` to retain each completed stage's
+measurements before final output. The file must not already exist. A `started` entry
+records fixture arguments, `stage_completed` entries record individual measurements,
+and `completed` is written only after final assertions and fixture cleanup succeed.
+Partial entries are diagnostic evidence; the final JSON and successful process exit
+remain required for a completed acceptance run.
