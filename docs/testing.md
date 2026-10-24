@@ -2,14 +2,16 @@
 
 Synthetic fixtures drive all committed tests; nothing derived from a real database is ever
 committed. Real-source runs are local, use read-only snapshots, and their outputs live under
-`~/.cache/chatstore-dev/` or temp dirs.
+`~/.cache/chatstore-dev/` or temp dirs. Remove inactive development snapshots and test/build
+caches after validation. Do not follow their symlinks into live source media. Benchmark-owned
+temporary fixtures are removed on exit; preserve the small JSON measurements, not old fixtures.
 
 ## Verification contract
 
 Before every commit:
 
 ```sh
-.venv/bin/pytest -q                       # currently 70 tests, ~6 s
+.venv/bin/pytest -q                       # full preservation suite
 .venv/bin/ruff check src tests scripts
 .venv/bin/mypy src
 git status                                 # no *.sqlite / *.zip / *.jsonl tracked

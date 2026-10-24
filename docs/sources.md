@@ -64,13 +64,15 @@ Interpretation rules, each backed by the validation in source-findings:
   no `ZCHATSESSION` marks the run `partial` — one exists on the test machine.
 - Credentials, session secrets and media encryption keys are never emitted.
 
-Every poll reconciles all logical groups: a row-ID window cannot detect older edits, backfills,
-absence or media changes. The `Z_PK` checkpoint remains useful for reporting source resets, but
-does not limit preservation coverage. Archive export is incremental through the transactional
-changefeed; native source scanning remains a performance limitation. Unchanged native message
-groups reuse canonical records through a transactional dependency memo. Fingerprints still
-cover historical rows, context and actual media bytes on every poll; see
-[native extraction reuse](incremental-preservation.md#native-extraction-reuse).
+A row-ID window alone cannot detect older edits, backfills, absence or media changes. During
+eligible monitored sessions, the native collector follows changed SQLite pages and selects
+changed rows plus their dependencies, including historical messages. Point-bound coverage and
+file watches retain unchanged evidence without re-reading every logical group or media file.
+The `Z_PK` checkpoint does not limit preservation coverage. Restart, lost WAL or unsupported
+coverage can require reconciliation; direct-name, identity and structural metadata changes can
+rebuild broader header state. Sources remain read-only. Archive export uses the transactional
+changefeed independently of the source capture path. See
+[incremental preservation](incremental-preservation.md) for proof boundaries and fallbacks.
 
 ## Apple Messages
 
@@ -139,4 +141,5 @@ Media dependencies are registered before hashing, and a further stable capture e
 complete coverage. Interrupted capture, changed source/cache state, monitor restart and watch
 errors force reconciliation. Existing one-shot sync still snapshots and scans each time.
 See [persistent sync lifecycle](incremental-preservation.md#persistent-sync-lifecycle) for the
-JSON stream, limitations and collector integration. Native changed-row selection remains open.
+JSON stream, limitations and collector integration. Native changed-row selection is used for
+eligible WhatsApp and Messages captures; unproven coverage takes the conservative path.

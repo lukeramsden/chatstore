@@ -1,5 +1,10 @@
 # Incremental preservation
 
+The workflow below describes the current implementation. Later component sections retain
+development-stage measurements and limitations; statements about a component not being
+connected describe that stage, before the subsequent integration sections. For the current
+requirement audit and remaining limitations, see [review](incremental-review.md).
+
 `archive export --consumer NAME` exports immutable, bounded changefeed batches. The first
 batches form a baseline; subsequent batches contain changes and compact freshness receipts.
 Monthly exports remain available without `--consumer`. The changefeed format requires this

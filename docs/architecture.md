@@ -13,7 +13,7 @@ source databases (read-only)
                           ┌───────────────┴────────────────┐
                           ▼                                ▼
                 SQLite + FTS5 cache               encrypted archives
-            (rebuildable, user-local)       (catalogue + one ZIP per UTC month)
+            (rebuildable, user-local)       (immutable deltas or monthly ZIPs)
                           │                                │
                   CLI / JSON / agent skill          verify / import / restore
 ```
@@ -24,7 +24,7 @@ be rebuilt from either a live source or a set of archives.
 
 ## Module map
 
-`src/chatstore/` (≈6,100 lines of Python) plus `helpers/messages-decoder/` (Rust).
+`src/chatstore/` (Python) plus `helpers/messages-decoder/` (Rust).
 
 | Module | Responsibility |
 | --- | --- |
