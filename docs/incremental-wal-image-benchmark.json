@@ -1,0 +1,78 @@
+{
+  "rows": 100000,
+  "scope": "Synthetic coordinated WAL validation, persistent page ownership update and indexed candidate SQL reads. Full image only at baseline; no per-update image copies. Excludes source setup/mutation, durable native mirror, canonical extraction, sync/archive work, kernel IO and energy. SQLite/index/WAL-index reads additional to WAL byte counters.",
+  "measurements": [
+    {
+      "stage": "baseline-view-full-image-and-index",
+      "wall_seconds": 0.5988850420108065,
+      "cpu_seconds": 0.5933219999999999,
+      "image_bytes": 11108352
+    },
+    {
+      "stage": "old-edit",
+      "wall_seconds": 0.005462207947857678,
+      "cpu_seconds": 0.005379000000000023,
+      "candidate_rows": 37,
+      "source_rows_returned": 37,
+      "tree_nodes_visited": 3,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4376
+    },
+    {
+      "stage": "new-row",
+      "wall_seconds": 0.01080175000242889,
+      "cpu_seconds": 0.010353000000000057,
+      "candidate_rows": 27,
+      "source_rows_returned": 27,
+      "tree_nodes_visited": 3,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4376
+    },
+    {
+      "stage": "old-delete",
+      "wall_seconds": 0.004893750068731606,
+      "cpu_seconds": 0.0048399999999999554,
+      "candidate_rows": 37,
+      "source_rows_returned": 36,
+      "tree_nodes_visited": 3,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4376
+    },
+    {
+      "stage": "large-payload",
+      "wall_seconds": 0.008609457989223301,
+      "cpu_seconds": 0.008541999999999939,
+      "candidate_rows": 110,
+      "source_rows_returned": 110,
+      "tree_nodes_visited": 6,
+      "wal_pages_retrieved": 18,
+      "wal_discovery_bytes": 74248,
+      "wal_page_reader_bytes": 75368
+    },
+    {
+      "stage": "overflow-only",
+      "wall_seconds": 0.00476683396846056,
+      "cpu_seconds": 0.00469799999999998,
+      "candidate_rows": 27,
+      "source_rows_returned": 27,
+      "tree_nodes_visited": 3,
+      "wal_pages_retrieved": 1,
+      "wal_discovery_bytes": 4208,
+      "wal_page_reader_bytes": 4376
+    },
+    {
+      "stage": "clean",
+      "wall_seconds": 0.0006328329909592867,
+      "cpu_seconds": 0.0005910000000000082,
+      "candidate_rows": 0,
+      "source_rows_returned": 0,
+      "tree_nodes_visited": 0,
+      "wal_pages_retrieved": 0,
+      "wal_discovery_bytes": 88,
+      "wal_page_reader_bytes": 200
+    }
+  ]
+}

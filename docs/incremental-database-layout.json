@@ -1,0 +1,2746 @@
+{
+  "messages": 30000,
+  "additional_aliases": 100,
+  "batch_limit": 5000,
+  "sqlite_stats": true,
+  "cache_spill_disabled": false,
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Synthetic source has no file-backed media. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, WhatsApp media and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+  "measurements": [
+    {
+      "stage": "sync-baseline",
+      "wall_seconds": 13.401394332999189,
+      "cpu_seconds": 11.620972,
+      "storage_read_bytes": 336863232,
+      "storage_written_bytes": 1307627520,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 108,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 8208,
+          "cache_writes": 186920,
+          "cache_spills": 20708,
+          "cache_bytes_after": 78406656,
+          "database_bytes_after": 470794240,
+          "wal_bytes_after": 119512
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5376,
+          "database_bytes_after": 4096,
+          "wal_bytes_after": 1474992
+        }
+      },
+      "lifetime_peak_rss_bytes": 150978560,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 207,
+        "aliases": 102,
+        "messages": 29999,
+        "canonical_units_rebuilt": 29999,
+        "attachments": 1,
+        "events": 2,
+        "unsupported": {
+          "group_event_type:15": 1,
+          "message_type:99": 1,
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 60318,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "initial"
+    },
+    {
+      "stage": "export-verified-baseline",
+      "wall_seconds": 17.714287458999024,
+      "cpu_seconds": 15.828753,
+      "storage_read_bytes": 449306624,
+      "storage_written_bytes": 315346944,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 44589,
+          "cache_writes": 247,
+          "cache_spills": 0,
+          "cache_bytes_after": 78406656,
+          "database_bytes_after": 470794240,
+          "wal_bytes_after": 1137152
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5376,
+          "database_bytes_after": 4096,
+          "wal_bytes_after": 1474992
+        }
+      },
+      "lifetime_peak_rss_bytes": 233357312,
+      "archives": 31,
+      "ciphertext_bytes": 9076459
+    },
+    {
+      "stage": "import-verified-baseline",
+      "wall_seconds": 31.44832516599854,
+      "cpu_seconds": 26.767159999999997,
+      "storage_read_bytes": 272678912,
+      "storage_written_bytes": 3750305792,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 46,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5376,
+          "database_bytes_after": 470794240,
+          "wal_bytes_after": 1137152
+        },
+        "importer": {
+          "cache_misses": 986,
+          "cache_writes": 271206,
+          "cache_spills": 0,
+          "cache_bytes_after": 144330752,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 31
+    },
+    {
+      "stage": "sync-clean",
+      "wall_seconds": 0.10935391599923605,
+      "cpu_seconds": 0.07716399999999624,
+      "storage_read_bytes": 4845568,
+      "storage_written_bytes": 3014656,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 74,
+          "cache_writes": 47,
+          "cache_spills": 0,
+          "cache_bytes_after": 358528,
+          "database_bytes_after": 470867968,
+          "wal_bytes_after": 111272
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 143991296,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean",
+      "wall_seconds": 0.005418499997176696,
+      "cpu_seconds": 0.004985000000004902,
+      "storage_read_bytes": 12288,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 19,
+          "cache_writes": 7,
+          "cache_spills": 0,
+          "cache_bytes_after": 358528,
+          "database_bytes_after": 470867968,
+          "wal_bytes_after": 140112
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 143991296,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 2330
+    },
+    {
+      "stage": "import-verified-clean",
+      "wall_seconds": 0.004066416004206985,
+      "cpu_seconds": 0.003887999999996339,
+      "storage_read_bytes": 16384,
+      "storage_written_bytes": 217088,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 358528,
+          "database_bytes_after": 470867968,
+          "wal_bytes_after": 140112
+        },
+        "importer": {
+          "cache_misses": 1,
+          "cache_writes": 43,
+          "cache_spills": 0,
+          "cache_bytes_after": 143991296,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 0.29401791599957505,
+      "cpu_seconds": 0.10814099999999627,
+      "storage_read_bytes": 16519168,
+      "storage_written_bytes": 2191360,
+      "package_idle_wakeups": 2,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 1115,
+          "cache_writes": 109,
+          "cache_spills": 0,
+          "cache_bytes_after": 5241472,
+          "database_bytes_after": 470888448,
+          "wal_bytes_after": 119512
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 139108352,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 207,
+        "aliases": 102,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 320
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-old-edit",
+      "wall_seconds": 0.005694791994756088,
+      "cpu_seconds": 0.005633000000003108,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 16,
+          "cache_writes": 7,
+          "cache_spills": 0,
+          "cache_bytes_after": 5241472,
+          "database_bytes_after": 470888448,
+          "wal_bytes_after": 148352
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 139108352,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 3380
+    },
+    {
+      "stage": "import-verified-old-edit",
+      "wall_seconds": 0.007106375000148546,
+      "cpu_seconds": 0.005758999999997627,
+      "storage_read_bytes": 184320,
+      "storage_written_bytes": 479232,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5241472,
+          "database_bytes_after": 470888448,
+          "wal_bytes_after": 148352
+        },
+        "importer": {
+          "cache_misses": 18,
+          "cache_writes": 105,
+          "cache_spills": 0,
+          "cache_bytes_after": 139108352,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    },
+    {
+      "stage": "sync-chat-title",
+      "wall_seconds": 0.08068887500121491,
+      "cpu_seconds": 0.07152599999999865,
+      "storage_read_bytes": 442368,
+      "storage_written_bytes": 1601536,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 37,
+          "cache_writes": 92,
+          "cache_spills": 0,
+          "cache_bytes_after": 5437312,
+          "database_bytes_after": 470921216,
+          "wal_bytes_after": 111272
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138912512,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 207,
+        "aliases": 102,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 318
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-chat-title",
+      "wall_seconds": 0.014617790999182034,
+      "cpu_seconds": 0.00993700000000075,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 11,
+          "cache_writes": 7,
+          "cache_spills": 0,
+          "cache_bytes_after": 5437312,
+          "database_bytes_after": 470921216,
+          "wal_bytes_after": 140112
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138912512,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 3141
+    },
+    {
+      "stage": "import-verified-chat-title",
+      "wall_seconds": 0.015404666999529582,
+      "cpu_seconds": 0.00894699999999915,
+      "storage_read_bytes": 69632,
+      "storage_written_bytes": 380928,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5437312,
+          "database_bytes_after": 470921216,
+          "wal_bytes_after": 140112
+        },
+        "importer": {
+          "cache_misses": 7,
+          "cache_writes": 83,
+          "cache_spills": 0,
+          "cache_bytes_after": 138912512,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    },
+    {
+      "stage": "sync-auxiliary-edit",
+      "wall_seconds": 0.1242091249951045,
+      "cpu_seconds": 0.08837599999999668,
+      "storage_read_bytes": 671744,
+      "storage_written_bytes": 1970176,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 53,
+          "cache_writes": 132,
+          "cache_spills": 0,
+          "cache_bytes_after": 5711488,
+          "database_bytes_after": 470958080,
+          "wal_bytes_after": 173072
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138638336,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 207,
+        "aliases": 102,
+        "events": 1,
+        "absent_from_source:withdrawn": 2,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 318
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-auxiliary-edit",
+      "wall_seconds": 0.010162667000258807,
+      "cpu_seconds": 0.008916000000006363,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 10,
+          "cache_writes": 7,
+          "cache_spills": 0,
+          "cache_bytes_after": 5711488,
+          "database_bytes_after": 470958080,
+          "wal_bytes_after": 201912
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138638336,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 3239
+    },
+    {
+      "stage": "import-verified-auxiliary-edit",
+      "wall_seconds": 0.019595416000811383,
+      "cpu_seconds": 0.007905999999998414,
+      "storage_read_bytes": 102400,
+      "storage_written_bytes": 528384,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5711488,
+          "database_bytes_after": 470958080,
+          "wal_bytes_after": 201912
+        },
+        "importer": {
+          "cache_misses": 14,
+          "cache_writes": 119,
+          "cache_spills": 0,
+          "cache_bytes_after": 138638336,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    },
+    {
+      "stage": "sync-old-delete",
+      "wall_seconds": 0.10076999999728287,
+      "cpu_seconds": 0.08276899999999898,
+      "storage_read_bytes": 409600,
+      "storage_written_bytes": 1896448,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 27,
+          "cache_writes": 96,
+          "cache_spills": 0,
+          "cache_bytes_after": 5863808,
+          "database_bytes_after": 470999040,
+          "wal_bytes_after": 140112
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138486016,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 207,
+        "aliases": 102,
+        "events": 1,
+        "absent_from_source:withdrawn": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 318
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-old-delete",
+      "wall_seconds": 0.005685041003744118,
+      "cpu_seconds": 0.005577999999999861,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 110592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 10,
+          "cache_writes": 10,
+          "cache_spills": 0,
+          "cache_bytes_after": 5863808,
+          "database_bytes_after": 470999040,
+          "wal_bytes_after": 181312
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138486016,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 3264
+    },
+    {
+      "stage": "import-verified-old-delete",
+      "wall_seconds": 0.007695583000895567,
+      "cpu_seconds": 0.006250999999998896,
+      "storage_read_bytes": 32768,
+      "storage_written_bytes": 364544,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5863808,
+          "database_bytes_after": 470999040,
+          "wal_bytes_after": 181312
+        },
+        "importer": {
+          "cache_misses": 2,
+          "cache_writes": 80,
+          "cache_spills": 0,
+          "cache_bytes_after": 138486016,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    },
+    {
+      "stage": "sync-clean-after-changes",
+      "wall_seconds": 0.06981554099911591,
+      "cpu_seconds": 0.06022000000000105,
+      "storage_read_bytes": 163840,
+      "storage_written_bytes": 999424,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 12,
+          "cache_writes": 49,
+          "cache_spills": 0,
+          "cache_bytes_after": 5933440,
+          "database_bytes_after": 471023616,
+          "wal_bytes_after": 119512
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138416384,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean-after-changes",
+      "wall_seconds": 0.01084245899983216,
+      "cpu_seconds": 0.007878999999995528,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 8,
+          "cache_writes": 7,
+          "cache_spills": 0,
+          "cache_bytes_after": 5933440,
+          "database_bytes_after": 471023616,
+          "wal_bytes_after": 148352
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 138416384,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1,
+      "ciphertext_bytes": 2393
+    },
+    {
+      "stage": "import-verified-clean-after-changes",
+      "wall_seconds": 0.010301250003976747,
+      "cpu_seconds": 0.0075999999999964984,
+      "storage_read_bytes": 4096,
+      "storage_written_bytes": 217088,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "sqlite": {
+        "producer": {
+          "cache_misses": 0,
+          "cache_writes": 0,
+          "cache_spills": 0,
+          "cache_bytes_after": 5933440,
+          "database_bytes_after": 471023616,
+          "wal_bytes_after": 148352
+        },
+        "importer": {
+          "cache_misses": 0,
+          "cache_writes": 47,
+          "cache_spills": 0,
+          "cache_bytes_after": 138416384,
+          "database_bytes_after": 502779904,
+          "wal_bytes_after": 54173912
+        }
+      },
+      "lifetime_peak_rss_bytes": 280870912,
+      "archives": 1
+    }
+  ],
+  "database_layout": {
+    "producer": {
+      "page_size": 4096,
+      "page_count": 114998,
+      "freelist_count": 0,
+      "objects": [
+        {
+          "name": "changes",
+          "type": "table",
+          "pages": 44600,
+          "bytes": 182681600,
+          "payload_bytes": 147175782,
+          "unused_bytes": 33712089
+        },
+        {
+          "name": "records",
+          "type": "table",
+          "pages": 20125,
+          "bytes": 82432000,
+          "payload_bytes": 65828687,
+          "unused_bytes": 15861118
+        },
+        {
+          "name": "revisions",
+          "type": "table",
+          "pages": 20122,
+          "bytes": 82419712,
+          "payload_bytes": 63126379,
+          "unused_bytes": 18551091
+        },
+        {
+          "name": "source_observations",
+          "type": "table",
+          "pages": 2762,
+          "bytes": 11313152,
+          "payload_bytes": 10338052,
+          "unused_bytes": 733946
+        },
+        {
+          "name": "records_heads",
+          "type": "index",
+          "pages": 2278,
+          "bytes": 9330688,
+          "payload_bytes": 7869942,
+          "unused_bytes": 1192106
+        },
+        {
+          "name": "sqlite_autoindex_revisions_1",
+          "type": "index",
+          "pages": 2121,
+          "bytes": 8687616,
+          "payload_bytes": 7449265,
+          "unused_bytes": 1031883
+        },
+        {
+          "name": "sqlite_autoindex_native_unit_members_1",
+          "type": "index",
+          "pages": 1931,
+          "bytes": 7909376,
+          "payload_bytes": 6786849,
+          "unused_bytes": 919365
+        },
+        {
+          "name": "native_units",
+          "type": "table",
+          "pages": 1909,
+          "bytes": 7819264,
+          "payload_bytes": 7428733,
+          "unused_bytes": 165664
+        },
+        {
+          "name": "records_capture_run",
+          "type": "index",
+          "pages": 1871,
+          "bytes": 7663616,
+          "payload_bytes": 6512118,
+          "unused_bytes": 948069
+        },
+        {
+          "name": "native_unit_members",
+          "type": "table",
+          "pages": 1720,
+          "bytes": 7045120,
+          "payload_bytes": 6579752,
+          "unused_bytes": 93154
+        },
+        {
+          "name": "messages_idx",
+          "type": "table",
+          "pages": 1672,
+          "bytes": 6848512,
+          "payload_bytes": 6359790,
+          "unused_bytes": 267766
+        },
+        {
+          "name": "observations_native",
+          "type": "index",
+          "pages": 1099,
+          "bytes": 4501504,
+          "payload_bytes": 4188938,
+          "unused_bytes": 178417
+        },
+        {
+          "name": "records_kind",
+          "type": "index",
+          "pages": 1040,
+          "bytes": 4259840,
+          "payload_bytes": 3737076,
+          "unused_bytes": 329307
+        },
+        {
+          "name": "revisions_observed",
+          "type": "index",
+          "pages": 1005,
+          "bytes": 4116480,
+          "payload_bytes": 3466825,
+          "unused_bytes": 456579
+        },
+        {
+          "name": "sqlite_autoindex_source_observations_1",
+          "type": "index",
+          "pages": 932,
+          "bytes": 3817472,
+          "payload_bytes": 3243334,
+          "unused_bytes": 471992
+        },
+        {
+          "name": "sqlite_autoindex_entity_keys_1",
+          "type": "index",
+          "pages": 884,
+          "bytes": 3620864,
+          "payload_bytes": 3043782,
+          "unused_bytes": 385497
+        },
+        {
+          "name": "sqlite_autoindex_records_1",
+          "type": "index",
+          "pages": 884,
+          "bytes": 3620864,
+          "payload_bytes": 3043782,
+          "unused_bytes": 385497
+        },
+        {
+          "name": "native_unit_member_urn",
+          "type": "index",
+          "pages": 874,
+          "bytes": 3579904,
+          "payload_bytes": 3027003,
+          "unused_bytes": 362423
+        },
+        {
+          "name": "messages_chat_time",
+          "type": "index",
+          "pages": 870,
+          "bytes": 3563520,
+          "payload_bytes": 3089769,
+          "unused_bytes": 373318
+        },
+        {
+          "name": "entity_keys",
+          "type": "table",
+          "pages": 802,
+          "bytes": 3284992,
+          "payload_bytes": 2895696,
+          "unused_bytes": 30447
+        },
+        {
+          "name": "parts_idx",
+          "type": "table",
+          "pages": 743,
+          "bytes": 3043328,
+          "payload_bytes": 2819718,
+          "unused_bytes": 47931
+        },
+        {
+          "name": "sqlite_autoindex_native_units_1",
+          "type": "index",
+          "pages": 585,
+          "bytes": 2396160,
+          "payload_bytes": 1999791,
+          "unused_bytes": 299356
+        },
+        {
+          "name": "messages_scope_time",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709701,
+          "unused_bytes": 250480
+        },
+        {
+          "name": "messages_sender",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709815,
+          "unused_bytes": 250360
+        },
+        {
+          "name": "messages_time",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709815,
+          "unused_bytes": 250360
+        },
+        {
+          "name": "parts_message",
+          "type": "index",
+          "pages": 451,
+          "bytes": 1847296,
+          "payload_bytes": 1529721,
+          "unused_bytes": 222176
+        },
+        {
+          "name": "observations_capture_run",
+          "type": "index",
+          "pages": 448,
+          "bytes": 1835008,
+          "payload_bytes": 1515972,
+          "unused_bytes": 222698
+        },
+        {
+          "name": "sqlite_autoindex_messages_idx_1",
+          "type": "index",
+          "pages": 435,
+          "bytes": 1781760,
+          "payload_bytes": 1499822,
+          "unused_bytes": 186725
+        },
+        {
+          "name": "sqlite_autoindex_parts_idx_1",
+          "type": "index",
+          "pages": 428,
+          "bytes": 1753088,
+          "payload_bytes": 1499724,
+          "unused_bytes": 158241
+        },
+        {
+          "name": "revisions_fts_content",
+          "type": "table",
+          "pages": 203,
+          "bytes": 831488,
+          "payload_bytes": 648829,
+          "unused_bytes": 7322
+        },
+        {
+          "name": "messages_fts_content",
+          "type": "table",
+          "pages": 201,
+          "bytes": 823296,
+          "payload_bytes": 648810,
+          "unused_bytes": 7722
+        },
+        {
+          "name": "revisions_fts_data",
+          "type": "table",
+          "pages": 116,
+          "bytes": 475136,
+          "payload_bytes": 444896,
+          "unused_bytes": 26626
+        },
+        {
+          "name": "messages_fts_data",
+          "type": "table",
+          "pages": 114,
+          "bytes": 466944,
+          "payload_bytes": 436383,
+          "unused_bytes": 27009
+        },
+        {
+          "name": "revisions_fts_docsize",
+          "type": "table",
+          "pages": 73,
+          "bytes": 299008,
+          "payload_bytes": 119988,
+          "unused_bytes": 5858
+        },
+        {
+          "name": "messages_fts_docsize",
+          "type": "table",
+          "pages": 71,
+          "bytes": 290816,
+          "payload_bytes": 119984,
+          "unused_bytes": 6207
+        },
+        {
+          "name": "sqlite_schema",
+          "type": "system",
+          "pages": 12,
+          "bytes": 49152,
+          "payload_bytes": 37887,
+          "unused_bytes": 10226
+        },
+        {
+          "name": "verified_exports",
+          "type": "table",
+          "pages": 9,
+          "bytes": 36864,
+          "payload_bytes": 28838,
+          "unused_bytes": 7716
+        },
+        {
+          "name": "exports",
+          "type": "table",
+          "pages": 7,
+          "bytes": 28672,
+          "payload_bytes": 19129,
+          "unused_bytes": 9263
+        },
+        {
+          "name": "aliases_idx",
+          "type": "table",
+          "pages": 5,
+          "bytes": 20480,
+          "payload_bytes": 14317,
+          "unused_bytes": 5583
+        },
+        {
+          "name": "aliases_new",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "aliases_old",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "exports_bucket",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5253,
+          "unused_bytes": 6855
+        },
+        {
+          "name": "sqlite_autoindex_aliases_idx_1",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "applied_changes",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "attachments_blob",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 3,
+          "unused_bytes": 4082
+        },
+        {
+          "name": "attachments_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 109,
+          "unused_bytes": 3975
+        },
+        {
+          "name": "attachments_message",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "bucket_membership",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "bucket_membership_urn",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "capture_coverage_attempts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "capture_coverage_points",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 190,
+          "unused_bytes": 3893
+        },
+        {
+          "name": "capture_coverage_writer",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "checkpoints",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1226,
+          "unused_bytes": 2853
+        },
+        {
+          "name": "conflicts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "delivery_checkpoints",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "delivery_proofs",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "entity_ids",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "entity_ids_local",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "events_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 268,
+          "unused_bytes": 3811
+        },
+        {
+          "name": "events_target",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 111,
+          "unused_bytes": 3971
+        },
+        {
+          "name": "export_consumers",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 259,
+          "unused_bytes": 3824
+        },
+        {
+          "name": "feed_imports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "freshness_end",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 233,
+          "unused_bytes": 3810
+        },
+        {
+          "name": "freshness_ranges",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1037,
+          "unused_bytes": 2991
+        },
+        {
+          "name": "freshness_run",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 919,
+          "unused_bytes": 3124
+        },
+        {
+          "name": "import_key_ranges",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "import_paths",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "import_range_dirty",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "import_range_ready",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "imports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "links_identity",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "links_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "links_person",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "memberships_chat",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "memberships_identity",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "memberships_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 973,
+          "unused_bytes": 3080
+        },
+        {
+          "name": "message_counts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 50,
+          "unused_bytes": 4034
+        },
+        {
+          "name": "messages_fts_config",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 11,
+          "unused_bytes": 4074
+        },
+        {
+          "name": "messages_fts_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 826,
+          "unused_bytes": 3004
+        },
+        {
+          "name": "meta",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 294,
+          "unused_bytes": 3769
+        },
+        {
+          "name": "native_capture_receipts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 2443,
+          "unused_bytes": 1610
+        },
+        {
+          "name": "observation_ids",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "observation_ids_local",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "observation_refreshes",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "projection_epoch",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 6,
+          "unused_bytes": 4078
+        },
+        {
+          "name": "records_latest_run",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 725,
+          "unused_bytes": 3342
+        },
+        {
+          "name": "revisions_fts_config",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 11,
+          "unused_bytes": 4074
+        },
+        {
+          "name": "revisions_fts_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 843,
+          "unused_bytes": 2984
+        },
+        {
+          "name": "source_projection_epochs",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 51,
+          "unused_bytes": 4033
+        },
+        {
+          "name": "sqlite_autoindex_applied_changes_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_attachments_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_bucket_membership_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_capture_coverage_attempts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_capture_coverage_points_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_checkpoints_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 120,
+          "unused_bytes": 3962
+        },
+        {
+          "name": "sqlite_autoindex_delivery_checkpoints_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_delivery_proofs_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_entity_ids_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_events_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 97,
+          "unused_bytes": 3985
+        },
+        {
+          "name": "sqlite_autoindex_export_consumers_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 12,
+          "unused_bytes": 4073
+        },
+        {
+          "name": "sqlite_autoindex_exports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1812,
+          "unused_bytes": 2165
+        },
+        {
+          "name": "sqlite_autoindex_feed_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_freshness_ranges_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 229,
+          "unused_bytes": 3814
+        },
+        {
+          "name": "sqlite_autoindex_import_key_ranges_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_import_paths_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_import_range_dirty_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_import_range_ready_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_links_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_memberships_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "sqlite_autoindex_message_counts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_meta_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 116,
+          "unused_bytes": 3954
+        },
+        {
+          "name": "sqlite_autoindex_native_capture_receipts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 279,
+          "unused_bytes": 3788
+        },
+        {
+          "name": "sqlite_autoindex_observation_ids_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_observation_refreshes_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_source_projection_epochs_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_verified_exports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1812,
+          "unused_bytes": 2165
+        },
+        {
+          "name": "sqlite_autoindex_verified_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_sequence",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 54,
+          "unused_bytes": 4022
+        },
+        {
+          "name": "verified_exports_stream",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1954,
+          "unused_bytes": 2023
+        },
+        {
+          "name": "verified_imports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        }
+      ],
+      "journal_operations": [
+        {
+          "operation": "revision",
+          "events": 60340,
+          "encoded_data_bytes": 69643060
+        },
+        {
+          "operation": "record",
+          "events": 60340,
+          "encoded_data_bytes": 58741346
+        },
+        {
+          "operation": "observation",
+          "events": 30330,
+          "encoded_data_bytes": 16849425
+        },
+        {
+          "operation": "observation_refresh",
+          "events": 51,
+          "encoded_data_bytes": 5719
+        },
+        {
+          "operation": "record_refresh",
+          "events": 10,
+          "encoded_data_bytes": 1224
+        },
+        {
+          "operation": "identity_metadata",
+          "events": 1,
+          "encoded_data_bytes": 132
+        }
+      ]
+    },
+    "importer": {
+      "page_size": 4096,
+      "page_count": 122801,
+      "freelist_count": 0,
+      "objects": [
+        {
+          "name": "changes",
+          "type": "table",
+          "pages": 44600,
+          "bytes": 182681600,
+          "payload_bytes": 147175768,
+          "unused_bytes": 33712103
+        },
+        {
+          "name": "records",
+          "type": "table",
+          "pages": 20125,
+          "bytes": 82432000,
+          "payload_bytes": 65828687,
+          "unused_bytes": 15861118
+        },
+        {
+          "name": "revisions",
+          "type": "table",
+          "pages": 20122,
+          "bytes": 82419712,
+          "payload_bytes": 63126379,
+          "unused_bytes": 18551091
+        },
+        {
+          "name": "applied_changes",
+          "type": "table",
+          "pages": 4887,
+          "bytes": 20017152,
+          "payload_bytes": 18700033,
+          "unused_bytes": 344723
+        },
+        {
+          "name": "observation_ids",
+          "type": "table",
+          "pages": 3799,
+          "bytes": 15560704,
+          "payload_bytes": 15188393,
+          "unused_bytes": 114104
+        },
+        {
+          "name": "source_observations",
+          "type": "table",
+          "pages": 2762,
+          "bytes": 11313152,
+          "payload_bytes": 10338052,
+          "unused_bytes": 733946
+        },
+        {
+          "name": "sqlite_autoindex_applied_changes_1",
+          "type": "index",
+          "pages": 2424,
+          "bytes": 9928704,
+          "payload_bytes": 8243170,
+          "unused_bytes": 1203234
+        },
+        {
+          "name": "records_heads",
+          "type": "index",
+          "pages": 2278,
+          "bytes": 9330688,
+          "payload_bytes": 7869942,
+          "unused_bytes": 1192106
+        },
+        {
+          "name": "sqlite_autoindex_revisions_1",
+          "type": "index",
+          "pages": 2121,
+          "bytes": 8687616,
+          "payload_bytes": 7449265,
+          "unused_bytes": 1031883
+        },
+        {
+          "name": "entity_ids",
+          "type": "table",
+          "pages": 2000,
+          "bytes": 8192000,
+          "payload_bytes": 7656066,
+          "unused_bytes": 129493
+        },
+        {
+          "name": "records_capture_run",
+          "type": "index",
+          "pages": 1871,
+          "bytes": 7663616,
+          "payload_bytes": 6512118,
+          "unused_bytes": 948069
+        },
+        {
+          "name": "messages_idx",
+          "type": "table",
+          "pages": 1672,
+          "bytes": 6848512,
+          "payload_bytes": 6359790,
+          "unused_bytes": 267766
+        },
+        {
+          "name": "observations_native",
+          "type": "index",
+          "pages": 1099,
+          "bytes": 4501504,
+          "payload_bytes": 4188938,
+          "unused_bytes": 178417
+        },
+        {
+          "name": "records_kind",
+          "type": "index",
+          "pages": 1040,
+          "bytes": 4259840,
+          "payload_bytes": 3737076,
+          "unused_bytes": 329307
+        },
+        {
+          "name": "revisions_observed",
+          "type": "index",
+          "pages": 1005,
+          "bytes": 4116480,
+          "payload_bytes": 3466825,
+          "unused_bytes": 456579
+        },
+        {
+          "name": "sqlite_autoindex_entity_ids_1",
+          "type": "index",
+          "pages": 959,
+          "bytes": 3928064,
+          "payload_bytes": 3252195,
+          "unused_bytes": 483384
+        },
+        {
+          "name": "sqlite_autoindex_source_observations_1",
+          "type": "index",
+          "pages": 932,
+          "bytes": 3817472,
+          "payload_bytes": 3243334,
+          "unused_bytes": 471992
+        },
+        {
+          "name": "sqlite_autoindex_entity_keys_1",
+          "type": "index",
+          "pages": 884,
+          "bytes": 3620864,
+          "payload_bytes": 3043782,
+          "unused_bytes": 385497
+        },
+        {
+          "name": "sqlite_autoindex_records_1",
+          "type": "index",
+          "pages": 884,
+          "bytes": 3620864,
+          "payload_bytes": 3043782,
+          "unused_bytes": 385497
+        },
+        {
+          "name": "messages_chat_time",
+          "type": "index",
+          "pages": 870,
+          "bytes": 3563520,
+          "payload_bytes": 3089769,
+          "unused_bytes": 373318
+        },
+        {
+          "name": "entity_keys",
+          "type": "table",
+          "pages": 802,
+          "bytes": 3284992,
+          "payload_bytes": 2895696,
+          "unused_bytes": 30447
+        },
+        {
+          "name": "parts_idx",
+          "type": "table",
+          "pages": 743,
+          "bytes": 3043328,
+          "payload_bytes": 2819718,
+          "unused_bytes": 47931
+        },
+        {
+          "name": "messages_scope_time",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709701,
+          "unused_bytes": 250480
+        },
+        {
+          "name": "messages_sender",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709815,
+          "unused_bytes": 250360
+        },
+        {
+          "name": "messages_time",
+          "type": "index",
+          "pages": 502,
+          "bytes": 2056192,
+          "payload_bytes": 1709815,
+          "unused_bytes": 250360
+        },
+        {
+          "name": "sqlite_autoindex_observation_ids_1",
+          "type": "index",
+          "pages": 475,
+          "bytes": 1945600,
+          "payload_bytes": 1606810,
+          "unused_bytes": 242128
+        },
+        {
+          "name": "parts_message",
+          "type": "index",
+          "pages": 451,
+          "bytes": 1847296,
+          "payload_bytes": 1529721,
+          "unused_bytes": 222176
+        },
+        {
+          "name": "observations_capture_run",
+          "type": "index",
+          "pages": 448,
+          "bytes": 1835008,
+          "payload_bytes": 1515972,
+          "unused_bytes": 222698
+        },
+        {
+          "name": "sqlite_autoindex_messages_idx_1",
+          "type": "index",
+          "pages": 435,
+          "bytes": 1781760,
+          "payload_bytes": 1499822,
+          "unused_bytes": 186725
+        },
+        {
+          "name": "sqlite_autoindex_parts_idx_1",
+          "type": "index",
+          "pages": 428,
+          "bytes": 1753088,
+          "payload_bytes": 1499724,
+          "unused_bytes": 158241
+        },
+        {
+          "name": "revisions_fts_content",
+          "type": "table",
+          "pages": 203,
+          "bytes": 831488,
+          "payload_bytes": 648829,
+          "unused_bytes": 7322
+        },
+        {
+          "name": "messages_fts_content",
+          "type": "table",
+          "pages": 201,
+          "bytes": 823296,
+          "payload_bytes": 648810,
+          "unused_bytes": 7722
+        },
+        {
+          "name": "entity_ids_local",
+          "type": "index",
+          "pages": 185,
+          "bytes": 757760,
+          "payload_bytes": 477153,
+          "unused_bytes": 97410
+        },
+        {
+          "name": "revisions_fts_data",
+          "type": "table",
+          "pages": 116,
+          "bytes": 475136,
+          "payload_bytes": 444896,
+          "unused_bytes": 26626
+        },
+        {
+          "name": "messages_fts_data",
+          "type": "table",
+          "pages": 114,
+          "bytes": 466944,
+          "payload_bytes": 436383,
+          "unused_bytes": 27009
+        },
+        {
+          "name": "observation_ids_local",
+          "type": "index",
+          "pages": 86,
+          "bytes": 352256,
+          "payload_bytes": 211998,
+          "unused_bytes": 48264
+        },
+        {
+          "name": "revisions_fts_docsize",
+          "type": "table",
+          "pages": 73,
+          "bytes": 299008,
+          "payload_bytes": 119988,
+          "unused_bytes": 5858
+        },
+        {
+          "name": "messages_fts_docsize",
+          "type": "table",
+          "pages": 71,
+          "bytes": 290816,
+          "payload_bytes": 119984,
+          "unused_bytes": 6207
+        },
+        {
+          "name": "imports",
+          "type": "table",
+          "pages": 20,
+          "bytes": 81920,
+          "payload_bytes": 53320,
+          "unused_bytes": 28125
+        },
+        {
+          "name": "sqlite_schema",
+          "type": "system",
+          "pages": 12,
+          "bytes": 49152,
+          "payload_bytes": 37887,
+          "unused_bytes": 10226
+        },
+        {
+          "name": "aliases_idx",
+          "type": "table",
+          "pages": 5,
+          "bytes": 20480,
+          "payload_bytes": 14317,
+          "unused_bytes": 5583
+        },
+        {
+          "name": "import_paths",
+          "type": "table",
+          "pages": 4,
+          "bytes": 16384,
+          "payload_bytes": 9102,
+          "unused_bytes": 7047
+        },
+        {
+          "name": "aliases_new",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "aliases_old",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "sqlite_autoindex_aliases_idx_1",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 5046,
+          "unused_bytes": 6901
+        },
+        {
+          "name": "sqlite_autoindex_import_paths_1",
+          "type": "index",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 7473,
+          "unused_bytes": 4635
+        },
+        {
+          "name": "verified_imports",
+          "type": "table",
+          "pages": 3,
+          "bytes": 12288,
+          "payload_bytes": 4440,
+          "unused_bytes": 7665
+        },
+        {
+          "name": "attachments_blob",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 3,
+          "unused_bytes": 4082
+        },
+        {
+          "name": "attachments_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 109,
+          "unused_bytes": 3975
+        },
+        {
+          "name": "attachments_message",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "bucket_membership",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "bucket_membership_urn",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "capture_coverage_attempts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "capture_coverage_points",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "capture_coverage_writer",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "checkpoints",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "conflicts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "delivery_checkpoints",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "delivery_proofs",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "events_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 268,
+          "unused_bytes": 3811
+        },
+        {
+          "name": "events_target",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 111,
+          "unused_bytes": 3971
+        },
+        {
+          "name": "export_consumers",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "exports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "exports_bucket",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "feed_imports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 216,
+          "unused_bytes": 3867
+        },
+        {
+          "name": "freshness_end",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 215,
+          "unused_bytes": 3831
+        },
+        {
+          "name": "freshness_ranges",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 965,
+          "unused_bytes": 3067
+        },
+        {
+          "name": "freshness_run",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 855,
+          "unused_bytes": 3191
+        },
+        {
+          "name": "import_key_ranges",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 264,
+          "unused_bytes": 3808
+        },
+        {
+          "name": "import_range_dirty",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "import_range_ready",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 113,
+          "unused_bytes": 3967
+        },
+        {
+          "name": "links_identity",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "links_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "links_person",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "memberships_chat",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "memberships_identity",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "memberships_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 973,
+          "unused_bytes": 3080
+        },
+        {
+          "name": "message_counts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 50,
+          "unused_bytes": 4034
+        },
+        {
+          "name": "messages_fts_config",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 11,
+          "unused_bytes": 4074
+        },
+        {
+          "name": "messages_fts_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 826,
+          "unused_bytes": 3004
+        },
+        {
+          "name": "meta",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 145,
+          "unused_bytes": 3923
+        },
+        {
+          "name": "native_capture_receipts",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "native_unit_member_urn",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "native_unit_members",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "native_units",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "observation_refreshes",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "projection_epoch",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 6,
+          "unused_bytes": 4078
+        },
+        {
+          "name": "records_latest_run",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 725,
+          "unused_bytes": 3342
+        },
+        {
+          "name": "revisions_fts_config",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 11,
+          "unused_bytes": 4074
+        },
+        {
+          "name": "revisions_fts_idx",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 843,
+          "unused_bytes": 2984
+        },
+        {
+          "name": "source_projection_epochs",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 51,
+          "unused_bytes": 4033
+        },
+        {
+          "name": "sqlite_autoindex_attachments_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_bucket_membership_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_capture_coverage_attempts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_capture_coverage_points_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_checkpoints_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_delivery_checkpoints_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_delivery_proofs_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_events_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 97,
+          "unused_bytes": 3985
+        },
+        {
+          "name": "sqlite_autoindex_export_consumers_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_exports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_feed_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 49,
+          "unused_bytes": 4036
+        },
+        {
+          "name": "sqlite_autoindex_freshness_ranges_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 211,
+          "unused_bytes": 3835
+        },
+        {
+          "name": "sqlite_autoindex_import_key_ranges_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 247,
+          "unused_bytes": 3829
+        },
+        {
+          "name": "sqlite_autoindex_import_range_dirty_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_import_range_ready_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 116,
+          "unused_bytes": 3966
+        },
+        {
+          "name": "sqlite_autoindex_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1812,
+          "unused_bytes": 2165
+        },
+        {
+          "name": "sqlite_autoindex_links_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_memberships_idx_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 342,
+          "unused_bytes": 3725
+        },
+        {
+          "name": "sqlite_autoindex_message_counts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_meta_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 99,
+          "unused_bytes": 3974
+        },
+        {
+          "name": "sqlite_autoindex_native_capture_receipts_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_native_unit_members_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_native_units_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_observation_refreshes_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_source_projection_epochs_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 48,
+          "unused_bytes": 4037
+        },
+        {
+          "name": "sqlite_autoindex_verified_exports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "sqlite_autoindex_verified_imports_1",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 1812,
+          "unused_bytes": 2165
+        },
+        {
+          "name": "sqlite_sequence",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 54,
+          "unused_bytes": 4022
+        },
+        {
+          "name": "verified_exports",
+          "type": "table",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        },
+        {
+          "name": "verified_exports_stream",
+          "type": "index",
+          "pages": 1,
+          "bytes": 4096,
+          "payload_bytes": 0,
+          "unused_bytes": 4088
+        }
+      ],
+      "journal_operations": [
+        {
+          "operation": "revision",
+          "events": 60340,
+          "encoded_data_bytes": 69643060
+        },
+        {
+          "operation": "record",
+          "events": 60340,
+          "encoded_data_bytes": 58741346
+        },
+        {
+          "operation": "observation",
+          "events": 30330,
+          "encoded_data_bytes": 16849425
+        },
+        {
+          "operation": "observation_refresh",
+          "events": 51,
+          "encoded_data_bytes": 5705
+        },
+        {
+          "operation": "record_refresh",
+          "events": 10,
+          "encoded_data_bytes": 1224
+        },
+        {
+          "operation": "identity_metadata",
+          "events": 1,
+          "encoded_data_bytes": 132
+        }
+      ]
+    }
+  },
+  "layout_scope": "Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll."
+}

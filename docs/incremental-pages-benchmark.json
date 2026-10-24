@@ -1,0 +1,35 @@
+{
+  "rows": 100000,
+  "scope": "Synthetic baseline mapping and changed-leaf selection only. Snapshot copies shown separately; their incremental replacement is not implemented. Decoder logical reads exclude SQLite candidate-query IO, WAL parsing, capture and archives. No energy measurement.",
+  "measurements": [
+    {
+      "stage": "prepare-baseline-image",
+      "wall_seconds": 0.01628216600511223,
+      "cpu_seconds": 0.015573999999999977,
+      "image_bytes": 11108352
+    },
+    {
+      "stage": "build-baseline-page-map",
+      "wall_seconds": 0.23606612510047853,
+      "cpu_seconds": 0.23285899999999998,
+      "pages_read": 2711,
+      "logical_bytes_read": 11104356,
+      "rows_indexed": 100000
+    },
+    {
+      "stage": "prepare-changed-image",
+      "wall_seconds": 0.016739333048462868,
+      "cpu_seconds": 0.015535999999999994,
+      "image_bytes": 11108352
+    },
+    {
+      "stage": "decode-changed-leaf-and-query-candidates",
+      "wall_seconds": 0.031168707995675504,
+      "cpu_seconds": 0.014579000000000009,
+      "pages_read": 1,
+      "logical_bytes_read": 4196,
+      "candidate_rows": 37,
+      "changed_rows": 1
+    }
+  ]
+}

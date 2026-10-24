@@ -1,0 +1,57 @@
+{
+  "rows": 100000,
+  "coordinated": true,
+  "scope": "Synthetic pinned SQLite view/WAL coordination; reported bytes cover WAL only, excluding index/SQLite metadata reads. Excludes setup, SQL mutation and sync/archive work. Logical reads, not kernel storage IO. No energy measurement.",
+  "measurements": [
+    {
+      "stage": "initial-wal-validation",
+      "wall_seconds": 0.46439741691574454,
+      "cpu_seconds": 0.319232,
+      "logical_bytes_read": 11181744,
+      "frames_read": 2714,
+      "changed_pages": 2712,
+      "commits": 2,
+      "wal_bytes": 11181712
+    },
+    {
+      "stage": "no-change",
+      "wall_seconds": 0.00048562500160187483,
+      "cpu_seconds": 0.0004529999999999812,
+      "logical_bytes_read": 88,
+      "frames_read": 0,
+      "changed_pages": 0,
+      "commits": 0,
+      "wal_bytes": 11181712
+    },
+    {
+      "stage": "historical-edit",
+      "wall_seconds": 0.0004211670020595193,
+      "cpu_seconds": 0.0003710000000000102,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11185832
+    },
+    {
+      "stage": "new-row",
+      "wall_seconds": 0.00040087499655783176,
+      "cpu_seconds": 0.0003690000000000082,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11189952
+    },
+    {
+      "stage": "historical-delete",
+      "wall_seconds": 0.0003952080151066184,
+      "cpu_seconds": 0.0003549999999999942,
+      "logical_bytes_read": 4208,
+      "frames_read": 1,
+      "changed_pages": 1,
+      "commits": 1,
+      "wal_bytes": 11194072
+    }
+  ]
+}

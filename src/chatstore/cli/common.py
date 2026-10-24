@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from ..adapters.base import SourceAdapter
@@ -19,6 +19,9 @@ from ..cache import Cache
 from ..canonical.records import iso_utc
 from ..config import Config, Identity, load_config, load_identity
 from ..paths import DataDir
+
+if TYPE_CHECKING:
+    from ..sync_session import SyncSession
 
 ENVELOPE = "chatstore-cli-v1"
 
@@ -51,6 +54,7 @@ class Ctx:
     _cfg: Config | None = None
     _ident: Identity | None = None
     _cache: Cache | None = None
+    _sync_sessions: dict[str, SyncSession] = field(default_factory=dict)
 
     def require_init(self) -> None:
         if not self.data_dir.exists():
@@ -123,7 +127,7 @@ def freshness(ctx: Ctx) -> dict[str, Any] | None:
         cache = ctx.cache()
     except (CliError, sqlite3.Error):
         return None
-    runs = cache.latest_sync_runs()
+    runs = cache.latest_sync_runs((source, info['scope']) for source, info in ctx.ident.scopes.items())
     out = []
     for source, info in ctx.ident.scopes.items():
         r = next((x for x in runs if x.get("source") == source), None)

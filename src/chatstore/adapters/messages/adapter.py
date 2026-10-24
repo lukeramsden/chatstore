@@ -8,13 +8,13 @@ Everything else (handles, chats, joins, ck_chat_id inference) is plain SQL on th
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import sqlite3
-import subprocess
 import sys
 from collections.abc import Iterator
+from contextlib import closing
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -22,20 +22,28 @@ from ...canonical.records import EPOCH_2001, allowlisted, record, timestamp
 from ...canonical.schemas import ALLOWLIST
 from ...config import Config
 from ...identity import urn as U
+from .. import prepared_media
 from ..base import (
     Diagnosis,
+    Emission,
     Emit,
     ExtractStats,
     IncompatibleSource,
     Observation,
     check_schema,
+    extract_unit,
     fingerprint,
+    native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
+from . import decoder, dependencies
+from .decoder import decode, decode_batches
+from .dependencies import install_indexes
+
+POLICY_MODULES = (decoder, dependencies, prepared_media)
 
 SOURCE = "messages"
 ADAPTER_VERSION = "messages-adapter/1.0.0"
-HELPER_FORMAT = "chatstore-messages-decoder/1"
 HELPER_NAME = "chatstore-messages-decoder"
 
 REQUIRED = {
@@ -140,165 +148,186 @@ class MessagesAdapter:
     # ---- extraction -----------------------------------------------------------------
 
     def extract(self, snap: Snapshot, scope: str, cfg: Config, stats: ExtractStats,
-                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emit]:
+                checkpoints: dict[str, Any] | None, *, full: bool) -> Iterator[Emission]:
         db_path = snap.files["chat"].snapshot_path
         helper = find_helper(cfg)
         if helper is None:
             raise HelperMissing(f"{HELPER_NAME} not found")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        problems = check_schema(conn, REQUIRED)
-        if problems:
-            raise IncompatibleSource("; ".join(problems))
-        root = cfg.source_root(SOURCE)
+        with closing(sqlite3.connect(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            problems = check_schema(conn, REQUIRED)
+            if problems:
+                raise IncompatibleSource("; ".join(problems))
+            selected = stats.selected_message_rowids
+            if selected is not None and full:
+                raise IncompatibleSource('selected message rows cannot be a full reconciliation')
+            # Private mirror indexes persist across changed-source polls.
+            install_indexes(conn)
+            if selected is not None:
+                if any(type(row) is not int or not -(1 << 63) <= row < (1 << 63) for row in selected):
+                    raise IncompatibleSource('selected messages must use signed SQLite row IDs')
+                conn.execute('CREATE TEMP TABLE cs_selected_messages(row_id INTEGER PRIMARY KEY)')
+                conn.executemany('INSERT INTO cs_selected_messages VALUES(?)', ((row,) for row in selected))
+            conn.commit()
+            root = cfg.source_root(SOURCE)
 
-        def urn(entity: str, key: str) -> str:
-            return U.derive_urn(SOURCE, scope, entity, key)
+            def urn(entity: str, key: str) -> str:
+                return U.derive_urn(SOURCE, scope, entity, key)
 
-        me_key = U.messages_me_key(None)
-        me_urn = urn("identity", me_key)
+            me_key = U.messages_me_key(None)
+            me_urn = urn("identity", me_key)
 
-        # --- handles -> identities ------------------------------------------------------
-        handle_key: dict[int, str] = {}
-        handle_urn: dict[int, str] = {}
-        by_key: dict[str, dict[str, Any]] = {}
-        for r in conn.execute("SELECT ROWID, id, service, person_centric_id, uncanonicalized_id FROM handle"):
-            key = U.messages_handle_key(r["service"] or "", r["id"] or "")
-            handle_key[r["ROWID"]] = key
-            handle_urn[r["ROWID"]] = urn("identity", key)
-            ent = by_key.setdefault(key, {"rows": [], "id": r["id"], "service": r["service"], "pcid": set(), "unc": set()})
-            ent["rows"].append(r["ROWID"])
-            if r["person_centric_id"]:
-                ent["pcid"].add(r["person_centric_id"])
-            if r["uncanonicalized_id"]:
-                ent["unc"].add(r["uncanonicalized_id"])
-        for key, ent in by_key.items():
-            names = [{"name": u, "origin": "uncanonicalized_id"} for u in sorted(ent["unc"]) if u != ent["id"]]
-            rec = record("identities", urn("identity", key), SOURCE, scope, native_key=key,
-                         kind="email" if "@" in (ent["id"] or "") else "phone", address=ent["id"],
-                         service=ent["service"], is_me=False, observed_names=names)
-            yield Emit(rec, Observation("handle", sorted(ent["rows"]), key, fingerprint(ent["id"], ent["service"], names)))
-        yield Emit(record("identities", me_urn, SOURCE, scope, native_key=me_key, kind="me", address=None, service=None,
-                          is_me=True, observed_names=[]), Observation("me", [], me_key, fingerprint("me")))
-        stats.bump("identities", len(by_key) + 1)
-        # person_centric_id groups several handles for the same person: emit as identity_links evidence via aliases? No:
-        # aliases are for renames; we emit nothing here but record the hint for Phase 4 link suggestions.
-        pc_groups: dict[str, set[str]] = {}
-        for key, ent in by_key.items():
-            for pc in ent["pcid"]:
-                pc_groups.setdefault(pc, set()).add(key)
-        stats.checkpoints["person_centric_groups"] = sum(1 for g in pc_groups.values() if len(g) > 1)
+            # --- handles -> identities ------------------------------------------------------
+            handle_key: dict[int, str] = {}
+            handle_urn: dict[int, str] = {}
+            by_key: dict[str, dict[str, Any]] = {}
+            for r in conn.execute("SELECT ROWID, id, service, person_centric_id, uncanonicalized_id FROM handle"):
+                key = U.messages_handle_key(r["service"] or "", r["id"] or "")
+                handle_key[r["ROWID"]] = key
+                handle_urn[r["ROWID"]] = urn("identity", key)
+                ent = by_key.setdefault(key, {"rows": [], "id": r["id"], "service": r["service"], "pcid": set(), "unc": set()})
+                ent["rows"].append(r["ROWID"])
+                if r["person_centric_id"]:
+                    ent["pcid"].add(r["person_centric_id"])
+                if r["uncanonicalized_id"]:
+                    ent["unc"].add(r["uncanonicalized_id"])
+            for key, ent in by_key.items():
+                names = [{"name": u, "origin": "uncanonicalized_id"} for u in sorted(ent["unc"]) if u != ent["id"]]
+                rec = record("identities", urn("identity", key), SOURCE, scope, native_key=key,
+                             kind="email" if "@" in (ent["id"] or "") else "phone", address=ent["id"],
+                             service=ent["service"], is_me=False, observed_names=names)
+                yield Emit(rec, Observation("handle", sorted(ent["rows"]), key, fingerprint(ent["id"], ent["service"], names)))
+            yield Emit(record("identities", me_urn, SOURCE, scope, native_key=me_key, kind="me", address=None, service=None,
+                              is_me=True, observed_names=[]), Observation("me", [], me_key, fingerprint("me")))
+            stats.bump("identities", len(by_key) + 1)
+            # person_centric_id groups several handles for the same person: emit as identity_links evidence via aliases? No:
+            # aliases are for renames; we emit nothing here but record the hint for Phase 4 link suggestions.
+            pc_groups: dict[str, set[str]] = {}
+            for key, ent in by_key.items():
+                for pc in ent["pcid"]:
+                    pc_groups.setdefault(pc, set()).add(key)
+            stats.checkpoints["person_centric_groups"] = sum(1 for g in pc_groups.values() if len(g) > 1)
 
-        # --- chats -------------------------------------------------------------------
-        chat_urn_by_rowid: dict[int, str] = {}
-        chat_key_by_rowid: dict[int, str] = {}
-        ident_to_chats: dict[str, list[int]] = {}
-        for r in conn.execute("SELECT ROWID, guid, chat_identifier, service_name, display_name, style, is_archived FROM chat"):
-            key = U.messages_chat_key(r["guid"])
-            c_urn = urn("chat", key)
-            chat_urn_by_rowid[r["ROWID"]] = c_urn
-            chat_key_by_rowid[r["ROWID"]] = key
-            ident_to_chats.setdefault(r["chat_identifier"] or "", []).append(r["ROWID"])
-            kind = "group" if r["style"] == 43 else "direct" if r["style"] == 45 else f"unknown:{r['style']}"
-            rec = record("chats", c_urn, SOURCE, scope, native_key=key, kind=kind, observed_name=r["display_name"] or None,
-                         service=r["service_name"], assignment="source", is_archived=bool(r["is_archived"]), created_at=None)
-            yield Emit(rec, Observation("chat", [r["ROWID"]], key, fingerprint(r["guid"], r["display_name"], r["style"], r["is_archived"], r["service_name"])))
-            stats.bump("chats")
+            # --- chats -------------------------------------------------------------------
+            chat_urn_by_rowid: dict[int, str] = {}
+            chat_key_by_rowid: dict[int, str] = {}
+            ident_to_chats: dict[str, list[int]] = {}
+            for r in conn.execute("SELECT ROWID, guid, chat_identifier, service_name, display_name, style, is_archived FROM chat"):
+                key = U.messages_chat_key(r["guid"])
+                c_urn = urn("chat", key)
+                chat_urn_by_rowid[r["ROWID"]] = c_urn
+                chat_key_by_rowid[r["ROWID"]] = key
+                ident_to_chats.setdefault(r["chat_identifier"] or "", []).append(r["ROWID"])
+                kind = "group" if r["style"] == 43 else "direct" if r["style"] == 45 else f"unknown:{r['style']}"
+                rec = record("chats", c_urn, SOURCE, scope, native_key=key, kind=kind, observed_name=r["display_name"] or None,
+                             service=r["service_name"], assignment="source", is_archived=bool(r["is_archived"]), created_at=None)
+                yield Emit(rec, Observation("chat", [r["ROWID"]], key, fingerprint(r["guid"], r["display_name"], r["style"], r["is_archived"], r["service_name"])))
+                stats.bump("chats")
 
-        # --- memberships --------------------------------------------------------------
-        for r in conn.execute("SELECT chat_id, handle_id FROM chat_handle_join"):
-            if r["chat_id"] not in chat_key_by_rowid or r["handle_id"] not in handle_key:
-                stats.error("dangling_chat_handle_join", f"chat_handle_join chat_id={r['chat_id']} handle_id={r['handle_id']}")
-                continue
-            key = U.composite_key("membership", chat_key_by_rowid[r["chat_id"]], handle_key[r["handle_id"]])
-            rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=chat_urn_by_rowid[r["chat_id"]],
-                         identity_urn=handle_urn[r["handle_id"]], role="member", state="unknown", first_seen=None,
-                         last_seen=None, evidence=[{"type": "chat_handle_join"}])
-            yield Emit(rec, Observation("chat_handle_join", [r["chat_id"], r["handle_id"]], key, fingerprint(key)))
-            stats.bump("chat_memberships")
+            # --- memberships --------------------------------------------------------------
+            for r in conn.execute("SELECT chat_id, handle_id FROM chat_handle_join"):
+                if r["chat_id"] not in chat_key_by_rowid or r["handle_id"] not in handle_key:
+                    stats.error("dangling_chat_handle_join", f"chat_handle_join chat_id={r['chat_id']} handle_id={r['handle_id']}")
+                    continue
+                key = U.composite_key("membership", chat_key_by_rowid[r["chat_id"]], handle_key[r["handle_id"]])
+                rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=chat_urn_by_rowid[r["chat_id"]],
+                             identity_urn=handle_urn[r["handle_id"]], role="member", state="unknown", first_seen=None,
+                             last_seen=None, evidence=[{"type": "chat_handle_join"}])
+                yield Emit(rec, Observation("chat_handle_join", [r["chat_id"], r["handle_id"]], key, fingerprint(key)))
+                stats.bump("chat_memberships")
 
-        # --- ck_chat_id inference for messages without a join row ------------------------
-        ck_rows = conn.execute(
-            """SELECT m.ROWID, m.ck_chat_id, m.service FROM message m
-               LEFT JOIN chat_message_join j ON j.message_id = m.ROWID
-               WHERE j.message_id IS NULL AND m.ck_chat_id IS NOT NULL""").fetchall()
-        inferred: dict[int, tuple[str, str]] = {}  # message rowid -> (chat_urn, assignment)
-        stub_chats: dict[str, str] = {}  # ck_chat_id -> chat urn
-        for r in ck_rows:
-            ck = r["ck_chat_id"]
-            tail = ck.split(";", 2)[-1] if ";" in ck else ck
-            cands = ident_to_chats.get(tail, [])
-            if len(cands) > 1:
-                svc_first = ck.split(";", 1)[0]
-                same = [c for c in cands if conn.execute("SELECT service_name FROM chat WHERE ROWID=?", (c,)).fetchone()[0] == svc_first]
-                cands = same or cands
-            if cands:
-                inferred[r["ROWID"]] = (chat_urn_by_rowid[min(cands)], "inferred_ck_chat_id")
+            # --- ck_chat_id inference for messages without a join row ------------------------
+            ck_rows = conn.execute(
+                """SELECT m.ROWID, m.ck_chat_id, m.service FROM message m
+                   LEFT JOIN chat_message_join j ON j.message_id = m.ROWID
+                   WHERE j.message_id IS NULL AND m.ck_chat_id IS NOT NULL""" +
+                (' AND m.ROWID IN (SELECT row_id FROM temp.cs_selected_messages)' if selected is not None else '')).fetchall()
+            inferred: dict[int, tuple[str, str]] = {}  # message rowid -> (chat_urn, assignment)
+            stub_chats: dict[str, str] = {}  # ck_chat_id -> chat urn
+            for r in ck_rows:
+                ck = r["ck_chat_id"]
+                tail = ck.split(";", 2)[-1] if ";" in ck else ck
+                cands = ident_to_chats.get(tail, [])
+                if len(cands) > 1:
+                    svc_first = ck.split(";", 1)[0]
+                    same = [c for c in cands if conn.execute("SELECT service_name FROM chat WHERE ROWID=?", (c,)).fetchone()[0] == svc_first]
+                    cands = same or cands
+                if cands:
+                    inferred[r["ROWID"]] = (chat_urn_by_rowid[min(cands)], "inferred_ck_chat_id")
+                else:
+                    if ck not in stub_chats:
+                        key = U.messages_inferred_chat_key(ck)
+                        s_urn = urn("chat", key)
+                        stub_chats[ck] = s_urn
+                        svc = ck.split(";", 1)[0] if ";" in ck else None
+                        rec = record("chats", s_urn, SOURCE, scope, native_key=key, kind="direct" if "chat" not in tail else "group",
+                                     observed_name=None, service=svc, assignment="stub", is_archived=None, created_at=None)
+                        yield Emit(rec, Observation("message.ck_chat_id", [], key, fingerprint(ck)))
+                        stats.bump("chats")
+                        stats.bump("stub_chats")
+                    inferred[r["ROWID"]] = (stub_chats[ck], "inferred_ck_chat_id")
+            stats.bump("messages_inferred_chat", len(inferred))
+
+            # --- attachments join ----------------------------------------------------------
+            # An attachment row can be joined to several messages (observed once). The attachment record
+            # is owned by the lowest message ROWID; other messages only reference its URN in their parts.
+            att_owner: dict[int, int] = {}
+            if selected is None:
+                owners = conn.execute('SELECT attachment_id,min(message_id) AS owner FROM message_attachment_join GROUP BY 1')
             else:
-                if ck not in stub_chats:
-                    key = U.messages_inferred_chat_key(ck)
-                    s_urn = urn("chat", key)
-                    stub_chats[ck] = s_urn
-                    svc = ck.split(";", 1)[0] if ";" in ck else None
-                    rec = record("chats", s_urn, SOURCE, scope, native_key=key, kind="direct" if "chat" not in tail else "group",
-                                 observed_name=None, service=svc, assignment="stub", is_archived=None, created_at=None)
-                    yield Emit(rec, Observation("message.ck_chat_id", [], key, fingerprint(ck)))
-                    stats.bump("chats")
-                    stats.bump("stub_chats")
-                inferred[r["ROWID"]] = (stub_chats[ck], "inferred_ck_chat_id")
-        stats.bump("messages_inferred_chat", len(inferred))
+                owners = conn.execute("""SELECT chosen.attachment_id,
+                    (SELECT min(owner.message_id) FROM message_attachment_join owner
+                     WHERE owner.attachment_id=chosen.attachment_id) AS owner
+                    FROM (SELECT DISTINCT a.attachment_id FROM message_attachment_join a
+                          WHERE a.message_id IN (SELECT row_id FROM temp.cs_selected_messages)) chosen""")
+            for r in owners:
+                att_owner[r['attachment_id']] = r['owner']
 
-        # --- attachments join ----------------------------------------------------------
-        # An attachment row can be joined to several messages (observed once). The attachment record
-        # is owned by the lowest message ROWID; other messages only reference its URN in their parts.
-        att_owner: dict[int, int] = {}
-        for r in conn.execute("SELECT attachment_id, min(message_id) AS owner FROM message_attachment_join GROUP BY 1"):
-            att_owner[r["attachment_id"]] = r["owner"]
+            # --- run helper ------------------------------------------------------------------
+            max_rowid = conn.execute("SELECT max(ROWID) FROM message").fetchone()[0] or 0
+            prev = int(checkpoints.get("max_message_rowid", 0)) if checkpoints else 0
+            if selected is None and prev > max_rowid:
+                stats.notes.append("source reset detected: max message ROWID went backwards; full scan")
+                stats.full_scan = True
+            stats.checkpoints["max_message_rowid"] = max_rowid
+            stats.scanned_tables |= {'handle', 'chat', 'chat_handle_join', 'me'}
+            if selected is None:
+                stats.scanned_tables |= {'message', 'attachment', 'message.ck_chat_id'}
 
-        # --- run helper ------------------------------------------------------------------
-        max_rowid = conn.execute("SELECT max(ROWID) FROM message").fetchone()[0] or 0
-        prev = int(checkpoints.get("max_message_rowid", 0)) if checkpoints else 0
-        if prev > max_rowid:
-            stats.notes.append("source reset detected: max message ROWID went backwards; full scan")
-            stats.full_scan = True
-        stats.checkpoints["max_message_rowid"] = max_rowid
-        # The helper always decodes the whole database; every table is scanned completely.
-        stats.scanned_tables |= {"handle", "chat", "chat_handle_join", "message", "attachment"}
+            if selected is None:
+                stream = decode(helper, db_path)
+            else:
+                ordered = (row[0] for row in conn.execute("""SELECT s.row_id FROM temp.cs_selected_messages s
+                    LEFT JOIN message m ON m.ROWID=s.row_id ORDER BY m.date,m.ROWID,s.row_id"""))
+                stream = decode_batches(helper, db_path, ordered, requested=len(selected))
+            with closing(stream) as decoded:
+                header = next(decoded)
+                stats.checkpoints['helper'] = {key: header.get(key) for key in ('format', 'library', 'helper_version', 'capabilities')}
+                policy_header = {key: value for key, value in header.items() if key != 'selection'}
+                for o in decoded:
+                    if o['type'] == 'footer':
+                        if o.get('errors'):
+                            stats.error('helper_row_errors', f"{o['errors']} rows failed to decode")
+                        continue
+                    if stats.watch_path:
+                        for attachment in o['attachments']:
+                            if attachment.get('filename'):
+                                stats.watch_path(Path(attachment['filename']).expanduser())
+                    probes = {id(a): snap.attachment_probe(a) if snap.attachment_probe else _probe_attachment(a, root)
+                              for a in o['attachments']}
+                    subject = (o.get('group_action') or {}).get('handle_id')
+                    context = (me_urn, handle_urn.get(o['handle_id']), handle_urn.get(subject) if subject is not None else None,
+                               chat_urn_by_rowid.get(o['chat_id']), inferred.get(o['rowid']), str(root),
+                               [(a['rowid'], att_owner.get(a['rowid'], o['rowid'])) for a in o['attachments']])
+                    digest = native_fingerprint(o, context, [probes[id(a)] for a in o['attachments']], policy_header)
+                    yield from extract_unit(stats, o['guid'], digest,
+                        partial(self._message, o, scope, stats, urn, me_urn, handle_urn,
+                                chat_urn_by_rowid, inferred, att_owner, root, probes))
 
-        proc = subprocess.Popen([str(helper), str(db_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                encoding="utf-8", bufsize=1 << 16)
-        assert proc.stdout is not None
-        header = json.loads(proc.stdout.readline() or "{}")
-        if header.get("type") != "header" or header.get("format") != HELPER_FORMAT:
-            proc.kill()
-            raise IncompatibleSource(f"helper produced unexpected header format {header.get('format')!r}")
-        stats.checkpoints["helper"] = {"format": header.get("format"), "library": header.get("library"),
-                                       "helper_version": header.get("helper_version")}
-        footer: dict[str, Any] | None = None
-        guid_by_rowid: dict[int, str] = {}
-        for line in proc.stdout:
-            o = json.loads(line)
-            t = o.get("type")
-            if t == "footer":
-                footer = o
-                break
-            if t != "message":
-                continue
-            guid_by_rowid[o["rowid"]] = o["guid"]
-            yield from self._message(o, conn, scope, stats, urn, me_urn, handle_urn, chat_urn_by_rowid, inferred, att_owner, root)
-        rc = proc.wait()
-        err = proc.stderr.read() if proc.stderr else ""
-        if rc != 0:
-            raise IncompatibleSource(f"helper exited {rc}: {err.strip()[:200]}")
-        if footer is None:
-            raise IncompatibleSource("helper output truncated (no footer)")
-        if footer.get("errors"):
-            stats.error("helper_row_errors", f"{footer['errors']} rows failed to decode")
-        conn.close()
 
-    def _message(self, o: dict[str, Any], conn: sqlite3.Connection, scope: str, stats: ExtractStats, urn: Any, me_urn: str,
+    def _message(self, o: dict[str, Any], scope: str, stats: ExtractStats, urn: Any, me_urn: str,
                  handle_urn: dict[int, str], chat_urn_by_rowid: dict[int, str], inferred: dict[int, tuple[str, str]],
-                 att_owner: dict[int, int], root: Path) -> Iterator[Emit]:
+                 att_owner: dict[int, int], root: Path, probes: dict[int, tuple[str, str | None, int | None, str | None]]) -> Iterator[Emit]:
         m_key = o["guid"]
         m_urn = urn("message", m_key)
         rowid = o["rowid"]
@@ -367,22 +396,7 @@ class MessagesAdapter:
             if a["rowid"] is not None:
                 used_att.add(a["rowid"])
             fn = a.get("filename")
-            availability, sha, size, hint = "unknown", None, a.get("total_bytes"), None
-            if a.get("_purged"):
-                availability = "missing"
-            elif fn:
-                p = Path(fn).expanduser()
-                try:
-                    hint = str(p.relative_to(root))
-                except ValueError:
-                    hint = os.path.basename(fn)
-                if p.is_file() and not p.is_symlink():
-                    availability = "available"
-                    sha, size = _sha256(p)
-                else:
-                    availability = "missing" if fn.startswith(("~", "/")) else "unknown"
-            else:
-                availability = "not_downloaded"
+            availability, sha, size, hint = probes[id(a)] if id(a) in probes else _probe_attachment(a, root)
             rec = record("attachments", a_urn, SOURCE, scope, native_key=a_key, message_urn=m_urn, part_index=part_index,
                          filename=os.path.basename(a.get("transfer_name") or fn or "") or None, mime_type=a.get("mime_type"),
                          uti=a.get("uti"), declared_size=size, availability=availability, blob_sha256=sha,
@@ -480,6 +494,23 @@ class MessagesAdapter:
                               target_native=ev["payload"].get("target_native"), actor_urn=sender,
                               at=timestamp(ev.get("at_raw", o["date"]), "ns", EPOCH_2001), payload=ev["payload"], carrier_message_urn=m_urn))
             stats.bump("events")
+
+
+def _probe_attachment(a: dict[str, Any], root: Path) -> tuple[str, str | None, int | None, str | None]:
+    fn, size = a.get('filename'), a.get('total_bytes')
+    if a.get('_purged'):
+        return 'missing', None, size, None
+    if not fn:
+        return 'not_downloaded', None, size, None
+    path = Path(fn).expanduser()
+    try:
+        hint = str(path.relative_to(root))
+    except ValueError:
+        hint = os.path.basename(fn)
+    if path.is_file() and not path.is_symlink():
+        sha, size = _sha256(path)
+        return 'available', sha, size, hint
+    return ('missing' if fn.startswith(('~', '/')) else 'unknown'), None, size, hint
 
 
 def _sha256(p: Path) -> tuple[str, int]:

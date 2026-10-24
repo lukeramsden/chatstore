@@ -1,0 +1,621 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "One instrumented no-pipeline run per history size, fixed 1,000 extra alias pairs. cProfile plus SQLite 1,000-step progress callbacks around the new-message capture only. Counts round down per connection; omitted labels have no full interval. Existing canonical Cache and new SQLite connections are included. Python WAL/page reads are not SQLite VM steps. Physical I/O is process-attributed. No remote traffic, media bytes or energy measurement. Profiling overhead is included; this is not an unprofiled timing comparison.",
+  "runs": [
+    {
+      "starting_messages": 100,
+      "additional_aliases": 1000,
+      "capture": {
+        "stage": "sync-new-message",
+        "wall_seconds": 0.24950020899996161,
+        "cpu_seconds": 0.247807,
+        "storage_read_bytes": 0,
+        "storage_written_bytes": 1875968,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 11,
+        "lifetime_peak_rss_bytes": 74809344,
+        "counts": {
+          "chats": 3,
+          "chat_memberships": 7,
+          "identities": 2007,
+          "aliases": 1002,
+          "messages": 1,
+          "canonical_units_rebuilt": 1,
+          "events": 1,
+          "unsupported": {
+            "group_change_type:5": 1
+          },
+          "written": {
+            "inserted": 2,
+            "updated": 0,
+            "unchanged": 3020
+          }
+        },
+        "mode": "incremental"
+      },
+      "sqlite_vm_steps_lower_bounds": {
+        "canonical-cache": 622000
+      },
+      "functions": [
+        {
+          "file": "native_collector.py",
+          "line": 41,
+          "function": "collect_native",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 1.4834e-05,
+          "cumulative_seconds": 0.24812087500000002
+        },
+        {
+          "file": "native_whatsapp.py",
+          "line": 31,
+          "function": "collect",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 6.2538e-05,
+          "cumulative_seconds": 0.24810604100000003
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 401,
+          "function": "_run_prepared_sync",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 8.9666e-05,
+          "cumulative_seconds": 0.22263537500000002
+        },
+        {
+          "file": "sync.py",
+          "line": 40,
+          "function": "run_sync",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0021199490000000003,
+          "cumulative_seconds": 0.19744
+        },
+        {
+          "file": "adapter.py",
+          "line": 142,
+          "function": "extract",
+          "primitive_calls": 3022,
+          "calls": 3022,
+          "self_seconds": 0.004350765,
+          "cumulative_seconds": 0.09995503500000001
+        },
+        {
+          "file": "__init__.py",
+          "line": 185,
+          "function": "dumps",
+          "primitive_calls": 21666,
+          "calls": 21666,
+          "self_seconds": 0.015224894000000001,
+          "cumulative_seconds": 0.078528287
+        },
+        {
+          "file": "extraction.py",
+          "line": 134,
+          "function": "code_signature",
+          "primitive_calls": 4,
+          "calls": 4,
+          "self_seconds": 0.0037022820000000003,
+          "cumulative_seconds": 0.070541001
+        },
+        {
+          "file": "encoder.py",
+          "line": 185,
+          "function": "encode",
+          "primitive_calls": 21666,
+          "calls": 21666,
+          "self_seconds": 0.012981183,
+          "cumulative_seconds": 0.06014301700000001
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 43,
+          "function": "policy_signature",
+          "primitive_calls": 3,
+          "calls": 3,
+          "self_seconds": 1.9707000000000003e-05,
+          "cumulative_seconds": 0.06004633400000001
+        },
+        {
+          "file": "sync.py",
+          "line": 172,
+          "function": "flush",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0010085650000000001,
+          "cumulative_seconds": 0.054156875
+        },
+        {
+          "file": "sync.py",
+          "line": 180,
+          "function": "commit_records",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.000108708,
+          "cumulative_seconds": 0.051195666
+        },
+        {
+          "file": "sync.py",
+          "line": 157,
+          "function": "capture",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0018318120000000002,
+          "cumulative_seconds": 0.050867125000000006
+        },
+        {
+          "file": "adapter.py",
+          "line": 310,
+          "function": "_aliases",
+          "primitive_calls": 1003,
+          "calls": 1003,
+          "self_seconds": 0.002800472,
+          "cumulative_seconds": 0.048545228
+        },
+        {
+          "file": "adapter.py",
+          "line": 158,
+          "function": "urn",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.001047004,
+          "cumulative_seconds": 0.048445939
+        },
+        {
+          "file": "urn.py",
+          "line": 52,
+          "function": "derive_urn",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.001733493,
+          "cumulative_seconds": 0.047398935
+        },
+        {
+          "file": "encoder.py",
+          "line": 207,
+          "function": "iterencode",
+          "primitive_calls": 21666,
+          "calls": 21666,
+          "self_seconds": 0.041775549,
+          "cumulative_seconds": 0.041775549
+        },
+        {
+          "file": "store.py",
+          "line": 22,
+          "function": "_j",
+          "primitive_calls": 9541,
+          "calls": 9541,
+          "self_seconds": 0.002357919,
+          "cumulative_seconds": 0.041493867000000004
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 117,
+          "function": "validate",
+          "primitive_calls": 2,
+          "calls": 2,
+          "self_seconds": 9.165000000000001e-06,
+          "cumulative_seconds": 0.040499875000000005
+        },
+        {
+          "file": "urn.py",
+          "line": 41,
+          "function": "derive_uuid",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.00464101,
+          "cumulative_seconds": 0.03859584
+        },
+        {
+          "file": "extraction.py",
+          "line": 61,
+          "function": "_literal",
+          "primitive_calls": 10246,
+          "calls": 21642,
+          "self_seconds": 0.010500993,
+          "cumulative_seconds": 0.037058270000000004
+        },
+        {
+          "file": "store.py",
+          "line": 286,
+          "function": "observe_many",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.00041205500000000004,
+          "cumulative_seconds": 0.025203208
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.sorted>",
+          "primitive_calls": 2269,
+          "calls": 2269,
+          "self_seconds": 0.002237652,
+          "cumulative_seconds": 0.025131524000000002
+        },
+        {
+          "file": "records.py",
+          "line": 45,
+          "function": "record",
+          "primitive_calls": 3024,
+          "calls": 3024,
+          "self_seconds": 0.001398839,
+          "cumulative_seconds": 0.023391214
+        },
+        {
+          "file": "sync.py",
+          "line": 66,
+          "function": "save_run",
+          "primitive_calls": 2,
+          "calls": 2,
+          "self_seconds": 2.6585e-05,
+          "cumulative_seconds": 0.022263
+        },
+        {
+          "file": "urn.py",
+          "line": 74,
+          "function": "revision_digest",
+          "primitive_calls": 3024,
+          "calls": 3024,
+          "self_seconds": 0.00424365,
+          "cumulative_seconds": 0.021992375
+        },
+        {
+          "file": "extraction.py",
+          "line": 118,
+          "function": "_function_policy",
+          "primitive_calls": 903,
+          "calls": 903,
+          "self_seconds": 0.001314924,
+          "cumulative_seconds": 0.019704102
+        },
+        {
+          "file": "urn.py",
+          "line": 22,
+          "function": "compact_json",
+          "primitive_calls": 6047,
+          "calls": 6047,
+          "self_seconds": 0.0016413810000000001,
+          "cumulative_seconds": 0.018644656000000003
+        },
+        {
+          "file": "urn.py",
+          "line": 27,
+          "function": "canonical_json",
+          "primitive_calls": 3024,
+          "calls": 3024,
+          "self_seconds": 0.000871192,
+          "cumulative_seconds": 0.015218784
+        },
+        {
+          "file": "extraction.py",
+          "line": 89,
+          "function": "_code_constant",
+          "primitive_calls": 960,
+          "calls": 9433,
+          "self_seconds": 0.006757300000000001,
+          "cumulative_seconds": 0.014767017
+        },
+        {
+          "file": "uuid.py",
+          "line": 781,
+          "function": "uuid5",
+          "primitive_calls": 5042,
+          "calls": 5042,
+          "self_seconds": 0.00625292,
+          "cumulative_seconds": 0.013982641
+        }
+      ]
+    },
+    {
+      "starting_messages": 100000,
+      "additional_aliases": 1000,
+      "capture": {
+        "stage": "sync-new-message",
+        "wall_seconds": 0.5075470419978956,
+        "cpu_seconds": 0.2916280000000029,
+        "storage_read_bytes": 49201152,
+        "storage_written_bytes": 2752512,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 11,
+        "lifetime_peak_rss_bytes": 206176256,
+        "counts": {
+          "chats": 3,
+          "chat_memberships": 7,
+          "identities": 2007,
+          "aliases": 1002,
+          "messages": 1,
+          "canonical_units_rebuilt": 1,
+          "events": 1,
+          "unsupported": {
+            "group_change_type:5": 1
+          },
+          "written": {
+            "inserted": 2,
+            "updated": 0,
+            "unchanged": 3020
+          }
+        },
+        "mode": "incremental"
+      },
+      "sqlite_vm_steps_lower_bounds": {
+        "native-mirror": 26000,
+        "canonical-cache": 632000
+      },
+      "functions": [
+        {
+          "file": "native_collector.py",
+          "line": 41,
+          "function": "collect_native",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 1.8624e-05,
+          "cumulative_seconds": 0.506077333
+        },
+        {
+          "file": "native_whatsapp.py",
+          "line": 31,
+          "function": "collect",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 5.7379e-05,
+          "cumulative_seconds": 0.506058709
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 401,
+          "function": "_run_prepared_sync",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.00012349800000000002,
+          "cumulative_seconds": 0.472577291
+        },
+        {
+          "file": "sync.py",
+          "line": 40,
+          "function": "run_sync",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0021406560000000003,
+          "cumulative_seconds": 0.397707709
+        },
+        {
+          "file": "sync.py",
+          "line": 172,
+          "function": "flush",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.0010167590000000001,
+          "cumulative_seconds": 0.24933395800000002
+        },
+        {
+          "file": "sync.py",
+          "line": 180,
+          "function": "commit_records",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.00012012600000000001,
+          "cumulative_seconds": 0.24673612500000003
+        },
+        {
+          "file": "sync.py",
+          "line": 157,
+          "function": "capture",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.001965007,
+          "cumulative_seconds": 0.246424416
+        },
+        {
+          "file": "store.py",
+          "line": 144,
+          "function": "upsert_many",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.002356116,
+          "cumulative_seconds": 0.14439337500000002
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'update' of 'dict' objects>",
+          "primitive_calls": 36,
+          "calls": 36,
+          "self_seconds": 0.003855741,
+          "cumulative_seconds": 0.139952626
+        },
+        {
+          "file": "store.py",
+          "line": 128,
+          "function": "current_heads",
+          "primitive_calls": 4,
+          "calls": 4,
+          "self_seconds": 0.000268529,
+          "cumulative_seconds": 0.13390316700000002
+        },
+        {
+          "file": "store.py",
+          "line": 141,
+          "function": "<genexpr>",
+          "primitive_calls": 3033,
+          "calls": 3033,
+          "self_seconds": 0.131253267,
+          "cumulative_seconds": 0.13129497
+        },
+        {
+          "file": "adapter.py",
+          "line": 142,
+          "function": "extract",
+          "primitive_calls": 3022,
+          "calls": 3022,
+          "self_seconds": 0.004299488000000001,
+          "cumulative_seconds": 0.102492704
+        },
+        {
+          "file": "store.py",
+          "line": 286,
+          "function": "observe_many",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.00047782600000000004,
+          "cumulative_seconds": 0.08652216700000001
+        },
+        {
+          "file": "__init__.py",
+          "line": 185,
+          "function": "dumps",
+          "primitive_calls": 21669,
+          "calls": 21669,
+          "self_seconds": 0.015357290000000001,
+          "cumulative_seconds": 0.08116922700000001
+        },
+        {
+          "file": "extraction.py",
+          "line": 134,
+          "function": "code_signature",
+          "primitive_calls": 4,
+          "calls": 4,
+          "self_seconds": 0.003766896,
+          "cumulative_seconds": 0.07155758300000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'executemany' of 'sqlite3.Connection' objects>",
+          "primitive_calls": 26,
+          "calls": 26,
+          "self_seconds": 0.06954499,
+          "cumulative_seconds": 0.06963633300000001
+        },
+        {
+          "file": "encoder.py",
+          "line": 185,
+          "function": "encode",
+          "primitive_calls": 21669,
+          "calls": 21669,
+          "self_seconds": 0.013085686000000001,
+          "cumulative_seconds": 0.062717067
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 43,
+          "function": "policy_signature",
+          "primitive_calls": 3,
+          "calls": 3,
+          "self_seconds": 2.3209e-05,
+          "cumulative_seconds": 0.06099529100000001
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 359,
+          "function": "_whatsapp_coverage",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 5.9250000000000004e-05,
+          "cumulative_seconds": 0.054157167000000006
+        },
+        {
+          "file": "unit_coverage.py",
+          "line": 101,
+          "function": "with_headers",
+          "primitive_calls": 1,
+          "calls": 1,
+          "self_seconds": 0.051701845,
+          "cumulative_seconds": 0.053196083000000005
+        },
+        {
+          "file": "adapter.py",
+          "line": 310,
+          "function": "_aliases",
+          "primitive_calls": 1003,
+          "calls": 1003,
+          "self_seconds": 0.0029155120000000003,
+          "cumulative_seconds": 0.050522038000000005
+        },
+        {
+          "file": "adapter.py",
+          "line": 158,
+          "function": "urn",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.0010626820000000001,
+          "cumulative_seconds": 0.048416893
+        },
+        {
+          "file": "urn.py",
+          "line": 52,
+          "function": "derive_urn",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.0017541820000000002,
+          "cumulative_seconds": 0.047354211
+        },
+        {
+          "file": "encoder.py",
+          "line": 207,
+          "function": "iterencode",
+          "primitive_calls": 21669,
+          "calls": 21669,
+          "self_seconds": 0.044184107,
+          "cumulative_seconds": 0.044184107
+        },
+        {
+          "file": "store.py",
+          "line": 22,
+          "function": "_j",
+          "primitive_calls": 9541,
+          "calls": 9541,
+          "self_seconds": 0.002421138,
+          "cumulative_seconds": 0.041748851000000003
+        },
+        {
+          "file": "prepared_sync.py",
+          "line": 117,
+          "function": "validate",
+          "primitive_calls": 2,
+          "calls": 2,
+          "self_seconds": 1.0917e-05,
+          "cumulative_seconds": 0.040840333
+        },
+        {
+          "file": "urn.py",
+          "line": 41,
+          "function": "derive_uuid",
+          "primitive_calls": 5034,
+          "calls": 5034,
+          "self_seconds": 0.004558633,
+          "cumulative_seconds": 0.038667021
+        },
+        {
+          "file": "extraction.py",
+          "line": 61,
+          "function": "_literal",
+          "primitive_calls": 10246,
+          "calls": 21642,
+          "self_seconds": 0.010699082,
+          "cumulative_seconds": 0.037196298
+        },
+        {
+          "file": "records.py",
+          "line": 45,
+          "function": "record",
+          "primitive_calls": 3024,
+          "calls": 3024,
+          "self_seconds": 0.0013810830000000002,
+          "cumulative_seconds": 0.025680953000000003
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.sorted>",
+          "primitive_calls": 2269,
+          "calls": 2269,
+          "self_seconds": 0.002273366,
+          "cumulative_seconds": 0.025184358
+        }
+      ]
+    }
+  ]
+}

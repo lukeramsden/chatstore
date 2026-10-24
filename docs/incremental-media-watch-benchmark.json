@@ -1,0 +1,80 @@
+{
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.3",
+    "kernel_file_limits": [
+      "kern.maxfilesperproc: 61440",
+      "kern.maxfiles: 122880"
+    ]
+  },
+  "runs": [
+    {
+      "files": 1000,
+      "polls": 100,
+      "fd_limit": 1048575,
+      "scope": "Synthetic MediaWatch/SourceMonitor routing only. Excludes file setup/mutation, media copying, SQLite, canonical sync, archives and delivery. RSS is lifetime process peak including fixture setup. Logical source file bytes read by routing are zero; kernel I/O and energy are not measured.",
+      "registration": {
+        "wall_seconds": 0.11706033299560659,
+        "cpu_seconds": 0.11671099999999998,
+        "open_fd_delta": 1009
+      },
+      "clean_median": {
+        "wall_seconds": 2.785449760267511e-05,
+        "cpu_seconds": 5.499999999991623e-06
+      },
+      "sparse": {
+        "wall_seconds": 6.720900273649022e-05,
+        "cpu_seconds": 4.799999999999249e-05,
+        "dirty_ids": 10
+      },
+      "status": "complete",
+      "fds_after_close_delta": 0,
+      "peak_rss_bytes": 35356672
+    },
+    {
+      "files": 10000,
+      "polls": 100,
+      "fd_limit": 1048575,
+      "scope": "Synthetic MediaWatch/SourceMonitor routing only. Excludes file setup/mutation, media copying, SQLite, canonical sync, archives and delivery. RSS is lifetime process peak including fixture setup. Logical source file bytes read by routing are zero; kernel I/O and energy are not measured.",
+      "registration": {
+        "wall_seconds": 1.3520045830009622,
+        "cpu_seconds": 1.2965030000000002,
+        "open_fd_delta": 10009
+      },
+      "clean_median": {
+        "wall_seconds": 2.6062498363899067e-05,
+        "cpu_seconds": 5.000000000254801e-06
+      },
+      "sparse": {
+        "wall_seconds": 0.00013054200098849833,
+        "cpu_seconds": 8.900000000000574e-05,
+        "dirty_ids": 10
+      },
+      "status": "complete",
+      "fds_after_close_delta": 0,
+      "peak_rss_bytes": 91783168
+    },
+    {
+      "files": 100000,
+      "polls": 100,
+      "fd_limit": 1048575,
+      "scope": "Synthetic MediaWatch/SourceMonitor routing only. Excludes file setup/mutation, media copying, SQLite, canonical sync, archives and delivery. RSS is lifetime process peak including fixture setup. Logical source file bytes read by routing are zero; kernel I/O and energy are not measured.",
+      "status": "monitoring_unavailable",
+      "failure": "watch registration failed: OSError",
+      "failure_wall_seconds": 8.130108625002322,
+      "fds_after_close_delta": 0,
+      "peak_rss_bytes": 359628800
+    },
+    {
+      "files": 1000,
+      "polls": 100,
+      "fd_limit": 256,
+      "scope": "Synthetic MediaWatch/SourceMonitor routing only. Excludes file setup/mutation, media copying, SQLite, canonical sync, archives and delivery. RSS is lifetime process peak including fixture setup. Logical source file bytes read by routing are zero; kernel I/O and energy are not measured.",
+      "status": "monitoring_unavailable",
+      "failure": "watch registration failed: OSError",
+      "failure_wall_seconds": 0.02772329199797241,
+      "fds_after_close_delta": 0,
+      "peak_rss_bytes": 30638080
+    }
+  ]
+}

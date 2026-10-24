@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-22T16:25:09.019411+00:00",
+  "synthetic_messages": 500000,
+  "observed_wal_bytes_at_termination": 44924360552,
+  "status": "terminated_for_excessive_temporary_wal_growth",
+  "exit_code": 143,
+  "scope": "Failed acceptance run. External file-size observation, not peak I/O or completed stage timing."
+}

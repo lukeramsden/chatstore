@@ -2,7 +2,13 @@
 
 ## Envelope
 
-Every command with `--json` prints exactly one JSON object on stdout:
+Every one-shot command with `--json` prints exactly one JSON object on stdout.
+`sync --watch-interval SECONDS` is a streaming exception: it emits and flushes one
+complete envelope per poll as newline-delimited JSON, until interrupted or `--max-polls N`
+is reached. Each envelope describes that poll, including its own exit code and errors.
+The bounded watch invocation exits with the final poll's code; interrupted watch mode exits 130.
+
+Envelope:
 
 ```json
 {
@@ -55,7 +61,7 @@ Every command with `--json` prints exactly one JSON object on stdout:
 | `version` | `{version, envelope, python, sqlite, platform}` |
 | `doctor` | `{data_dir, python, sqlite, fts5, sources: [{source, path_found, readable, schema_ok, schema_version, permission_hint, wal_present}], helper: {found, version}, keychain: bool}` |
 | `init` | `{data_dir, created: bool, scopes: [{source, scope}]}` |
-| `sync --source all|whatsapp|messages [--mode incremental|full]` | `sync_runs` record(s). `errors[]` is `{code, count, sample}` where `sample` is a non-sensitive pointer to the first affected row (native table, row id, timestamp, type code — never text or addresses). Any adapter error other than `ambiguous_lid_phone_pair` marks the run `partial` (exit 5); the cache still contains every record that did extract. |
+| `sync --source all|whatsapp|messages [--mode incremental|full] [--watch-interval SECONDS --max-polls N]` | `sync_runs` record(s). `errors[]` is `{code, count, sample}` where `sample` is a non-sensitive pointer to the first affected row (native table, row id, timestamp, type code — never text or addresses). Any adapter error other than `ambiguous_lid_phone_pair` marks the run `partial` (exit 5); the cache still contains every record that did extract. Watch mode emits one envelope per poll. Rejected media retention/monitoring emits `data: null`, `ok: false`, and envelope error `capture_retry_required`; the next scheduled poll retries. A finite run returns its final poll's exit code (1 if that capture still fails). |
 | `status` | `{data_dir, scopes, sync_runs_latest, counts, coverage}` |
 | `search <query> [--since --until --source --chat --sender --person --transport --has-attachment --advanced --history]` | `[{urn, revision_digest, chat_urn, chat_label, sender_urn, sender_label, sent_at, transport, kind, snippet, provenance: {source, scope}}]` |
 | `chats [--source --since --label --participant]` | `[{urn, kind, label, service, message_count, last_message_at, participants}]`. `--label` is a case-insensitive substring over the chat label and participant labels; `--participant` is an identity or person URN (a person's linked identities and all aliases are followed). |
@@ -100,3 +106,17 @@ Every command with `--json` prints exactly one JSON object on stdout:
 - `--advanced`: raw FTS5 syntax, syntax errors → exit 2 with a message.
 - Reactions and system events are excluded unless `--kind` includes them.
 - `--history` also searches retained revisions (flagged `revision_superseded` in results).
+
+## Monitored sync
+
+`sync --watch-interval 900` preserves a 15-minute source polling cadence while keeping
+process-local source monitors alive. Intervals are positive finite seconds; `--max-polls`
+is a positive integer and requires watch mode. Configuration and identity are reloaded
+between polls. `--mode full` always bypasses monitored reuse.
+
+A reused run has `snapshot: null`, `counts.monitored_coverage_reused: 1`, unchanged adapter
+checkpoints and an explicit coverage note. Its type counts describe reused captured coverage,
+not freshly emitted adapter records. It journals exact record/observation sighting ranges.
+Unsupported monitoring, lost sessions, semantic cache edits and changed dependencies cause
+ordinary capture. The first capture discovers media dependencies; a further stable capture
+establishes complete watch coverage. No persisted cursor authorizes source skips after restart.

@@ -3,7 +3,7 @@
 //! Read-only: opens the given path with `imessage_database::tables::table::get_connection`
 //! (SQLITE_OPEN_READ_ONLY). Only ever point it at a snapshot, never at the live database.
 //!
-//! Usage: chatstore-messages-decoder <path-to-chat.db> [--since-rowid N]
+//! Usage: chatstore-messages-decoder <path-to-chat.db> [--since-rowid N | --rowids-file rowids.json]
 //!
 //! Output: one JSON object per line.
 //!   first line : {"type":"header","format":"chatstore-messages-decoder/1","library":"imessage-database 4.2.0",...}
@@ -11,7 +11,8 @@
 //!   last line  : {"type":"footer","messages":N,"errors":N}
 //! Body text and edit history are emitted verbatim; the Python side never re-parses typedstream.
 
-use std::io::{BufWriter, Write};
+use std::collections::BTreeSet;
+use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 use imessage_database::{
@@ -41,6 +42,65 @@ struct Header<'a> {
     format: &'a str,
     library: &'a str,
     helper_version: &'a str,
+    capabilities: [&'a str; 1],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection: Option<Selection>,
+}
+
+#[derive(Serialize)]
+struct Selection {
+    kind: &'static str,
+    requested: usize,
+}
+
+struct Options {
+    since: Option<i64>,
+    rowids: Option<BTreeSet<i64>>,
+}
+
+fn options(args: &[String]) -> Result<Options, String> {
+    let mut result = Options { since: None, rowids: None };
+    let mut position = 2;
+    while position < args.len() {
+        let value = args.get(position + 1).ok_or("missing selection argument")?;
+        match args[position].as_str() {
+            "--since-rowid" if result.since.is_none() && result.rowids.is_none() => {
+                result.since = Some(value.parse().map_err(|_| "invalid --since-rowid integer")?);
+            }
+            "--rowids-file" if result.since.is_none() && result.rowids.is_none() => {
+                let mut file = std::fs::File::open(value).map_err(|e| format!("cannot open rowids file: {e}"))?;
+                let mut data = Vec::new();
+                Read::by_ref(&mut file).take(256 * 1024 + 1).read_to_end(&mut data).map_err(|e| e.to_string())?;
+                if data.len() > 256 * 1024 {
+                    return Err("rowids file exceeds byte limit".into());
+                }
+                let values: Vec<i64> = serde_json::from_slice(&data).map_err(|e| format!("invalid rowids array: {e}"))?;
+                if values.len() > 10000 {
+                    return Err("rowids selection exceeds row limit".into());
+                }
+                result.rowids = Some(values.into_iter().collect());
+            }
+            _ => return Err("unknown, repeated or conflicting selection option".into()),
+        }
+        position += 2;
+    }
+    Ok(result)
+}
+
+fn selected_query(query: &str, options: &Options) -> Result<String, &'static str> {
+    // Keep the pinned library's schema-specific columns and correlated joins.
+    // Refuse a changed template rather than risk filtering a full materialization.
+    let head = query.trim_end().strip_suffix("\nORDER BY\n    m.date;").ok_or("unsupported library query template")?;
+    let filter = if let Some(rowids) = &options.rowids {
+        if rowids.is_empty() { "0".to_string() } else {
+            format!("m.ROWID IN ({})", rowids.iter().map(i64::to_string).collect::<Vec<_>>().join(","))
+        }
+    } else if let Some(since) = options.since {
+        format!("m.ROWID > {since}")
+    } else {
+        return Ok(format!("{head}ORDER BY m.date,m.ROWID,c.chat_id,deleted_from;"));
+    };
+    Ok(format!("{head}WHERE {filter}\nORDER BY m.date,m.ROWID,c.chat_id,deleted_from;"))
 }
 
 #[derive(Serialize)]
@@ -49,6 +109,8 @@ struct Footer<'a> {
     ty: &'a str,
     messages: u64,
     errors: u64,
+    query_fullscan_steps: i32,
+    query_vm_steps: i32,
 }
 
 #[derive(Serialize)]
@@ -298,14 +360,14 @@ fn build_parts(m: &Message) -> Vec<Part> {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 || args[1] == "--help" {
-        eprintln!("usage: chatstore-messages-decoder <chat.db snapshot> [--since-rowid N]");
+        eprintln!("usage: chatstore-messages-decoder <chat.db snapshot> [--since-rowid N | --rowids-file rowids.json]");
         std::process::exit(64);
     }
     let path = Path::new(&args[1]);
-    let mut since: i64 = 0;
-    if let Some(i) = args.iter().position(|a| a == "--since-rowid") {
-        since = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(0);
-    }
+    let options = options(&args).unwrap_or_else(|error| {
+        eprintln!("{error}");
+        std::process::exit(64);
+    });
     let db = match get_connection(path) {
         Ok(c) => c,
         Err(e) => {
@@ -315,17 +377,27 @@ fn main() {
     };
     let stdout = std::io::stdout();
     let mut w = BufWriter::with_capacity(1 << 20, stdout.lock());
-    let header = Header { ty: "header", format: FORMAT, library: "imessage-database 4.2.0", helper_version: env!("CARGO_PKG_VERSION") };
+    let header = Header { ty: "header", format: FORMAT, library: "imessage-database 4.2.0", helper_version: env!("CARGO_PKG_VERSION"),
+        capabilities: ["rowids-file-v1"],
+        selection: options.rowids.as_ref().map(|ids| Selection { kind: "rowids", requested: ids.len() }) };
     writeln!(w, "{}", serde_json::to_string(&header).unwrap()).unwrap();
 
     let ctx = QueryContext::default();
-    let mut stmt = match Message::stream_rows(&db, &ctx) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("query failed (schema mismatch?): {e}");
+    let base = match Message::stream_rows(&db, &ctx) {
+        Ok(statement) => statement.expanded_sql().expect("library query has no unresolved bindings"),
+        Err(error) => {
+            eprintln!("query failed (schema mismatch?): {error}");
             std::process::exit(65);
         }
     };
+    let query = selected_query(&base, &options).unwrap_or_else(|error| {
+        eprintln!("{error}");
+        std::process::exit(65);
+    });
+    let mut stmt = db.prepare_cached(&query).unwrap_or_else(|error| {
+        eprintln!("selected query failed: {error}");
+        std::process::exit(65);
+    });
     let rows = match Message::rows(&mut stmt, []) {
         Ok(r) => r,
         Err(e) => {
@@ -343,9 +415,6 @@ fn main() {
                 continue;
             }
         };
-        if (m.rowid as i64) <= since {
-            continue;
-        }
         let mut parser_status = "decoded";
         match m.parse_body(&db) {
             Ok(b) => m.apply_body(b),
@@ -432,7 +501,9 @@ fn main() {
         writeln!(w, "{}", serde_json::to_string(&out).unwrap()).unwrap();
         n += 1;
     }
-    let footer = Footer { ty: "footer", messages: n, errors: errs };
+    let footer = Footer { ty: "footer", messages: n, errors: errs,
+        query_fullscan_steps: stmt.get_status(rusqlite::StatementStatus::FullscanStep),
+        query_vm_steps: stmt.get_status(rusqlite::StatementStatus::VmStep) };
     writeln!(w, "{}", serde_json::to_string(&footer).unwrap()).unwrap();
     w.flush().unwrap();
 }
