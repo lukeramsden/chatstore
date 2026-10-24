@@ -1040,3 +1040,69 @@ Direct energy measurement was unavailable without privileged instrumentation. CP
 wakeups do not establish joules or battery impact. The local HTTPS integration test covers
 retrieved receipt/ciphertext verification and truncated-transfer retry; it does not measure
 large-workload WAN performance.
+
+
+## Real SSH transfer and isolated Linux import (24 October 2026)
+
+[Raw results](incremental-remote-pipeline.json) contain the local preparation and all 15
+remote/transport measurements. The user supplied the existing Linux host used for real
+imports. Testing used a separate source snapshot and synthetic data directory; the installed
+application and its production data were unchanged. Python loaded this PR's code through
+the isolated `PYTHONPATH`; the existing interpreter supplied compatible dependencies.
+
+This fixture has **100,000 canonical messages**, one chat, one sender and per-message source
+observations spanning roughly six years. It is distinct from the populated 500,000-native-row
+fixture above: no native adapters, media files or large chat/alias population are exercised
+here. Do not compare the two baseline timings as a platform speedup. The remote host had
+7.8 GiB free, so this run used the smaller fixture rather than another full populated import.
+A 2 GiB free-space reserve was checked before every archive.
+
+The producer database was deleted before transfer. The receiver had only immutable archives
+and their receipts. Final checks verified 100,001 message heads, all three revisions of the
+historically edited/deleted message, searchability of its prior text, renamed chat context,
+absent provenance for the deleted message and present provenance for an unrelated message.
+
+| Case | Ciphertext bytes | Actual SSH sent bytes | Transfer wall seconds | Linux import wall / CPU seconds |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 14,823,628 | 15,158,832 | 1.117 | 93.159 / 84.948 |
+| clean | 1,101 | 13,972 | 0.268 | 0.019 / 0.012 |
+| new-message | 1,663 | 13,972 | 0.267 | 0.053 / 0.045 |
+| old-edit | 1,703 | 13,972 | 0.262 | 0.048 / 0.041 |
+| context | 1,394 | 13,972 | 0.364 | 0.044 / 0.039 |
+| old-delete | 1,715 | 13,972 | 0.336 | 0.047 / 0.041 |
+
+The 81 baseline archives transferred successfully after an intentionally interrupted TAR/SSH
+stream. The partial archive was rejected with no imported records or feed checkpoint. A full
+retry then imported the baseline, followed by freshness, new-message, old-edit, context and
+deletion deltas. A repeated final import added zero objects and passed the same preservation
+assertions. These are real network operations, not ciphertext-size estimates.
+
+Each transfer opened a fresh SSH connection, so setup and TAR block padding dominate small
+deltas. SSH's sent/received counters include SSH/TAR/metadata overhead; they are not IP packet
+capture. Reported transfer CPU includes local parent and child processes, not remote SSH CPU.
+The raw artifact includes all received-byte counters, local transfer CPU and Linux importer
+storage counters and lifetime peak RSS. Import timing includes cache opening/closing, receipt
+hash comparison, authenticated archive verification and replay. Post-import assertions run
+outside the timer. Python module startup and SSH command-launch latency are outside importer
+timing. No direct energy measurement was available.
+
+The remote test directory occupied about 903 MiB and was removed after results were retrieved.
+Free space returned to 7.8 GiB; the production cache retained its pre-test modification time.
+The local producer cache had already been removed by the preparation step.
+
+### Reproduction
+
+Use an isolated remote directory and a matching repository snapshot at `REMOTE_ROOT/repo`
+containing the benchmark script. The interpreter must have the project dependencies.
+
+```sh
+python scripts/benchmark_remote_pipeline.py prepare --root LOCAL_ROOT --messages 100000
+python scripts/benchmark_remote_transport.py --host SSH_DESTINATION \
+  --remote-root REMOTE_ROOT --remote-python REMOTE_PYTHON \
+  --local-root LOCAL_ROOT --output RESULT.json
+```
+
+The preparation root must not already exist. Transport writes a new per-stage JSONL log and
+writes final JSON only after every remote invocation and post-import assertion succeeds.
+Remove only the owned local and remote benchmark directories after saving the small result
+files. This command does not install or replace the production application.
