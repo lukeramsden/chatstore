@@ -207,3 +207,32 @@ def test_issue_7_whatsapp_owner_jids_are_is_me(tmp_path: Path, monkeypatch, caps
     other = next(p for p in alice["participants"] if p["label"] != "me")
     _, r = run(capsys, "resolve", other["urn"])
     assert r["data"]["record"]["is_me"] is False
+
+
+def test_issue_8_sync_reports_written_counts_and_mode_up_front(wa_env, capsys, monkeypatch):
+    """#8: progress must say the mode first and count rows processed, not "imported"; the summary
+    must report new/updated/unchanged measured at the cache so adapters are comparable."""
+    wa = wa_env["wa"]
+    c = sqlite3.connect(wa / "ChatStorage.sqlite")
+    c.execute("INSERT INTO ZWAMESSAGE VALUES (60,1,1,0,0,0,0,0,0,60,0,0,1,NULL,NULL,NULL,700000600,NULL,'15550001111@s.whatsapp.net',NULL,'3EB0NEW00060','later message',NULL)")
+    c.execute("UPDATE ZWAMESSAGE SET ZMESSAGESTATUS=8 WHERE Z_PK=1")
+    c.commit()
+    c.close()
+
+    import chatstore.sync as sync_mod
+    monkeypatch.setattr(sync_mod, "BATCH", 1)  # force per-batch progress lines
+    code = main(["sync", "--source", "whatsapp"])
+    captured = capsys.readouterr()
+    assert code == 0
+    err_lines = captured.err.splitlines()
+    assert any("incremental sync from checkpoint max_message_pk=" in line for line in err_lines)
+    assert not any("imported" in line for line in err_lines)
+    # stderr is not a TTY under pytest, so per-batch counters are hidden
+    assert not any("processed " in line for line in err_lines)
+    assert "new=" in captured.out and "unchanged=" in captured.out and "emitted by adapter" in captured.out
+
+    code, e = run(capsys, "sync", "--source", "whatsapp")
+    w = e["data"][0]["counts"]["written"]
+    assert e["data"][0]["mode"] == "incremental"
+    # nothing changed since the last run: everything re-read must be unchanged
+    assert w["inserted"] == 0 and w["updated"] == 0 and w["unchanged"] > 0

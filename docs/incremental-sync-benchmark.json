@@ -1,0 +1,89 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]",
+  "extra_messages": 100000,
+  "sync_only": true,
+  "measurements": [
+    {
+      "stage": "sync-initial",
+      "wall_seconds": 61.90392504201736,
+      "cpu_seconds": 42.477962,
+      "peak_rss_bytes": 131268608,
+      "archive_bytes": 0,
+      "archive_count": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 2172583936,
+        "storage_written_bytes": 6026493952,
+        "package_idle_wakeups": 6,
+        "interrupt_wakeups": 1620
+      }
+    },
+    {
+      "stage": "sync-poll",
+      "wall_seconds": 16.67101425002329,
+      "cpu_seconds": 10.179637000000001,
+      "peak_rss_bytes": 134840320,
+      "archive_bytes": 0,
+      "archive_count": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1187762176,
+        "storage_written_bytes": 16367616,
+        "package_idle_wakeups": 1,
+        "interrupt_wakeups": 33
+      }
+    },
+    {
+      "stage": "sync-new-message",
+      "wall_seconds": 18.63915033300873,
+      "cpu_seconds": 11.107911,
+      "peak_rss_bytes": 135299072,
+      "archive_bytes": 0,
+      "archive_count": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 994217984,
+        "storage_written_bytes": 17027072,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 240
+      }
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 27.99658529192675,
+      "cpu_seconds": 14.113207,
+      "peak_rss_bytes": 127860736,
+      "archive_bytes": 0,
+      "archive_count": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1372024832,
+        "storage_written_bytes": 16973824,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 475
+      }
+    }
+  ],
+  "final_no_change_poll": {
+    "stage": "sync-poll",
+    "wall_seconds": 13.650334167061374,
+    "cpu_seconds": 9.81018,
+    "peak_rss_bytes": 134578176,
+    "archive_bytes": 0,
+    "archive_count": 0,
+    "energy_joules": null,
+    "io": {
+      "storage_read_bytes": 620679168,
+      "storage_written_bytes": 16539648,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 19
+    }
+  },
+  "notes": [
+    "Synthetic WhatsApp source with 100000 extra messages across about six years.",
+    "The four original measurements were taken after compact sightings but before the final covering-index lookup and hot-path cleanup.",
+    "final_no_change_poll is the subsequent unprofiled poll after those changes; imports gained evidence-binding validation afterwards without changing this sync path.",
+    "No energy-joule measurement. Kernel filesystem counters include caching and writeback effects; runs are indicative rather than controlled energy experiments."
+  ]
+}

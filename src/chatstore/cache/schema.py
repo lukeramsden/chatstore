@@ -1,11 +1,15 @@
 """SQLite schema. A rebuildable projection of canonical records (specs/canonical-model.md)."""
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 12
 
 DDL = [
     "PRAGMA journal_mode=WAL",
     "PRAGMA foreign_keys=ON",
     """CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS native_capture_receipts (
+        token TEXT PRIMARY KEY, binding TEXT NOT NULL, source TEXT NOT NULL,
+        account_scope TEXT NOT NULL, sync_run TEXT NOT NULL, receipt TEXT NOT NULL
+    )""",
     # Current view of every canonical entity, one row per URN.
     """CREATE TABLE IF NOT EXISTS records (
         urn TEXT PRIMARY KEY,
@@ -19,6 +23,10 @@ DDL = [
         record TEXT NOT NULL
     )""",
     "CREATE INDEX IF NOT EXISTS records_kind ON records(kind, source, account_scope)",
+    """CREATE INDEX IF NOT EXISTS records_latest_run ON records(source, account_scope, observed_at DESC, urn)
+        WHERE kind='sync_runs'""",
+    "CREATE INDEX IF NOT EXISTS records_heads ON records(urn, revision_digest, observed_at)",
+    "CREATE INDEX IF NOT EXISTS records_capture_run ON records(sync_run,kind,urn)",
     # Immutable observed revisions.
     """CREATE TABLE IF NOT EXISTS revisions (
         id INTEGER PRIMARY KEY,
@@ -85,6 +93,7 @@ DDL = [
     "CREATE INDEX IF NOT EXISTS aliases_new ON aliases_idx(new_urn)",
     # Provenance.
     """CREATE TABLE IF NOT EXISTS source_observations (
+        observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
         entity_urn TEXT NOT NULL,
         source TEXT NOT NULL,
         account_scope TEXT NOT NULL,
@@ -97,9 +106,10 @@ DDL = [
         observed_at INTEGER NOT NULL,
         sync_run TEXT,
         present TEXT NOT NULL,
-        PRIMARY KEY (entity_urn, source, account_scope, native_table)
+        UNIQUE (entity_urn, source, account_scope, native_table)
     )""",
     "CREATE INDEX IF NOT EXISTS observations_native ON source_observations(source, account_scope, native_table, native_key)",
+    "CREATE INDEX IF NOT EXISTS observations_capture_run ON source_observations(sync_run)",
     # Sync checkpoints per source/scope.
     """CREATE TABLE IF NOT EXISTS checkpoints (
         source TEXT NOT NULL, account_scope TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,

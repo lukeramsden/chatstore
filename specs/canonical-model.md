@@ -119,6 +119,13 @@ unchanged.
 (`{earliest_utc_ms, latest_utc_ms, messages}`), `errors` (list of `{code, count, sample}`,
 redacted), `adapter_version`, `parser_version`.
 
+`counts` has two kinds of entry. `counts.written` (`{inserted, updated, unchanged}`) is
+measured at the cache and means the same for every adapter: how many emitted records were
+new, changed content, or identical to the stored head. Every other key (`messages`, `chats`,
+...) is the adapter's own tally of what it *emitted*, which on an incremental run may be a
+full re-read (Messages) or only the changed window (WhatsApp); do not compare those across
+adapters or read them as "new records".
+
 ## Redaction / allowlist
 
 Exported `payload` and `source_flags` objects contain only fields named in

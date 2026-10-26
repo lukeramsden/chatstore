@@ -1,0 +1,315 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "python": "3.14.3 (main, Feb  3 2026, 15:32:20) [Clang 17.0.0 (clang-1700.6.3.2)]",
+  "extra_messages": 100000,
+  "measurements": [
+    {
+      "stage": "sync-initial",
+      "wall_seconds": 31.897705417010002,
+      "cpu_seconds": 26.581631,
+      "peak_rss_bytes": 136134656,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1349353472,
+        "storage_written_bytes": 4896403456,
+        "package_idle_wakeups": 21,
+        "interrupt_wakeups": 785
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "monthly-baseline",
+      "wall_seconds": 76.4489449999528,
+      "cpu_seconds": 68.877572,
+      "peak_rss_bytes": 1932460032,
+      "archive_bytes": 47015459,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1204359168,
+        "storage_written_bytes": 967401472,
+        "package_idle_wakeups": 1,
+        "interrupt_wakeups": 36
+      },
+      "archive_count": 78
+    },
+    {
+      "stage": "export-baseline",
+      "wall_seconds": 72.56786058400758,
+      "cpu_seconds": 68.50370500000001,
+      "peak_rss_bytes": 212205568,
+      "archive_bytes": 29547960,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 912990208,
+        "storage_written_bytes": 1039790080,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 101
+    },
+    {
+      "stage": "sync-poll",
+      "wall_seconds": 21.543862791964784,
+      "cpu_seconds": 13.213739,
+      "peak_rss_bytes": 145506304,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1816653824,
+        "storage_written_bytes": 1303040000,
+        "package_idle_wakeups": 3,
+        "interrupt_wakeups": 148
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "monthly-poll",
+      "wall_seconds": 21.65179629100021,
+      "cpu_seconds": 6.358214,
+      "peak_rss_bytes": 1766883328,
+      "archive_bytes": 6406,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1128620032,
+        "storage_written_bytes": 151552,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 79
+      },
+      "archive_count": 1
+    },
+    {
+      "stage": "export-poll",
+      "wall_seconds": 0.03373970801476389,
+      "cpu_seconds": 0.032770999999999995,
+      "peak_rss_bytes": 38797312,
+      "archive_bytes": 2360,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 94208,
+        "storage_written_bytes": 81920,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 1
+    },
+    {
+      "stage": "export-unchanged",
+      "wall_seconds": 0.00043520901817828417,
+      "cpu_seconds": 0.0004250000000000087,
+      "peak_rss_bytes": 34308096,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 0,
+        "storage_written_bytes": 0,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "sync-new-message",
+      "wall_seconds": 19.564726250013337,
+      "cpu_seconds": 12.71567,
+      "peak_rss_bytes": 144441344,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1536430080,
+        "storage_written_bytes": 1156153344,
+        "package_idle_wakeups": 2,
+        "interrupt_wakeups": 232
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "monthly-new-message",
+      "wall_seconds": 20.961873708991334,
+      "cpu_seconds": 6.660444,
+      "peak_rss_bytes": 1834237952,
+      "archive_bytes": 177563,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1226436608,
+        "storage_written_bytes": 3588096,
+        "package_idle_wakeups": 6,
+        "interrupt_wakeups": 235
+      },
+      "archive_count": 2
+    },
+    {
+      "stage": "export-new-message",
+      "wall_seconds": 0.03265462501440197,
+      "cpu_seconds": 0.03176,
+      "peak_rss_bytes": 39272448,
+      "archive_bytes": 3246,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 81920,
+        "storage_written_bytes": 106496,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 1
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 17.482345666969195,
+      "cpu_seconds": 12.027204000000001,
+      "peak_rss_bytes": 142491648,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 477605888,
+        "storage_written_bytes": 1543155712,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 1
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "export-old-edit",
+      "wall_seconds": 0.03266649995930493,
+      "cpu_seconds": 0.03253,
+      "peak_rss_bytes": 38584320,
+      "archive_bytes": 3390,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 0,
+        "storage_written_bytes": 114688,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 1
+    },
+    {
+      "stage": "verify-new-delta",
+      "wall_seconds": 0.03011566703207791,
+      "cpu_seconds": 0.02928900000000001,
+      "peak_rss_bytes": 38240256,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 8192,
+        "storage_written_bytes": 36864,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "import-baseline",
+      "wall_seconds": 117.63195262500085,
+      "cpu_seconds": 87.005136,
+      "peak_rss_bytes": 182878208,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1976532992,
+        "storage_written_bytes": 14549938176,
+        "package_idle_wakeups": 1,
+        "interrupt_wakeups": 250
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "import-poll",
+      "wall_seconds": 0.3748855839949101,
+      "cpu_seconds": 0.11243600000000001,
+      "peak_rss_bytes": 55476224,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 35737600,
+        "storage_written_bytes": 434176,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "import-new-message",
+      "wall_seconds": 0.09572137508075684,
+      "cpu_seconds": 0.09333100000000001,
+      "peak_rss_bytes": 56213504,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 159744,
+        "storage_written_bytes": 1306624,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "import-old-edit",
+      "wall_seconds": 0.0968815420055762,
+      "cpu_seconds": 0.09410400000000001,
+      "peak_rss_bytes": 56279040,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 221184,
+        "storage_written_bytes": 1122304,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "import-cold-all",
+      "wall_seconds": 121.92009216698352,
+      "cpu_seconds": 87.881781,
+      "peak_rss_bytes": 186892288,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 2291224576,
+        "storage_written_bytes": 14482964480,
+        "package_idle_wakeups": 7,
+        "interrupt_wakeups": 273
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "sync-initial-before-cache-cap",
+      "wall_seconds": 32.5099806250073,
+      "cpu_seconds": 26.615489999999998,
+      "peak_rss_bytes": 722419712,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 1696649216,
+        "storage_written_bytes": 4309434368,
+        "package_idle_wakeups": 37,
+        "interrupt_wakeups": 427
+      },
+      "archive_count": 0
+    },
+    {
+      "stage": "export-cli-unchanged",
+      "wall_seconds": 0.0207085000583902,
+      "cpu_seconds": 0.019651000000000002,
+      "peak_rss_bytes": 37994496,
+      "archive_bytes": 0,
+      "energy_joules": null,
+      "io": {
+        "storage_read_bytes": 135168,
+        "storage_written_bytes": 4096,
+        "package_idle_wakeups": 0,
+        "interrupt_wakeups": 0
+      },
+      "archive_count": 0
+    }
+  ],
+  "notes": [
+    "Synthetic 100,000 extra messages across about six years; no private source data.",
+    "Stage timing excludes module imports/configuration/Cache construction; peak RSS includes them.",
+    "Initial sync was repeated with the final 64 MiB cache cap; the earlier 512 MiB result is retained separately. The repeated fixture includes the benchmark new message and old edit.",
+    "Archive bytes are transfer sizes; no network upload or energy-joule measurement.",
+    "Source sync remains a full scan and does not meet the bounded-work acceptance criterion.",
+    "The 100,000-message run preceded final producer-event deduplication and validation cleanup; a complete 1,000-message run passed on the final implementation. Timings are indicative, not release performance guarantees."
+  ]
+}

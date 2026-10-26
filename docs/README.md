@@ -14,3 +14,7 @@ these pages explain the system as built.
 | [decisions.md](decisions.md) | Every trade-off and the evidence behind it, by topic; measurements; known gaps |
 | [testing.md](testing.md) | Verification contract, suites, acceptance test, real-data conventions |
 | [history.md](history.md) | Delivery phases, review and corrections, publication, plan corrections |
+
+See [incremental preservation](incremental-preservation.md) for changefeed export, delivery proofs, cold restore, and source-performance limitations.
+
+See [incremental review](incremental-review.md) for issue #10 requirements, validation evidence and remaining acceptance gaps.

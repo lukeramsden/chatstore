@@ -1,0 +1,66 @@
+{
+  "messages": 100000,
+  "scope": "Synthetic adapter extraction with explicit caller-supplied row selection. Initial snapshot and private dependency index construction shown separately. Includes helper launch/SQL/decoding, Python context reads, canonical record construction and media probes for selected rows. Excludes WAL/native-mirror preparation, dependency routing, canonical cache commits, archives, source mutation/setup, kernel IO and energy. Fullscan/VM counters describe the primary message query, not every helper SQL statement. CPU splits parent and child helpers.",
+  "measurements": [
+    {
+      "stage": "prepare-full-private-snapshot",
+      "wall_seconds": 0.04684124991763383,
+      "image_bytes": 24199168
+    },
+    {
+      "stage": "baseline-full-adapter-and-index-build",
+      "wall_seconds": 5.318596749915741,
+      "parent_cpu_seconds": 5.219024,
+      "helper_cpu_seconds": 0.37866199999999994,
+      "canonical_records_emitted": 200015,
+      "messages_emitted": 100000,
+      "helper_messages_decoded": 100000,
+      "query_fullscan_steps": 99999,
+      "query_vm_steps": 10700020
+    },
+    {
+      "stage": "explicit-empty-selection",
+      "wall_seconds": 0.00822391698602587,
+      "parent_cpu_seconds": 0.0035850000000001714,
+      "helper_cpu_seconds": 0.0039949999999999986,
+      "canonical_records_emitted": 11,
+      "messages_emitted": 0,
+      "helper_messages_decoded": 0,
+      "query_fullscan_steps": 0,
+      "query_vm_steps": 8
+    },
+    {
+      "stage": "explicit-old-row-selection",
+      "wall_seconds": 0.006685291999019682,
+      "parent_cpu_seconds": 0.0030770000000002184,
+      "helper_cpu_seconds": 0.003277000000000009,
+      "canonical_records_emitted": 13,
+      "messages_emitted": 1,
+      "helper_messages_decoded": 1,
+      "query_fullscan_steps": 0,
+      "query_vm_steps": 86
+    },
+    {
+      "stage": "explicit-new-row-selection",
+      "wall_seconds": 0.0061800830299034715,
+      "parent_cpu_seconds": 0.002685999999999744,
+      "helper_cpu_seconds": 0.003270000000000023,
+      "canonical_records_emitted": 13,
+      "messages_emitted": 1,
+      "helper_messages_decoded": 1,
+      "query_fullscan_steps": 0,
+      "query_vm_steps": 86
+    },
+    {
+      "stage": "explicit-deleted-row-selection",
+      "wall_seconds": 0.006146833999082446,
+      "parent_cpu_seconds": 0.002430999999999628,
+      "helper_cpu_seconds": 0.0031689999999999774,
+      "canonical_records_emitted": 11,
+      "messages_emitted": 0,
+      "helper_messages_decoded": 0,
+      "query_fullscan_steps": 0,
+      "query_vm_steps": 12
+    }
+  ]
+}

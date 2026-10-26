@@ -1,0 +1,717 @@
+{
+  "messages": 100000,
+  "additional_aliases": 1000,
+  "batch_limit": 5000,
+  "file_media": true,
+  "archive_media": "text",
+  "wal_resets": true,
+  "sqlite_stats": false,
+  "cache_spill_disabled": false,
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "Synthetic source includes one watched 256 KiB deterministic binary file. Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof, representative large media populations and energy. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+  "measurements": [
+    {
+      "stage": "sync-baseline",
+      "wall_seconds": 59.955353500001365,
+      "cpu_seconds": 48.163470000000004,
+      "storage_read_bytes": 2871713792,
+      "storage_written_bytes": 7170826240,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 3548,
+      "lifetime_peak_rss_bytes": 178192384,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "messages": 99999,
+        "canonical_units_rebuilt": 99999,
+        "attachments": 1,
+        "events": 2,
+        "unsupported": {
+          "group_event_type:15": 1,
+          "message_type:99": 1,
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 203019,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "initial"
+    },
+    {
+      "stage": "export-verified-baseline",
+      "wall_seconds": 59.11023749999731,
+      "cpu_seconds": 55.349523999999995,
+      "storage_read_bytes": 1476575232,
+      "storage_written_bytes": 1060990976,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 250396672,
+      "archives": 102,
+      "journal_events": 509111,
+      "ciphertext_bytes": 30639434
+    },
+    {
+      "stage": "import-verified-baseline",
+      "wall_seconds": 229.44804520800244,
+      "cpu_seconds": 118.17090199999998,
+      "storage_read_bytes": 8554266624,
+      "storage_written_bytes": 21868879872,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 1468,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 102
+    },
+    {
+      "stage": "sync-clean",
+      "wall_seconds": 0.4143991669989191,
+      "cpu_seconds": 0.17701099999999315,
+      "storage_read_bytes": 15376384,
+      "storage_written_bytes": 7790592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean",
+      "wall_seconds": 0.012064499998814426,
+      "cpu_seconds": 0.008535999999992328,
+      "storage_read_bytes": 49152,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 6,
+      "ciphertext_bytes": 2340
+    },
+    {
+      "stage": "import-verified-clean",
+      "wall_seconds": 0.00793024999438785,
+      "cpu_seconds": 0.006841000000008535,
+      "storage_read_bytes": 20480,
+      "storage_written_bytes": 217088,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-new-message",
+      "wall_seconds": 0.5198707920062589,
+      "cpu_seconds": 0.11601000000001704,
+      "storage_read_bytes": 2662400,
+      "storage_written_bytes": 2793472,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-new-message",
+      "wall_seconds": 0.012913749989820644,
+      "cpu_seconds": 0.008777999999978192,
+      "storage_read_bytes": 8192,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 12,
+      "ciphertext_bytes": 3184
+    },
+    {
+      "stage": "import-verified-new-message",
+      "wall_seconds": 0.017584207991603762,
+      "cpu_seconds": 0.009788000000014563,
+      "storage_read_bytes": 65536,
+      "storage_written_bytes": 495616,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-clean-after-new",
+      "wall_seconds": 0.15044524999393616,
+      "cpu_seconds": 0.07994600000000673,
+      "storage_read_bytes": 245760,
+      "storage_written_bytes": 1003520,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean-after-new",
+      "wall_seconds": 0.01786466600606218,
+      "cpu_seconds": 0.009358000000020184,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 81920,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 6,
+      "ciphertext_bytes": 2371
+    },
+    {
+      "stage": "import-verified-clean-after-new",
+      "wall_seconds": 0.017551541997818276,
+      "cpu_seconds": 0.006629000000003771,
+      "storage_read_bytes": 32768,
+      "storage_written_bytes": 249856,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-wal-reset-clean",
+      "wall_seconds": 1.617227124996134,
+      "cpu_seconds": 1.3270840000000135,
+      "storage_read_bytes": 2859008,
+      "storage_written_bytes": 20881408,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 20,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-wal-reset-clean",
+      "wall_seconds": 0.0066572920040925965,
+      "cpu_seconds": 0.006011999999998352,
+      "storage_read_bytes": 4096,
+      "storage_written_bytes": 110592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 6,
+      "ciphertext_bytes": 2386
+    },
+    {
+      "stage": "import-verified-wal-reset-clean",
+      "wall_seconds": 0.004217875000904314,
+      "cpu_seconds": 0.00394099999999753,
+      "storage_read_bytes": 20480,
+      "storage_written_bytes": 217088,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-wal-reset-old-edit",
+      "wall_seconds": 1.2625474159867736,
+      "cpu_seconds": 1.1869549999999833,
+      "storage_read_bytes": 2293760,
+      "storage_written_bytes": 22028288,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 21,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-wal-reset-old-edit",
+      "wall_seconds": 0.00620274999528192,
+      "cpu_seconds": 0.005970000000019127,
+      "storage_read_bytes": 8192,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 12,
+      "ciphertext_bytes": 3304
+    },
+    {
+      "stage": "import-verified-wal-reset-old-edit",
+      "wall_seconds": 0.009632957997382618,
+      "cpu_seconds": 0.006051000000013573,
+      "storage_read_bytes": 524288,
+      "storage_written_bytes": 462848,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 0.06660937498963904,
+      "cpu_seconds": 0.062211999999988166,
+      "storage_read_bytes": 253952,
+      "storage_written_bytes": 2437120,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-old-edit",
+      "wall_seconds": 0.005662124996888451,
+      "cpu_seconds": 0.005467000000010103,
+      "storage_read_bytes": 32768,
+      "storage_written_bytes": 110592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 12,
+      "ciphertext_bytes": 3278
+    },
+    {
+      "stage": "import-verified-old-edit",
+      "wall_seconds": 0.00643770799797494,
+      "cpu_seconds": 0.0051890000000014425,
+      "storage_read_bytes": 147456,
+      "storage_written_bytes": 446464,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-chat-title",
+      "wall_seconds": 0.9777314579987433,
+      "cpu_seconds": 0.28503699999998844,
+      "storage_read_bytes": 109408256,
+      "storage_written_bytes": 1527808,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 3018
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-chat-title",
+      "wall_seconds": 0.01083012500021141,
+      "cpu_seconds": 0.007671000000016193,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 19,
+      "ciphertext_bytes": 3174
+    },
+    {
+      "stage": "import-verified-chat-title",
+      "wall_seconds": 0.009684582997579128,
+      "cpu_seconds": 0.006911999999999807,
+      "storage_read_bytes": 212992,
+      "storage_written_bytes": 348160,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-auxiliary-edit",
+      "wall_seconds": 0.1964195830078097,
+      "cpu_seconds": 0.18085000000002083,
+      "storage_read_bytes": 606208,
+      "storage_written_bytes": 1945600,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "chats": 3,
+        "chat_memberships": 7,
+        "identities": 2007,
+        "aliases": 1002,
+        "events": 1,
+        "absent_from_source:withdrawn": 2,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 3018
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-auxiliary-edit",
+      "wall_seconds": 0.006823624993558042,
+      "cpu_seconds": 0.006486999999992804,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 77824,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 21,
+      "ciphertext_bytes": 3283
+    },
+    {
+      "stage": "import-verified-auxiliary-edit",
+      "wall_seconds": 0.01309054100420326,
+      "cpu_seconds": 0.008790000000004738,
+      "storage_read_bytes": 385024,
+      "storage_written_bytes": 479232,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-file-only-edit",
+      "wall_seconds": 0.07045391699648462,
+      "cpu_seconds": 0.06175500000000511,
+      "storage_read_bytes": 634880,
+      "storage_written_bytes": 2060288,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 1,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-file-only-edit",
+      "wall_seconds": 0.007062082993797958,
+      "cpu_seconds": 0.006669999999985521,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 110592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 14,
+      "ciphertext_bytes": 3111
+    },
+    {
+      "stage": "import-verified-file-only-edit",
+      "wall_seconds": 0.006969958005356602,
+      "cpu_seconds": 0.005448999999998705,
+      "storage_read_bytes": 147456,
+      "storage_written_bytes": 364544,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-clean-after-file",
+      "wall_seconds": 0.0536699999938719,
+      "cpu_seconds": 0.05150999999997907,
+      "storage_read_bytes": 135168,
+      "storage_written_bytes": 1003520,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean-after-file",
+      "wall_seconds": 0.004796667009941302,
+      "cpu_seconds": 0.004756999999983691,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 6,
+      "ciphertext_bytes": 2422
+    },
+    {
+      "stage": "import-verified-clean-after-file",
+      "wall_seconds": 0.0039583329926244915,
+      "cpu_seconds": 0.0035599999999931242,
+      "storage_read_bytes": 49152,
+      "storage_written_bytes": 217088,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-file-missing",
+      "wall_seconds": 0.0551155419962015,
+      "cpu_seconds": 0.05244600000000332,
+      "storage_read_bytes": 184320,
+      "storage_written_bytes": 1523712,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-file-missing",
+      "wall_seconds": 0.005261917001917027,
+      "cpu_seconds": 0.005218999999982543,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 110592,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 12,
+      "ciphertext_bytes": 2946
+    },
+    {
+      "stage": "import-verified-file-missing",
+      "wall_seconds": 0.006870750003145076,
+      "cpu_seconds": 0.005601000000012846,
+      "storage_read_bytes": 65536,
+      "storage_written_bytes": 331776,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-file-download",
+      "wall_seconds": 0.05943437499809079,
+      "cpu_seconds": 0.055873999999988655,
+      "storage_read_bytes": 253952,
+      "storage_written_bytes": 1986560,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 1,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-file-download",
+      "wall_seconds": 0.005524624997633509,
+      "cpu_seconds": 0.005473999999992429,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 14,
+      "ciphertext_bytes": 3136
+    },
+    {
+      "stage": "import-verified-file-download",
+      "wall_seconds": 0.00481579199549742,
+      "cpu_seconds": 0.0045199999999852025,
+      "storage_read_bytes": 16384,
+      "storage_written_bytes": 380928,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-old-delete",
+      "wall_seconds": 0.060863666993100196,
+      "cpu_seconds": 0.0580139999999858,
+      "storage_read_bytes": 200704,
+      "storage_written_bytes": 1691648,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "absent_from_source:withdrawn": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-old-delete",
+      "wall_seconds": 0.004890291995252483,
+      "cpu_seconds": 0.004817000000002736,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 7,
+      "ciphertext_bytes": 2584
+    },
+    {
+      "stage": "import-verified-old-delete",
+      "wall_seconds": 0.0036358750076033175,
+      "cpu_seconds": 0.00356299999998555,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 315392,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    },
+    {
+      "stage": "sync-clean-after-changes",
+      "wall_seconds": 0.05574066699773539,
+      "cpu_seconds": 0.05306400000000622,
+      "storage_read_bytes": 163840,
+      "storage_written_bytes": 1150976,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 17,
+      "lifetime_peak_rss_bytes": 282607616,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "export-verified-clean-after-changes",
+      "wall_seconds": 0.0051886659930460155,
+      "cpu_seconds": 0.00511800000001017,
+      "storage_read_bytes": 0,
+      "storage_written_bytes": 94208,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1,
+      "journal_events": 6,
+      "ciphertext_bytes": 2416
+    },
+    {
+      "stage": "import-verified-clean-after-changes",
+      "wall_seconds": 0.03903812500357162,
+      "cpu_seconds": 0.012235000000003993,
+      "storage_read_bytes": 2854912,
+      "storage_written_bytes": 5443584,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 0,
+      "lifetime_peak_rss_bytes": 282607616,
+      "archives": 1
+    }
+  ],
+  "database_layout": {},
+  "reset_scope": "Optional reset stages checkpoint/truncate the source WAL and commit a fresh frame before capture; these source-writer mutations are outside timings. Capture includes a full image backup, native page-graph rebuild and ordered raw-row comparison. This is not bounded reset discovery. Empty or invalid WALs retain ordinary fallback.",
+  "layout_scope": "Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll."
+}
