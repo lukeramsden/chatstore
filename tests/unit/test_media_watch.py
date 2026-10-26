@@ -59,14 +59,15 @@ def test_clean_poll_does_not_enumerate_attachments(tmp_path, monkeypatch):
         assert media.dirty_ids() == set()
 
 
-def test_watch_failure_never_returns_clean_coverage(tmp_path):
-    target = tmp_path / 'target'
+def test_watch_failure_never_returns_clean_coverage(tmp_path, monkeypatch):
+    target = tmp_path.resolve() / 'target'
     target.write_bytes(b'x')
-    link = tmp_path / 'link'
-    link.symlink_to(target)
+    def denied(*args, **kwargs):
+        raise PermissionError('watch denied')
     with SourceMonitor() as monitor:
         media = MediaWatch(monitor)
-        with pytest.raises(MonitoringUnavailable, match='symlink'):
-            media.update([(1, str(link))])
+        monkeypatch.setattr(os, 'open', denied)
+        with pytest.raises(MonitoringUnavailable, match='registration failed'):
+            media.update([(1, str(target))])
         with pytest.raises(MonitoringUnavailable):
             media.dirty_ids()

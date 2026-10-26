@@ -88,19 +88,64 @@ def test_replaced_media_is_rearmed_before_capture_can_be_accepted(tmp_path):
             assert not monitor.unchanged()
 
 
-def test_symlink_and_missing_database_fail_closed(tmp_path):
+def test_symlink_target_writes_and_retargeting_are_monitored(tmp_path):
     root = tmp_path.resolve()
-    target = root / 'target'
-    target.write_bytes(b'bytes')
-    link = root / 'link'
-    link.symlink_to(target)
+    target, other, link = root / 'target', root / 'other', root / 'link'
+    target.write_bytes(b'original')
+    other.write_bytes(b'other')
+    link.symlink_to(target.name)
     with SourceMonitor() as monitor:
         monitor.watch(link)
-        assert not monitor.accept_capture(monitor.token())
-        assert not monitor.unchanged()
-        assert monitor.failure
+        assert monitor.accept_capture(monitor.token())
+        target.write_bytes(b'edited')
+        assert monitor.dirty_paths() == {link}
+        assert monitor.accept_capture(monitor.token())
+        link.unlink()
+        link.symlink_to(other.name)
+        assert monitor.dirty_paths() == {link}
+        assert target not in monitor._files
+        assert monitor.accept_capture(monitor.token())
+        other.write_bytes(b'edited again')
+        assert monitor.dirty_paths() == {link}
+        monitor.unwatch(link)
+        assert not monitor._files
+        assert not monitor._request_targets
+
+
+def test_symlink_ancestor_and_missing_target_creation(tmp_path):
+    root = tmp_path.resolve()
+    directory, alias = root / 'directory', root / 'alias'
+    directory.mkdir()
+    alias.symlink_to(directory.name)
+    media = alias / 'missing'
     with SourceMonitor() as monitor:
-        monitor.database(root / 'missing.sqlite')
+        monitor.watch(media)
+        assert monitor.accept_capture(monitor.token())
+        (directory / 'missing').write_bytes(b'newly downloaded')
+        assert monitor.dirty_paths() == {media}
+        assert monitor.accept_capture(monitor.token())
+        (directory / 'missing').write_bytes(b'changed bytes')
+        assert monitor.dirty_paths() == {media}
+
+
+def test_symlink_chain_replacement_requires_new_target_coverage(tmp_path):
+    root = tmp_path.resolve()
+    first, second, missing = root / 'first', root / 'second', root / 'missing'
+    first.symlink_to(second.name)
+    second.symlink_to(missing.name)
+    with SourceMonitor() as monitor:
+        monitor.watch(first)
+        assert monitor.accept_capture(monitor.token())
+        missing.write_bytes(b'downloaded')
+        assert monitor.dirty_paths() == {first}
+        assert monitor.accept_capture(monitor.token())
+        missing.write_bytes(b'edited')
+        assert monitor.dirty_paths() == {first}
+
+
+def test_missing_database_fails_closed(tmp_path):
+    with SourceMonitor() as monitor:
+        monitor.database(tmp_path.resolve() / 'missing.sqlite')
         assert monitor.failure
         assert not monitor.unchanged()
 
@@ -346,3 +391,62 @@ def test_manual_rearm_before_event_poll_keeps_replacement_dirty(tmp_path):
         with path.open('r+b', buffering=0) as writer:
             writer.write(b'new write')
             assert monitor.dirty_paths() == frozenset({path})
+
+
+def test_symlink_retarget_keeps_shared_target_owners(tmp_path, monkeypatch):
+    root = tmp_path.resolve()
+    target, other, link = root / 'target', root / 'other', root / 'link'
+    target.write_bytes(b'original')
+    other.write_bytes(b'other')
+    link.symlink_to(target)
+    with SourceMonitor() as monitor:
+        monitor.watch(link)
+        monitor.watch(target)
+        assert monitor.accept_capture(monitor.token())
+        link.unlink()
+        link.symlink_to(other)
+        assert link in monitor.dirty_paths()
+        assert monitor.accept_capture(monitor.token())
+        monitor.unwatch(link)
+        assert target in monitor._files
+        target.write_bytes(b'changed')
+        assert monitor.dirty_paths() == {target}
+        assert monitor.accept_capture(monitor.token())
+        def forbidden(*args, **kwargs):
+            raise AssertionError('clean poll inspected paths')
+        monkeypatch.setattr(Path, 'lstat', forbidden)
+        monkeypatch.setattr(os, 'open', forbidden)
+        assert monitor.dirty_paths() == set()
+
+
+def test_watch_registration_race_fails_closed(tmp_path, monkeypatch):
+    target = tmp_path.resolve() / 'file'
+    target.write_bytes(b'original')
+    original = os.open
+    def replace_before_open(path, flags):
+        if path == target:
+            target.unlink()
+            target.write_bytes(b'replaced')
+        return original(path, flags)
+    with SourceMonitor() as monitor:
+        monkeypatch.setattr(os, 'open', replace_before_open)
+        monitor.watch(target)
+        assert monitor.failure == 'watch target changed during registration'
+        assert not monitor.accept_capture(monitor.token())
+
+
+def test_database_symlink_swap_during_registration_fails_closed(tmp_path, monkeypatch):
+    root = tmp_path.resolve()
+    database, other = root / 'database', root / 'other'
+    database.write_bytes(b'original')
+    other.write_bytes(b'other')
+    with SourceMonitor() as monitor:
+        original = monitor.watch
+        def swap(path):
+            database.unlink()
+            database.symlink_to(other)
+            original(path)
+        monkeypatch.setattr(monitor, 'watch', swap)
+        monitor.database(database)
+        assert monitor.failure == 'symlink database identity is unsupported'
+        assert not monitor.accept_capture(monitor.token())

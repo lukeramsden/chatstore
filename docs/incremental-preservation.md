@@ -1,5 +1,12 @@
 # Incremental preservation
 
+As of v1.2.1, vnode monitoring covers symlink inodes and their target chains,
+including symlinked ancestor directories. Link replacement invalidates the owning
+paths, rearms target coverage and retires unneeded handles. Registration races
+fail closed. The historical sections below that describe blanket symlink
+rejection predate this support; source identity and media-capture restrictions
+still apply independently of watch coverage.
+
 The workflow below describes the current implementation. Later component sections retain
 development-stage measurements and limitations; statements about a component not being
 connected describe that stage, before the subsequent integration sections. For the current
