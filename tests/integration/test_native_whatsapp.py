@@ -640,3 +640,24 @@ def test_recently_written_auxiliary_database_is_reread_after_restart(collector, 
                 session.close()
     # A racy fingerprint proves nothing, so the restarted session re-reads the rows.
     assert len(reads) == 2
+
+
+def test_new_message_with_chat_bookkeeping_update_reuses_headers(collector, capsys):
+    root, _, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cli(capsys, 'sync', '--source', 'whatsapp')
+    columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWAMESSAGE)')]
+    values = dict(zip(columns, writer.execute('SELECT * FROM ZWAMESSAGE WHERE Z_PK=1').fetchone(), strict=True))
+    values.update(Z_PK=writer.execute('SELECT max(Z_PK)+1 FROM ZWAMESSAGE').fetchone()[0],
+                  ZSORT=writer.execute('SELECT max(ZSORT)+1 FROM ZWAMESSAGE').fetchone()[0],
+                  ZSTANZAID='NEW-WITH-CHAT-BOOKKEEPING', ZTEXT='arrives with a chat row update')
+    writer.execute(f"INSERT INTO ZWAMESSAGE({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                   [values[column] for column in columns])
+    # WhatsApp rewrites the chat's bookkeeping columns with every message.
+    writer.execute('UPDATE ZWACHATSESSION SET ZLASTMESSAGEDATE=coalesce(ZLASTMESSAGEDATE,0)+1, Z_OPT=coalesce(Z_OPT,0)+1 WHERE Z_PK=?',
+                   (values['ZCHATSESSION'],))
+    writer.commit()
+    result = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert result['mode'] == 'incremental' and result['counts']['messages'] == 1
+    assert result['counts'].get('prepared_headers_reused') == 1
+    assert result['counts'].get('identities', 0) == 0 and result['counts'].get('chats') == 1
