@@ -1446,6 +1446,23 @@ new message, old edit, old delete, file rewrite, deletion and re-download. Repro
 benchmark lets fixture files age past the racy window before timing, as a 15-minute
 schedule would. It does not include process start-up, which is about 0.15s.
 
-Not done: auxiliary alias databases are still re-read once per process. Their evidence
-point is reused when the payload is unchanged, and they are small. No measurement on a
-real 200k-group history is recorded here yet.
+Alias databases (LID, ContactsV2) get the same treatment. `lstat` fingerprints of each
+database and its WAL are stored in `cs_native_wa_alias_files`, bound to the point. A
+fresh process reuses the retained alias evidence without reading the tables when the
+fingerprints match the parent. A fingerprint within the racy window never authorizes reuse.
+
+Real-history check (macOS, Python 3.14), measured from fresh processes with
+`ulimit -n 256` against a temporary data directory. The history had 200,854 WhatsApp
+messages and 4,456 media rows with local paths, 2.9 GB retained:
+
+| run | wall | result |
+|---|---|---|
+| initial baseline from `/` (copies all media into the blob store) | 934s | native baseline |
+| rebase after a code/policy change | 94s | `full_reconcile` |
+| no source change, from `/tmp` | 1.50s | delta, `prepared_coverage_reused=1` |
+| five no-change polls a minute apart, from `/` | 0.61-0.65s | 0 rows, 0 files hashed, coverage `full=0` |
+
+The first rebase attempt was rejected with `capture_retry_required`: WhatsApp wrote an
+alias database during the 40s capture. The next run succeeded. Messages was not measured
+because the measuring shell lacked Full Disk Access. New-message and attachment deltas on
+the real history were not observed, because no WhatsApp change arrived during the run.
