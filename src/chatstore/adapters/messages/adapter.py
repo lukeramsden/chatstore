@@ -507,10 +507,12 @@ def _probe_attachment(a: dict[str, Any], root: Path) -> tuple[str, str | None, i
         hint = str(path.relative_to(root))
     except ValueError:
         hint = os.path.basename(fn)
+    if not fn.startswith(('~', '/')):
+        return 'unknown', None, size, hint  # never resolved against the cwd
     if path.is_file() and not path.is_symlink():
         sha, size = _sha256(path)
         return 'available', sha, size, hint
-    return ('missing' if fn.startswith(('~', '/')) else 'unknown'), None, size, hint
+    return 'missing', None, size, hint
 
 
 def _sha256(p: Path) -> tuple[str, int]:

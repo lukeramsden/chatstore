@@ -82,7 +82,10 @@ def capture_attachment(a: dict[str, Any], root: Path, dd: DataDir) -> CapturedMe
         hint = str(path.relative_to(root))
     except ValueError:
         hint = os.path.basename(filename)
-    absent = CapturedMedia(filename, 'missing' if filename.startswith(('~', '/')) else 'unknown', None, size, hint)
+    if not filename.startswith(('~', '/')):
+        # A relative name has no defined base; opening it would read from the cwd.
+        return CapturedMedia(filename, 'unknown', None, size, hint)
+    absent = CapturedMedia(filename, 'missing', None, size, hint)
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError as exc:

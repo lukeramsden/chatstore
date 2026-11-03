@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from chatstore.adapters import media_ledger
 from chatstore.adapters.whatsapp.adapter import WhatsAppAdapter
 from chatstore.archive.import_ import import_archive
 from chatstore.archive.incremental import export_changes
@@ -256,9 +257,12 @@ def main():
                 elif mutation:
                     writer.execute(mutation)
                     writer.commit()
+                if label == 'baseline' or mutation in ('file-edit', 'file-download'):
+                    # Scheduled polls run long after file writes; let them age past the
+                    # racy-clean window so it does not re-hash them (outside the timings).
+                    time.sleep(media_ledger.RACY_WINDOW_NS / 1e9 + 0.1)
                 def capture(label=label):
-                    outcome = collect_native(adapter, dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg),
-                        media_watch=session.native_media(cfg, dd, source='whatsapp') if args.file_media else None)
+                    outcome = collect_native(adapter, dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg))
                     assert outcome is not None and outcome.exit_code == 0, outcome
                     counts = outcome.run['counts']
                     if label.startswith('clean') or label == 'auxiliary-noop':
@@ -342,7 +346,7 @@ def main():
         'file_media': args.file_media, 'archive_media': args.archive_media, 'wal_resets': args.wal_resets,
         'resource_sampling': args.sample_resources,
         'sqlite_stats': args.sqlite_stats, 'cache_spill_disabled': args.disable_cache_spill, 'platform': platform.platform(),
-        'scope': (f'Synthetic source includes {args.media_files} watched deterministic files of {args.media_bytes} bytes each. ' if args.file_media else 'Synthetic source has no file-backed media. ') + 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof and energy. File population and byte sizes are explicit fixture parameters; synthetic file bytes do not establish real-media type/content diversity. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
+        'scope': (f'Synthetic source includes {args.media_files} ledger-tracked deterministic files of {args.media_bytes} bytes each. ' if args.file_media else 'Synthetic source has no file-backed media. ') + 'Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof and energy. File population and byte sizes are explicit fixture parameters; synthetic file bytes do not establish real-media type/content diversity. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.',
         'resource_sampling_scope': 'Optional 10 ms sampling records parent resident memory/physical footprint and producer/importer WAL file-size maxima, not a guaranteed instantaneous peak or native-mirror WAL size. Sampling overhead is included in stage CPU/wall while active; resident gauges include allocations retained from earlier stages. Lifetime peak RSS remains a separate high-water mark.',
         'measurements': measurements, 'database_layout': layouts,
         'reset_scope': 'Optional reset stages checkpoint/truncate the source WAL and commit a fresh frame before capture; these source-writer mutations are outside timings. Capture includes a full image backup, native page-graph rebuild and ordered raw-row comparison. This is not bounded reset discovery. Empty or invalid WALs retain ordinary fallback.',

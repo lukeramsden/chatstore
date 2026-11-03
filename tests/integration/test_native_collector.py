@@ -106,16 +106,18 @@ def test_unrelated_native_table_changes_do_not_force_full_history_capture(collec
     assert not result['snapshot']['prepared_native']['capture']['baseline']
 
 
-def test_file_backed_source_uses_ordinary_capture_without_publishing_native_point(collector, capsys):
+def test_file_backed_source_publishes_native_point_with_retained_media(collector, capsys):
     dd, root, writer = collector
     writer.execute("INSERT INTO attachment(ROWID,guid,filename) VALUES(1,'attachment-guid','~/Library/Messages/Attachments/file')")
     writer.commit()
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
     result = cli(capsys, 'sync', '--source', 'messages')[0]
-    assert 'prepared_native' not in result['snapshot']
+    capture = result['snapshot']['prepared_native']['capture']
+    assert capture['baseline'] and capture['context']['messages_media'] == {'format': 1}
     mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
     with NativeMirror(mirror_path) as mirror:
-        assert mirror.pending() is None and mirror.continuation() is None
+        assert mirror.pending() is None and mirror.continuation().token == capture['token']
+        assert mirror.conn.execute('SELECT point FROM cs_native_media_ledger_state').fetchone()[0] == capture['token']
 
 
 def test_delta_does_not_query_source_attachment_history(collector, capsys, monkeypatch):
@@ -134,14 +136,13 @@ def test_delta_does_not_query_source_attachment_history(collector, capsys, monke
     monkeypatch.setattr(WalSource, '_open', traced)
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
     cli(capsys, 'sync', '--source', 'messages')
-    assert any("SELECT 1 FROM attachment WHERE filename>''" in query for query in queries)
     queries.clear()
     result = cli(capsys, 'sync', '--source', 'messages')[0]
     assert result['counts'].get('messages', 0) == 0
     assert not any('FROM attachment' in query for query in queries)
 
 
-def test_new_file_path_rolls_back_candidate_before_ordinary_capture(collector, capsys):
+def test_new_file_path_is_captured_by_native_delta(collector, capsys):
     dd, root, writer = collector
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
     initial = cli(capsys, 'sync', '--source', 'messages')[0]
@@ -149,40 +150,15 @@ def test_new_file_path_rolls_back_candidate_before_ordinary_capture(collector, c
     writer.execute("INSERT INTO attachment(ROWID,guid,filename) VALUES(1,'new-file-guid','~/Library/Messages/Attachments/file')")
     writer.execute('INSERT INTO message_attachment_join(message_id,attachment_id) VALUES(1,1)')
     writer.commit()
-    fallback = cli(capsys, 'sync', '--source', 'messages')[0]
-    assert 'prepared_native' not in fallback['snapshot']
-    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
-    with NativeMirror(mirror_path) as mirror:
-        assert mirror.pending() is None and mirror.continuation().token == token
-        assert mirror.conn.execute('SELECT count(*) FROM attachment').fetchone()[0] == 0
-        assert mirror.conn.execute('SELECT point FROM cs_native_page_state').fetchone()[0] == token
-    writer.execute('UPDATE attachment SET filename=NULL')
-    writer.commit()
-    captured = cli(capsys, 'sync', '--source', 'messages')[0]
-    assert captured['snapshot']['prepared_native']['capture']['parent'] == token
-    assert captured['status'] == 'complete'
+    delta = cli(capsys, 'sync', '--source', 'messages')[0]
+    assert delta['snapshot']['prepared_native']['capture']['parent'] == token
+    assert delta['mode'] == 'incremental' and delta['counts']['messages'] == 1
+    with closing(Cache(dd.cache)) as cache:
+        assert next(cache.iter_records('attachments'))['availability'] == 'missing'
 
 
-def test_private_media_eligibility_lookup_is_bounded_by_index():
-    from chatstore.native_collector import MediaCaptureRequired, _validate_text_only
 
-    with closing(sqlite3.connect(':memory:')) as conn:
-        conn.execute('CREATE TABLE attachment(filename TEXT)')
-        conn.executemany('INSERT INTO attachment VALUES(?)', ((None,) for _ in range(100000)))
-        conn.execute('CREATE INDEX cs_route_media_file ON attachment(filename)')
-        steps = []
-        conn.set_progress_handler(lambda: steps.append(1) or 0, 1)
-        _validate_text_only(conn)
-        assert len(steps) < 30
-        conn.set_progress_handler(None, 0)
-        conn.execute("INSERT INTO attachment VALUES('/new-file')")
-        with pytest.raises(MediaCaptureRequired):
-            _validate_text_only(conn)
-
-
-def test_session_collector_routes_file_only_changes_without_unrelated_messages(collector, capsys):
-    from chatstore.sync_session import SyncSession
-
+def test_one_shot_collector_routes_file_only_changes_without_unrelated_messages(collector, capsys):
     dd, root, writer = collector
     filename = root / 'Attachments' / 'watched.bin'
     filename.write_bytes(b'initial retained bytes')
@@ -191,10 +167,10 @@ def test_session_collector_routes_file_only_changes_without_unrelated_messages(c
     writer.commit()
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
     cfg, ident = load_config(dd), load_identity(dd)
-    with SyncSession() as session, closing(Cache(dd.cache)) as cache:
-        watcher = session.native_media(cfg, dd)
+    with closing(Cache(dd.cache)) as cache:
         def poll():
-            outcome = collect_native(MessagesAdapter(), dd, cfg, ident, cache, media_watch=watcher)
+            # Each call is a fresh collector: file coverage comes only from the ledger.
+            outcome = collect_native(MessagesAdapter(), dd, cfg, ident, cache)
             assert outcome is not None and outcome.exit_code == 0
             return outcome.run
         initial = poll()
@@ -212,12 +188,11 @@ def test_session_collector_routes_file_only_changes_without_unrelated_messages(c
         assert missing['counts']['messages'] == 1
         assert cache.get(attachment['urn'])['availability'] == 'missing'
         assert len(cache.revisions_of(attachment['urn'])) == 3
-    assert watcher._monitor is None
 
 
 @pytest.mark.parametrize('failure', ['mutation', 'monitor'])
 def test_watch_cli_retries_rejected_media_without_advancing_point(collector, capsys, monkeypatch, failure):
-    from chatstore.adapters import media_watch
+    from chatstore.adapters import prepared_media
     from chatstore.adapters.media_capture import MediaUnavailable
     from chatstore.adapters.monitor import MonitoringUnavailable
 
@@ -228,7 +203,7 @@ def test_watch_cli_retries_rejected_media_without_advancing_point(collector, cap
     writer.execute('INSERT INTO message_attachment_join(message_id,attachment_id) VALUES(1,1)')
     writer.commit()
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
-    original = media_watch.prepare_media
+    original = prepared_media.prepare_media
     calls = 0
     def fail_after_retention(*args, **kwargs):
         nonlocal calls
@@ -237,7 +212,7 @@ def test_watch_cli_retries_rejected_media_without_advancing_point(collector, cap
         if calls == 1:
             error = MediaUnavailable if failure == 'mutation' else MonitoringUnavailable
             raise error('injected rejected media capture')
-    monkeypatch.setattr(media_watch, 'prepare_media', fail_after_retention)
+    monkeypatch.setattr(prepared_media, 'prepare_media', fail_after_retention)
     sleeps = []
     def between_polls(seconds):
         sleeps.append(seconds)
@@ -258,28 +233,20 @@ def test_watch_cli_retries_rejected_media_without_advancing_point(collector, cap
 
 
 def test_watch_cli_reports_failure_when_media_remains_unavailable(collector, capsys, monkeypatch):
-    from chatstore.adapters import media_watch
-    from chatstore.adapters.monitor import MonitoringUnavailable
+    from chatstore.adapters import prepared_media
+    from chatstore.adapters.media_capture import MediaUnavailable
 
     dd, root, _ = collector
     cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
-    monitors = []
-    original = media_watch.SourceMonitor
-    def track_monitor():
-        monitor = original()
-        monitors.append(monitor)
-        return monitor
     def unavailable(*args, **kwargs):
-        raise MonitoringUnavailable('descriptor coverage unavailable')
-    monkeypatch.setattr(media_watch, 'SourceMonitor', track_monitor)
-    monkeypatch.setattr(media_watch, 'prepare_media', unavailable)
+        raise MediaUnavailable('source media changed during capture')
+    monkeypatch.setattr(prepared_media, 'prepare_media', unavailable)
     monkeypatch.setattr('chatstore.cli.app.time.sleep', lambda seconds: None)
     code = main(['--json', 'sync', '--source', 'messages', '--watch-interval', '900', '--max-polls', '2'])
     results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert code == 1 and len(results) == 2
     assert all(not result['ok'] and result['data'] is None for result in results)
     assert all(result['errors'][0]['code'] == 'capture_retry_required' for result in results)
-    assert len(monitors) == 2 and all(monitor._closed for monitor in monitors)
     mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
     with NativeMirror(mirror_path) as mirror:
         assert mirror.pending() is None and mirror.continuation() is None

@@ -135,11 +135,12 @@ read receipts and tapbacks mutate or reference old rows. Decoding the 77k-row te
 
 ## Retained monitoring
 
-`sync --watch-interval SECONDS` retains SQLite read connections and file/ancestor vnode watches
-on macOS. Stable monitored captures can re-sight exact prior coverage without native reads.
-Media dependencies are registered before hashing, and a further stable capture establishes
-complete coverage. Interrupted capture, changed source/cache state, monitor restart and watch
-errors force reconciliation. Existing one-shot sync still snapshots and scans each time.
+Native WhatsApp and Messages captures on macOS keep their source cursor and an `lstat`
+media ledger in the private mirror, so one-shot `sync` reads only changed rows and
+re-hashes only files whose stat fingerprint changed (or that are racy). `sync
+--watch-interval SECONDS` additionally retains SQLite source monitors between polls; it
+no longer holds per-file media watches. Interrupted capture, changed source/cache
+state, policy changes and a missing ledger force reconciliation.
 See [persistent sync lifecycle](incremental-preservation.md#persistent-sync-lifecycle) for the
 JSON stream, limitations and collector integration. Native changed-row selection is used for
 eligible WhatsApp and Messages captures; unproven coverage takes the conservative path.

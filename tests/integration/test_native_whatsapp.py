@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 import sqlite3
 import sys
 from contextlib import closing
@@ -89,21 +91,16 @@ def test_cli_whatsapp_pending_retry_does_not_open_expired_sources(collector, cap
         assert mirror.pending() is None and mirror.continuation() == pending
 
 
-def test_file_path_transition_rolls_back_native_candidate_before_fallback(collector, capsys):
+def test_file_path_transition_is_captured_by_native_delta(collector, capsys):
     root, dd, writer = collector
     cli(capsys, 'init', '--whatsapp-path', str(root))
     initial = cli(capsys, 'sync', '--source', 'whatsapp')[0]
     token = initial['snapshot']['prepared_native']['capture']['token']
     writer.execute("UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH='Media/x/pic.jpg' WHERE Z_PK=1")
     writer.commit()
-    with closing(Cache(dd.cache)) as cache:
-        assert collect_native(WhatsAppAdapter(), dd, load_config(dd), load_identity(dd), cache) is None
-    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
-    with NativeMirror(mirror_path) as mirror:
-        assert mirror.pending() is None and mirror.continuation().token == token
-        assert mirror.conn.execute('SELECT ZMEDIALOCALPATH FROM ZWAMEDIAITEM WHERE Z_PK=1').fetchone()[0] is None
-    fallback = cli(capsys, 'sync', '--source', 'whatsapp')[0]
-    assert 'prepared_native' not in fallback['snapshot']
+    delta = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert delta['snapshot']['prepared_native']['capture']['parent'] == token
+    assert delta['mode'] == 'incremental' and delta['counts']['messages'] == 1
     with closing(Cache(dd.cache)) as cache:
         assert next(cache.iter_records('attachments'))['availability'] == 'available'
 
@@ -569,3 +566,43 @@ def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collecto
             for row in cache.iter_records('chats'):
                 assert target.get(row['urn'])['revision_digest'] == row['revision_digest']
                 assert {r['revision_digest'] for r in target.revisions_of(row['urn'])} == {r['revision_digest'] for r in cache.revisions_of(row['urn'])}
+
+
+def test_one_shot_cli_with_downloaded_media_is_selective_and_cwd_independent(collector, capsys, monkeypatch, tmp_path):
+    root, dd, writer = collector
+    picture = root / 'Message/Media/x/pic.jpg'
+    writer.execute("UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH='Media/x/pic.jpg' WHERE Z_PK=1")
+    writer.commit()
+    mirror_path = None
+
+    def media_state():
+        with NativeMirror(mirror_path) as mirror:
+            changes = [row[0] for row in mirror.conn.execute('SELECT row_id FROM cs_native_wa_media_changes')]
+            return changes, mirror.conn.execute('SELECT full FROM cs_native_wa_media_coverage').fetchone()[0]
+
+    monkeypatch.chdir('/')
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    initial = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    capture = initial['snapshot']['prepared_native']['capture']
+    assert capture['baseline'] and capture['context']['whatsapp_media'] == {'format': 1}
+    descriptors = len(os.listdir('/dev/fd'))
+    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+    monkeypatch.chdir(tmp_path)
+    clean = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    clean_capture = clean['snapshot']['prepared_native']['capture']
+    assert clean_capture['parent'] == capture['token'] and not clean_capture['baseline']
+    assert clean_capture['policy_tag'] == capture['policy_tag']
+    assert clean['counts']['prepared_coverage_reused'] == 1
+    assert media_state() == ([], 0)  # No file bytes were read.
+    writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='old edit with downloaded media present' WHERE Z_PK=1")
+    writer.commit()
+    edited = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert edited['mode'] == 'incremental' and edited['counts']['messages'] == 1
+    assert media_state() == ([], 0)
+    picture.write_bytes(b'rewritten in place between one-shot runs')
+    rewritten = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert rewritten['mode'] == 'incremental' and rewritten['counts']['messages'] == 1
+    assert media_state() == ([1], 0)
+    assert len(os.listdir('/dev/fd')) == descriptors  # No watcher state survives a run.
+    with closing(Cache(dd.cache)) as cache:
+        assert next(cache.iter_records('attachments'))['blob_sha256'] == hashlib.sha256(picture.read_bytes()).hexdigest()

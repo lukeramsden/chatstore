@@ -34,13 +34,14 @@ scripts/build-helper.sh              # Rust helper for Apple Messages bodies (ne
 
 Eligible WAL-backed Messages syncs use a durable native mirror under the data directory
 to select old edits and deletions across restarts. Pending captures retry before opening
-the source. Persistent watch sessions also support retained media for Messages and WhatsApp.
+the source. Retained media evidence is supported for Messages and WhatsApp in one-shot and watch mode.
 Unsupported sources and captures without the required monitoring reconcile normally; see [implementation limits](docs/incremental-preservation.md#cli-native-messages-dispatch).
 
-For persistent source polling on macOS, `chatstore --json sync --watch-interval 900` retains
-live monitors and emits one JSON result per poll. Stable sources reuse exact captured coverage;
-changed sources use selective native capture where coverage is proven. Keep this process
-alive across polls; separate one-shot invocations cannot retain file-watch coverage. See [monitored sync](docs/incremental-preservation.md#persistent-sync-lifecycle).
+On macOS, scheduled one-shot `chatstore --json sync` runs read only the changed rows and
+changed media files. A persisted stat ledger in the native mirror stands in for live file
+watches, so no process or descriptors are kept between runs. Unchanged sources re-sight
+exact captured coverage. `--watch-interval 900` is still available for a persistent
+collector that emits one JSON result per poll. See [durable media ledger](docs/incremental-preservation.md#durable-media-ledger-for-one-shot-sync).
 
 Archives:
 

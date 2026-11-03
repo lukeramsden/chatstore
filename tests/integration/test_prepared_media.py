@@ -1,7 +1,9 @@
 import hashlib
+import os
 import sqlite3
 import subprocess
 import sys
+import time
 from contextlib import closing
 from functools import partial
 from pathlib import Path
@@ -205,83 +207,172 @@ def test_delta_requires_explicit_file_change_coverage(media_history):
     assert mirror.pending() is None and mirror.continuation() == parent
 
 
-@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS vnode monitoring')
-def test_live_media_watch_tracks_file_only_changes_and_recovers_rejected_point(media_history, monkeypatch):
-    from chatstore.adapters import prepared_media
-    from chatstore.adapters.media_watch import PreparedMediaWatch
+def _ledger(cfg, dd):
+    from chatstore.adapters.media_ledger import MessagesMediaLedger
 
-    _, dd, cfg, _, _, mirror, _, path, filename, parent = media_history
-    assert sync(media_history, parent).exit_code == 0
-    watcher = PreparedMediaWatch(cfg.source_root('messages'), dd)
-    def prepare(previous, validator):
+    # A new instance per attempt stands in for a new one-shot process.
+    return MessagesMediaLedger(cfg.source_root('messages'), dd)
+
+
+def _delta(history, previous, validator):
+    """Prepare a delta, returning the point and the filenames whose bytes were read.
+
+    Recording is scoped to the delta: a patched capture function would change
+    the extraction policy that the canonical sync validates.
+    """
+    from chatstore.adapters import prepared_media
+
+    *_, mirror, _, path, _, _ = history
+    original = prepared_media.capture_attachment
+    names: list[str] = []
+    def record(*args, **kwargs):
+        names.append(args[0]['filename'])
+        return original(*args, **kwargs)
+    prepared_media.capture_attachment = record
+    try:
         with view(path, previous.cursor) as source, WalPages(path.with_name(path.name + '-wal'), source.changes) as pages:
             return mirror.prepare(source, pages, expected_token=previous.token, namespace=previous.namespace,
                 policy_tag=previous.policy_tag, observed_at='2026-10-18T10:15:00Z',
-                context={'messages_media': {'format': 1}}, validate_rows=validator)
-    try:
-        child = prepare(parent, watcher.prepare)
-        assert sync(media_history, child).exit_code == 0
-        original = prepared_media.capture_attachment
-        captured = []
-        def record(*args, **kwargs):
-            captured.append(args[0]['filename'])
-            return original(*args, **kwargs)
-        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
-        clean = prepare(child, watcher.prepare)
-        assert captured == []
-        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
-        assert sync(media_history, clean).exit_code == 0
-        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
-        filename.write_bytes(b'file-only event')
-        changed = prepare(clean, watcher.prepare)
-        assert captured == [str(filename)]
-        assert read_media(mirror.conn, changed.token, {'rowid': 1, 'filename': str(filename)})[1] == hashlib.sha256(b'file-only event').hexdigest()
-        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
-        assert sync(media_history, changed).exit_code == 0
-        monkeypatch.setattr(prepared_media, 'capture_attachment', record)
-        def reject(conn):
-            watcher.prepare(conn)
-            raise RuntimeError('publication rejected')
-        with pytest.raises(RuntimeError, match='publication rejected'):
-            prepare(changed, reject)
-        captured.clear()
-        recovered = prepare(changed, watcher.prepare)
-        assert str(filename) in captured  # Rolled-back point forces full file reconciliation.
-        monkeypatch.setattr(prepared_media, 'capture_attachment', original)
-        assert sync(media_history, recovered).exit_code == 0
+                context={'messages_media': {'format': 1}}, validate_rows=validator), names
     finally:
-        watcher.close()
+        prepared_media.capture_attachment = original
 
 
-@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS vnode monitoring')
-def test_live_media_change_during_retention_rejects_native_publication(media_history, monkeypatch):
+def _coverage(mirror):
+    return tuple(mirror.conn.execute('SELECT point,full FROM cs_native_media_coverage').fetchone())
+
+
+def test_media_ledger_tracks_file_only_changes_across_processes_and_rejected_points(media_history):
+    _, dd, cfg, _, _, mirror, _, _, filename, parent = media_history
+    assert sync(media_history, parent).exit_code == 0
+    child, captured = _delta(media_history, parent, _ledger(cfg, dd).prepare)
+    assert str(filename) in captured and _coverage(mirror) == (child.token, 1)  # No ledger yet.
+    assert sync(media_history, child).exit_code == 0
+    clean, captured = _delta(media_history, child, _ledger(cfg, dd).prepare)
+    assert captured == [] and _coverage(mirror) == (clean.token, 0)
+    assert sync(media_history, clean).exit_code == 0
+    filename.write_bytes(b'file-only event')
+    changed, captured = _delta(media_history, clean, _ledger(cfg, dd).prepare)
+    assert captured == [str(filename)] and _coverage(mirror) == (changed.token, 0)
+    assert read_media(mirror.conn, changed.token, {'rowid': 1, 'filename': str(filename)})[1] == hashlib.sha256(b'file-only event').hexdigest()
+    assert sync(media_history, changed).exit_code == 0
+    filename.write_bytes(b'change seen by a rejected point')
+    def reject(conn):
+        _ledger(cfg, dd).prepare(conn)
+        raise RuntimeError('publication rejected')
+    with pytest.raises(RuntimeError, match='publication rejected'):
+        _delta(media_history, changed, reject)
+    # The rolled-back attempt also rolled back its ledger rows: the change is
+    # still dirty against the parent, and nothing else is re-hashed.
+    recovered, captured = _delta(media_history, changed, _ledger(cfg, dd).prepare)
+    assert captured == [str(filename)] and _coverage(mirror) == (recovered.token, 0)
+    assert sync(media_history, recovered).exit_code == 0
+
+
+@pytest.mark.parametrize('persistent', [False, True])
+def test_media_change_during_retention_retries_once_then_rejects_publication(media_history, monkeypatch, persistent):
     from chatstore.adapters import prepared_media
     from chatstore.adapters.media_capture import MediaUnavailable
-    from chatstore.adapters.media_watch import PreparedMediaWatch
 
-    _, dd, cfg, _, _, mirror, _, path, filename, parent = media_history
+    _, dd, cfg, _, _, mirror, _, _, filename, parent = media_history
     assert sync(media_history, parent).exit_code == 0
-    watcher = PreparedMediaWatch(cfg.source_root('messages'), dd)
+    child, _ = _delta(media_history, parent, _ledger(cfg, dd).prepare)
+    assert sync(media_history, child).exit_code == 0
+    filename.write_bytes(b'dirty before capture')
     original = prepared_media.capture_attachment
+    writes = []
     def change_after_copy(attachment, *args, **kwargs):
-        captured = original(attachment, *args, **kwargs)
-        if attachment['filename'] == str(filename):
-            filename.write_bytes(b'changed after retained copy')
-        return captured
+        result = original(attachment, *args, **kwargs)
+        if attachment['filename'] == str(filename) and (persistent or not writes):
+            writes.append(1)
+            filename.write_bytes(b'changed after retained copy %d' % len(writes))
+        return result
     monkeypatch.setattr(prepared_media, 'capture_attachment', change_after_copy)
-    try:
-        with (view(path, parent.cursor) as source,
-              WalPages(path.with_name(path.name + '-wal'), source.changes) as pages,
-              pytest.raises(MediaUnavailable, match='changed during')):
-            mirror.prepare(source, pages, expected_token=parent.token, namespace=parent.namespace,
-                policy_tag=parent.policy_tag, observed_at='2026-10-18T10:15:00Z',
-                context={'messages_media': {'format': 1}}, validate_rows=watcher.prepare)
-        assert mirror.pending() is None
-        assert mirror.continuation() == parent
-        assert mirror.conn.execute('SELECT point FROM cs_native_media_state').fetchone()[0] == parent.token
-        assert watcher._binding is None
-    finally:
-        watcher.close()
+    if not persistent:
+        retried, captured = _delta(media_history, child, _ledger(cfg, dd).prepare)
+        assert captured == [str(filename)] * 2
+        expected = hashlib.sha256(b'changed after retained copy 1').hexdigest()
+        assert read_media(mirror.conn, retried.token, {'rowid': 1, 'filename': str(filename)})[1] == expected
+        return
+    with pytest.raises(MediaUnavailable, match='changed during capture'):
+        _delta(media_history, child, _ledger(cfg, dd).prepare)
+    assert len(writes) == 2
+    assert mirror.pending() is None and mirror.continuation() == child
+    assert mirror.conn.execute('SELECT point FROM cs_native_media_state').fetchone()[0] == child.token
+    assert mirror.conn.execute('SELECT point FROM cs_native_media_ledger_state').fetchone()[0] == child.token
+
+
+def _ledger_point(history):
+    """Return a published, canonically acknowledged point with ledger coverage."""
+    _, dd, cfg, _, _, _, _, _, _, parent = history
+    assert sync(history, parent).exit_code == 0
+    child, _ = _delta(history, parent, _ledger(cfg, dd).prepare)
+    assert sync(history, child).exit_code == 0
+    return child
+
+
+@pytest.mark.parametrize('mutation', ['rewrite_same_size_restored_mtime', 'delete', 'recreate', 'symlink'])
+def test_media_ledger_detects_file_mutations_without_watchers(media_history, tmp_path, mutation):
+    _, dd, cfg, _, _, mirror, _, _, filename, _ = media_history
+    point = _ledger_point(media_history)
+    before = filename.stat()
+    if mutation == 'rewrite_same_size_restored_mtime':
+        filename.write_bytes(bytes(len(filename.read_bytes())))
+        os.utime(filename, ns=(before.st_atime_ns, before.st_mtime_ns))
+        assert filename.stat().st_mtime_ns == before.st_mtime_ns and filename.stat().st_size == before.st_size
+    elif mutation == 'delete':
+        filename.unlink()
+    elif mutation == 'recreate':
+        filename.unlink()
+        point, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+        assert captured == [str(filename)]
+        assert sync(media_history, point).exit_code == 0
+        filename.write_bytes(b'downloaded again')
+    else:
+        target = tmp_path / 'elsewhere.bin'
+        target.write_bytes(filename.read_bytes())
+        filename.unlink()
+        filename.symlink_to(target)
+    changed, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+    assert captured == [str(filename)]
+    availability, digest, *_ = read_media(mirror.conn, changed.token, {'rowid': 1, 'filename': str(filename)})
+    if mutation == 'rewrite_same_size_restored_mtime':
+        assert digest == hashlib.sha256(bytes(before.st_size)).hexdigest()
+    elif mutation == 'recreate':
+        assert availability == 'available' and digest == hashlib.sha256(b'downloaded again').hexdigest()
+    else:
+        assert availability == 'missing' and digest is None
+
+
+@pytest.mark.racy_window
+def test_racy_media_is_rehashed_until_its_timestamps_age(media_history, monkeypatch):
+    from chatstore.adapters import media_ledger
+
+    _, dd, cfg, _, _, mirror, _, _, filename, _ = media_history
+    point = _ledger_point(media_history)  # Fixture files were written just now.
+    assert mirror.conn.execute('SELECT racy FROM cs_native_media_ledger WHERE row_id=1').fetchone()[0] == 1
+    point, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+    assert str(filename) in captured  # Unchanged stat, but racy: re-hashed.
+    assert sync(media_history, point).exit_code == 0
+    later = time.time_ns() + 2 * media_ledger.RACY_WINDOW_NS
+    monkeypatch.setattr(media_ledger.time, 'time_ns', lambda: later)
+    point, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+    assert str(filename) in captured  # Still racy as of the previous scan.
+    assert mirror.conn.execute('SELECT racy FROM cs_native_media_ledger WHERE row_id=1').fetchone()[0] == 0
+    assert sync(media_history, point).exit_code == 0
+    point, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+    assert captured == [] and _coverage(mirror) == (point.token, 0)
+
+
+def test_clock_rollback_reconciles_every_file(media_history, monkeypatch):
+    from chatstore.adapters import media_ledger
+
+    _, dd, cfg, _, _, mirror, _, _, filename, _ = media_history
+    point = _ledger_point(media_history)
+    earlier = time.time_ns() - 3600 * 10**9
+    monkeypatch.setattr(media_ledger.time, 'time_ns', lambda: earlier)
+    rolled_back, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+    assert str(filename) in captured and _coverage(mirror) == (rolled_back.token, 1)
 
 
 def test_policy_upgrade_rebinds_retained_media_after_source_expiry(media_history, tmp_path, monkeypatch):

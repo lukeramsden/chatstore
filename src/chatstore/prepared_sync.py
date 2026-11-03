@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import (
-    media_watch,
+    media_ledger,
     monitor,
     native_mirror,
     page_index,
@@ -52,8 +52,11 @@ def policy_signature(adapter: SourceAdapter, cfg: Config) -> str:
             raise MirrorUnavailable('prepared Messages capture requires its decoder')
         with helper.open('rb') as binary:
             helper_digest = hashlib.file_digest(binary, 'sha256').hexdigest()
-    projection = (media_watch, monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector, whatsapp_dependencies)
-    policy = [code_signature(adapter, cfg, extra_modules=projection), helper_digest, os.getcwd()]
+    projection = (media_ledger, monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector, whatsapp_dependencies)
+    # The absolute source root, not the cwd: a relative configured root is the
+    # only way the process location can change which files a capture reads.
+    root = str(cfg.source_root(adapter.source).absolute())
+    policy = [code_signature(adapter, cfg, extra_modules=projection), helper_digest, root]
     return hashlib.sha256(json.dumps(policy).encode()).hexdigest()
 
 

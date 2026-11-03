@@ -22,7 +22,10 @@ chatstore = "chatstore.cli.app:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["real_source: needs a real local source database; never run in CI"]
+markers = [
+  "real_source: needs a real local source database; never run in CI",
+  "racy_window: keep the production racy-clean media window",
+]
 
 [tool.ruff]
 line-length = 100

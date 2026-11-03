@@ -158,10 +158,9 @@ def cmd_sync(ctx: Ctx) -> Result:
             print(f"[{_s}] {msg}", file=sys.stderr)
 
         session = ctx._sync_sessions.get(s)
-        media_watch = session.native_media(ctx.cfg, ctx.data_dir, source=s) if session is not None and s in ('messages', 'whatsapp') else None
         auxiliary_session = session.native_auxiliary(ctx.cfg) if session is not None and s == 'whatsapp' else None
         out = collect_native(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
-                             media_watch=media_watch, auxiliary_session=auxiliary_session)
+                             auxiliary_session=auxiliary_session)
         if out is None:
             out = run_sync(ad, ctx.data_dir, ctx.cfg, ident, ctx.cache(), full=(ctx.args.mode == "full"),
                            session=ctx._sync_sessions.get(s), progress=None if quiet else progress)
@@ -543,8 +542,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 res = args.fn(ctx)
             except (MediaUnavailable, MonitoringUnavailable) as exc:
-                if interval is None:
-                    raise
+                # Nothing was published; the next one-shot run or poll retries.
                 res = Result(None, EXIT_FAIL, errors=[{
                     'code': 'capture_retry_required',
                     'message': f'{type(exc).__name__}: {exc}; another capture is required',

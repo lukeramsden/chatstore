@@ -8,19 +8,16 @@ from pathlib import Path
 from typing import Any, Self
 
 from .adapters.base import ExtractStats, SourceAdapter
-from .adapters.media_watch import PreparedMediaWatch
 from .adapters.messages.adapter import MessagesAdapter, find_helper
 from .adapters.monitor import CaptureToken, MonitoringUnavailable, SourceMonitor
 from .adapters.whatsapp.adapter import WhatsAppAdapter
 from .adapters.whatsapp.auxiliary import AuxiliarySession
-from .adapters.whatsapp.media_watch import PreparedWhatsAppMediaWatch
 from .cache import Cache
 from .cache.changefeed import append, id_ranges
 from .cache.extraction import code_signature
 from .cache.freshness import stamp
 from .cache.projection_epoch import read_source
 from .config import Config
-from .paths import DataDir
 
 
 class SyncSession:
@@ -38,8 +35,6 @@ class SyncSession:
         self._epoch = 0
         self._eligible = False
         self._source_paths: list[Path] = []
-        self._native_media: PreparedMediaWatch | PreparedWhatsAppMediaWatch | None = None
-        self._native_media_key: tuple[str, str, str] | None = None
         self._native_auxiliary: AuxiliarySession | None = None
         self._native_auxiliary_root: str | None = None
 
@@ -53,19 +48,6 @@ class SyncSession:
         assert self._native_auxiliary is not None
         return self._native_auxiliary
 
-    def native_media(self, cfg: Config, dd: DataDir, *, source: str = 'messages') -> PreparedMediaWatch | PreparedWhatsAppMediaWatch:
-        if source not in ('messages', 'whatsapp'):
-            raise ValueError('unsupported native media source')
-        root = cfg.source_root(source) / 'Message' if source == 'whatsapp' else cfg.source_root(source)
-        key = (source, str(root.absolute()), str(dd.root.absolute()))
-        if self._native_media_key != key:
-            if self._native_media is not None:
-                self._native_media.close()
-            self._native_media = PreparedWhatsAppMediaWatch(root, dd) if source == 'whatsapp' else PreparedMediaWatch(root, dd)
-            self._native_media_key = key
-        assert self._native_media is not None
-        return self._native_media
-
     def prepare(self, adapter: SourceAdapter, cfg: Config, cache: Cache, scope: str) -> None:
         helper_digest = ''
         if type(adapter) is MessagesAdapter:
@@ -77,7 +59,8 @@ class SyncSession:
                 except OSError:
                     self.close()
                     return
-        key = (adapter.source, scope, str(cache.path.resolve()), code_signature(adapter, cfg), helper_digest, str(Path.cwd()))
+        key = (adapter.source, scope, str(cache.path.resolve()), code_signature(adapter, cfg), helper_digest,
+               str(cfg.source_root(adapter.source).absolute()))
         if key != self._key or (self._monitor and self._monitor.failure):
             self.close()
             self._key = key
@@ -187,10 +170,6 @@ class SyncSession:
             self._native_auxiliary.close()
         self._native_auxiliary = None
         self._native_auxiliary_root = None
-        if self._native_media is not None:
-            self._native_media.close()
-        self._native_media = None
-        self._native_media_key = None
         if self._monitor:
             self._monitor.close()
         self._monitor = None
