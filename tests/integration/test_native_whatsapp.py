@@ -105,7 +105,7 @@ def test_file_path_transition_is_captured_by_native_delta(collector, capsys):
         assert next(cache.iter_records('attachments'))['availability'] == 'available'
 
 
-def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collector, capsys, monkeypatch):
+def test_auxiliary_alias_rows_are_skipped_until_change_across_restarts(collector, capsys, monkeypatch):
     from chatstore.adapters.whatsapp import aliases
     from chatstore.sync_session import SyncSession
 
@@ -139,9 +139,17 @@ def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collect
         assert len(reads) == 2
         with NativeMirror(mirror_path) as mirror:
             assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == changed['token']
-        auxiliary.close()  # Simulate restart: the durable payload alone cannot authorize reuse.
+        auxiliary.close()  # Simulate restart: the persisted file fingerprint authorizes reuse.
         poll()
+        assert len(reads) == 2
+        auxiliary.close()
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as writer:
+            writer.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+1 555 333 5555' WHERE Z_PK=1")
+            writer.commit()
+        restarted = poll()
         assert len(reads) == 3
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == restarted['token']
     assert auxiliary._monitor is None
 
 
@@ -606,3 +614,29 @@ def test_one_shot_cli_with_downloaded_media_is_selective_and_cwd_independent(col
     assert len(os.listdir('/dev/fd')) == descriptors  # No watcher state survives a run.
     with closing(Cache(dd.cache)) as cache:
         assert next(cache.iter_records('attachments'))['blob_sha256'] == hashlib.sha256(picture.read_bytes()).hexdigest()
+
+
+@pytest.mark.racy_window
+def test_recently_written_auxiliary_database_is_reread_after_restart(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.adapters.whatsapp.auxiliary import AuxiliarySession
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    from chatstore.adapters import media_ledger
+
+    original, reads = aliases.collect, []
+    monkeypatch.setattr(aliases, 'collect', lambda sources: reads.append(1) or original(sources))
+    # Every scan happens 1s after LID.sqlite's last change, inside the racy window.
+    written = max(os.stat(root / name).st_ctime_ns for name in ('LID.sqlite',))
+    monkeypatch.setattr(media_ledger.time, 'time_ns', lambda: written + 10**9)
+    with closing(Cache(dd.cache)) as cache:
+        for _ in range(2):  # A new session per poll stands in for a new process.
+            session = AuxiliarySession(cfg.source_root('whatsapp'))
+            try:
+                assert collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=session).exit_code == 0
+            finally:
+                session.close()
+    # A racy fingerprint proves nothing, so the restarted session re-reads the rows.
+    assert len(reads) == 2

@@ -52,7 +52,13 @@ def _volatile(value: str) -> bool:
     return value.startswith('errno:') and int(value[6:]) not in _ABSENT
 
 
-def _racy(value: str, started_ns: int) -> bool:
+def now_ns() -> int:
+    """Scan clock for racy-clean decisions; compare only with values it returned."""
+    return time.time_ns()
+
+
+def recent(value: str, started_ns: int) -> bool:
+    """True when a fingerprint's timestamps are too close to the scan to prove cleanliness."""
     if value.startswith('errno:'):
         return False
     _, _, _, _, mtime, ctime, _ = value.split(':', 6)
@@ -91,7 +97,7 @@ class PreparedMediaLedger:
         point = conn.execute('SELECT point FROM cs_native_page_state WHERE id=1').fetchone()
         if point is None:
             raise MediaUnavailable('media ledger requires a candidate page point')
-        started = time.time_ns()
+        started = now_ns()
         conn.execute('''CREATE TABLE IF NOT EXISTS cs_native_media_ledger(
             row_id INTEGER PRIMARY KEY,path TEXT NOT NULL,fingerprint TEXT NOT NULL,racy INTEGER NOT NULL)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS cs_native_media_ledger_state(
@@ -147,7 +153,7 @@ class PreparedMediaLedger:
             conn.executemany('DELETE FROM cs_native_media_ledger WHERE row_id=?', ((row_id,) for row_id in stale))
         conn.executemany('''INSERT INTO cs_native_media_ledger VALUES(?,?,?,?) ON CONFLICT(row_id) DO UPDATE
             SET path=excluded.path,fingerprint=excluded.fingerprint,racy=excluded.racy''',
-            ((row_id, current[row_id], seen[row_id], int(_racy(seen[row_id], started))) for row_id in captured))
+            ((row_id, current[row_id], seen[row_id], int(recent(seen[row_id], started))) for row_id in captured))
         conn.execute('''INSERT INTO cs_native_media_ledger_state VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE
             SET point=excluded.point,format=excluded.format,captured_ns=excluded.captured_ns''', (point, FORMAT, started))
 
