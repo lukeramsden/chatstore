@@ -612,6 +612,11 @@ def test_one_shot_cli_with_downloaded_media_is_selective_and_cwd_independent(col
     assert rewritten['mode'] == 'incremental' and rewritten['counts']['messages'] == 1
     assert media_state() == ([1], 0)
     assert len(os.listdir('/dev/fd')) == descriptors  # No watcher state survives a run.
+    full = cli(capsys, 'sync', '--source', 'whatsapp', '--mode', 'full')[0]
+    assert full['mode'] == 'full_reconcile'
+    assert media_state() == ([], 1)  # --mode full re-hashes every file, not just dirty ones.
+    after_full = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert after_full['counts']['prepared_coverage_reused'] == 1 and media_state() == ([], 0)
     with closing(Cache(dd.cache)) as cache:
         assert next(cache.iter_records('attachments'))['blob_sha256'] == hashlib.sha256(picture.read_bytes()).hexdigest()
 
@@ -661,3 +666,23 @@ def test_new_message_with_chat_bookkeeping_update_reuses_headers(collector, caps
     assert result['mode'] == 'incremental' and result['counts']['messages'] == 1
     assert result['counts'].get('prepared_headers_reused') == 1
     assert result['counts'].get('identities', 0) == 0 and result['counts'].get('chats') == 1
+
+
+def test_alias_database_write_during_long_baseline_does_not_reject_capture(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import events
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    original = events.prepare
+    def baseline_work_while_whatsapp_writes(conn, *, full):
+        # Stands in for minutes of baseline work while WhatsApp updates LID.sqlite.
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as lid:
+            lid.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+1 555 777 0000' WHERE Z_PK=1")
+            lid.commit()
+        return original(conn, full=full)
+    monkeypatch.setattr(events, 'prepare', baseline_work_while_whatsapp_writes)
+    result = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert result['status'] == 'complete'
+    assert result['snapshot']['prepared_native']['capture']['baseline']
+    with closing(Cache(dd.cache)) as cache:
+        assert any('15557770000' in (row.get('address') or '') for row in cache.iter_records('identities'))

@@ -75,7 +75,7 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
                         view, tables, expected_token=previous.token, namespace=namespace, policy_tag=policy)
                     baseline = baseline and not reconcile
                     context: dict[str, Any] = {'collector': 'messages-native-v1', 'messages_media': {'format': 1}}
-                    validator = partial(ledger.prepare, full=baseline)
+                    validator = partial(ledger.prepare, full=baseline or full)
                     if previous is None:
                         pending = mirror.initialize(view, tables, namespace=namespace, policy_tag=policy,
                             observed_at=observed_at, context=context, validate_rows=validator)
@@ -92,7 +92,8 @@ def collect_native(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: Iden
                                 validate_rows=validator)
                 break
             except (WalUnavailable, PageUnavailable):
-                if not continuation or after is None:
+                # Retry natively once before falling back to ordinary snapshot capture.
+                if not continuation:
                     return None
         assert pending is not None
         return _run_prepared_sync(adapter, dd, cfg, ident, cache,

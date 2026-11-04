@@ -53,36 +53,41 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     reconcile = after is None and previous is not None and mirror.can_reconcile(
                         view, REQUIRED, expected_token=previous.token, namespace=namespace, policy_tag=policy)
                     baseline = baseline and not reconcile
-                    with auxiliary_session.views() as optional:
-                        context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
-                                   'whatsapp_auxiliary': optional.evidence, 'whatsapp_events': {'format': 1},
-                                   'whatsapp_chats': {'format': 1}, 'whatsapp_media': {'format': 1}}
-                        def validate(conn: sqlite3.Connection, baseline: bool = baseline,
-                                     context: dict[str, Any] = context) -> None:
-                            ledger.prepare(conn, full=baseline)
-                            events.prepare(conn, full=baseline)
-                            chats.prepare(conn, full=baseline)
+                    context: dict[str, Any] = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
+                               'whatsapp_events': {'format': 1}, 'whatsapp_chats': {'format': 1},
+                               'whatsapp_media': {'format': 1}}
+                    def validate(conn: sqlite3.Connection, baseline: bool = baseline,
+                                 context: dict[str, Any] = context) -> None:
+                        ledger.prepare(conn, full=baseline or full)
+                        events.prepare(conn, full=baseline)
+                        chats.prepare(conn, full=baseline)
+                        # Pin the alias databases only for their own short read: a baseline
+                        # backup can take minutes while WhatsApp keeps writing them.
+                        with auxiliary_session.views() as optional:
+                            context['whatsapp_auxiliary'] = optional.evidence
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
-                            context['whatsapp_alias_evidence_point'] = conn.execute(
-                                'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
-                        observed_at = datetime.now(UTC).isoformat()
-                        if previous is None:
-                            pending = mirror.initialize(view, REQUIRED, namespace=namespace, policy_tag=policy,
-                                observed_at=observed_at, context=context, validate_rows=validate)
-                        elif reconcile:
-                            pending = mirror.reconcile(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                        context['whatsapp_alias_evidence_point'] = conn.execute(
+                            'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
+                    observed_at = datetime.now(UTC).isoformat()
+                    if previous is None:
+                        pending = mirror.initialize(view, REQUIRED, namespace=namespace, policy_tag=policy,
+                            observed_at=observed_at, context=context, validate_rows=validate)
+                    elif reconcile:
+                        pending = mirror.reconcile(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                            policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
+                    elif after is None or previous.schema_version != view.schema_version:
+                        pending = mirror.rebase(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                            policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
+                    else:
+                        with WalPages(source_path.with_name(source_path.name + '-wal'), view.changes) as pages:
+                            pending = mirror.prepare(view, pages, expected_token=previous.token, namespace=namespace,
                                 policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
-                        elif after is None or previous.schema_version != view.schema_version:
-                            pending = mirror.rebase(view, REQUIRED, expected_token=previous.token, namespace=namespace,
-                                policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
-                        else:
-                            with WalPages(source_path.with_name(source_path.name + '-wal'), view.changes) as pages:
-                                pending = mirror.prepare(view, pages, expected_token=previous.token, namespace=namespace,
-                                    policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
                 break
             except (WalUnavailable, PageUnavailable):
-                if not continuation or after is None:
+                # The source moved under the view. Retry natively once (as a fresh
+                # baseline/rebase) before falling back to an ordinary snapshot capture.
+                if not continuation:
                     return None
         assert pending is not None
         return _run_prepared_sync(adapter, dd, cfg, ident, cache, PreparedSync(mirror, pending, 'ChatStorage'), full=full)
