@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Self
 
+from .. import media_ledger
 from ..monitor import CaptureToken, MonitoringUnavailable, SourceMonitor
 from . import aliases
 from .aliases import SOURCES
@@ -20,9 +22,26 @@ class AuxiliaryViews:
         self._monitor = monitor
         self._owns_monitor = monitor is None
         self._before: CaptureToken | None = None
+        self.files_fingerprint: str | None = None
+
+    def _fingerprint(self) -> str | None:
+        """Durable proof that the optional databases are unchanged, taken before reading.
+
+        Every committed write changes the database or WAL file's ctime. A value
+        too close to the scan clock proves nothing and is recorded as None.
+        """
+        started = media_ledger.now_ns()
+        files = {}
+        for name in SOURCES:
+            path = str(self.root / f'{name}.sqlite')
+            files[name] = [media_ledger.fingerprint(path), media_ledger.fingerprint(path + '-wal')]
+        if any(media_ledger.recent(value, started) for pair in files.values() for value in pair):
+            return None
+        return json.dumps(files, sort_keys=True)
 
     def __enter__(self) -> Self:
         try:
+            self.files_fingerprint = self._fingerprint()
             if self._monitor is None:
                 self._monitor = SourceMonitor()
             for name in SOURCES:
@@ -83,6 +102,7 @@ class AuxiliaryViews:
         self._monitor = None
         self._before = None
         self.evidence = {}
+        self.files_fingerprint = None
 
     def __exit__(self, *args: object) -> None:
         self.close()
@@ -115,10 +135,18 @@ class AuxiliarySession:
         point = conn.execute('SELECT point FROM cs_native_page_state WHERE id=1').fetchone()
         if point is None:
             raise MonitoringUnavailable('alias capture requires a candidate page point')
-        unchanged = not full and parent is not None and self._binding == (database, parent[0], views._before)
+        conn.execute('''CREATE TABLE IF NOT EXISTS cs_native_wa_alias_files(
+            id INTEGER PRIMARY KEY CHECK(id=1),point TEXT NOT NULL,fingerprint TEXT)''')
+        stored = conn.execute('SELECT point,fingerprint FROM cs_native_wa_alias_files WHERE id=1').fetchone()
+        durable = (parent is not None and stored is not None and views.files_fingerprint is not None
+                   and (stored[0], stored[1]) == (parent[0], views.files_fingerprint))
+        unchanged = not full and parent is not None and (
+            durable or self._binding == (database, parent[0], views._before))
         if not unchanged or not aliases.reuse(conn, parent[0]):
             aliases.prepare(conn, sources=views.sources)
         views.validate()
+        conn.execute('''INSERT INTO cs_native_wa_alias_files VALUES(1,?,?) ON CONFLICT(id) DO UPDATE
+            SET point=excluded.point,fingerprint=excluded.fingerprint''', (point[0], views.files_fingerprint))
         self._binding = (database, point[0], views._before)
 
     def close(self) -> None:

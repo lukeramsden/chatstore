@@ -36,8 +36,7 @@ def history(tmp_path):
         with closing(Cache(dd.cache)) as cache, SyncSession() as session:
             def poll():
                 result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
-                    auxiliary_session=session.native_auxiliary(cfg),
-                    media_watch=session.native_media(cfg, dd, source='whatsapp'))
+                    auxiliary_session=session.native_auxiliary(cfg))
                 assert result is not None and result.exit_code == 0, result
                 return result.run
             yield root, dd, cfg, ident, writer, cache, session, poll
@@ -107,12 +106,11 @@ def test_shared_file_changes_missing_and_downloads_cold_restore_all_versions(his
             assert blob_path(restored, digest).is_file()
 
 
-def test_failed_file_capture_cannot_publish_or_fall_back_and_restart_reconciles(history, monkeypatch):
+def test_failed_file_capture_cannot_publish_or_fall_back_and_retry_is_selective(history, monkeypatch):
     from chatstore.adapters.media_capture import MediaUnavailable
     from chatstore.adapters.native_mirror import NativeMirror
-    from chatstore.adapters.whatsapp.media_watch import PreparedWhatsAppMediaWatch
 
-    root, dd, cfg, _, _, cache, session, poll = history
+    root, dd, _, _, _, cache, _, poll = history
     fail = [False]
     original = media.capture_attachment
     def capture(*args, **kwargs):
@@ -126,14 +124,14 @@ def test_failed_file_capture_cannot_publish_or_fall_back_and_restart_reconciles(
     fail[0] = True
     with pytest.raises(MediaUnavailable, match='injected WhatsApp'):
         poll()
-    watcher = session.native_media(cfg, dd, source='whatsapp')
-    assert isinstance(watcher, PreparedWhatsAppMediaWatch) and watcher._monitor is None
     with NativeMirror(next((dd.root / 'native').glob('*.sqlite3'))) as mirror:
         assert mirror.pending() is None and mirror.continuation().token == initial['token']
     assert next(cache.iter_records('attachments'))['revision_digest'] == previous['revision_digest']
     fail[0] = False
     recovered = poll()
-    assert recovered['mode'] == 'full_reconcile'
+    # The rolled-back attempt left the ledger at the parent point, so the
+    # retry hashes only the changed file instead of reconciling everything.
+    assert recovered['mode'] == 'incremental' and recovered['counts']['messages'] == 1
     assert next(cache.iter_records('attachments'))['blob_sha256'] != previous['blob_sha256']
     assert blob_path(dd, previous['blob_sha256']).is_file()
     assert poll()['counts']['prepared_coverage_reused'] == 1

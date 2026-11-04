@@ -1,0 +1,407 @@
+{
+  "messages": 100000,
+  "additional_aliases": 1000,
+  "batch_limit": 5000,
+  "media_items": 5000,
+  "media_files": 5000,
+  "media_bytes": 4096,
+  "chats": 50,
+  "setup_checkpointed": false,
+  "file_media": true,
+  "archive_media": "text",
+  "wal_resets": false,
+  "resource_sampling": false,
+  "sqlite_stats": false,
+  "cache_spill_disabled": false,
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "scope": "Synthetic source includes 5000 ledger-tracked deterministic files of 4096 bytes each. Production collector with retained auxiliary monitoring, native preparation, canonical coverage and acknowledgement. Optional export includes encryption and built-in exact-ciphertext verification; import includes its trust-boundary verification. Excludes fixture setup/mutation, network transfer/remote proof and energy. File population and byte sizes are explicit fixture parameters; synthetic file bytes do not establish real-media type/content diversity. Storage counters are Darwin process-attributed I/O; cached reads can be zero and buffered attribution can cross stage boundaries. Optional SQLite counters cover only canonical producer/importer Cache connections, not native mirrors or source readers; cache_writes/spills are page counts and cache_bytes is a gauge. Disabling spills is an explicit benchmark-only experiment. RSS is the lifetime peak including fixture/baseline, not incremental-only peak. Ciphertext bytes are potential transfer bytes, not measured network traffic.",
+  "resource_sampling_scope": "Optional 10 ms sampling records parent resident memory/physical footprint and producer/importer WAL file-size maxima, not a guaranteed instantaneous peak or native-mirror WAL size. Sampling overhead is included in stage CPU/wall while active; resident gauges include allocations retained from earlier stages. Lifetime peak RSS remains a separate high-water mark.",
+  "measurements": [
+    {
+      "stage": "sync-baseline",
+      "wall_seconds": 185.03387650003424,
+      "cpu_seconds": 75.805084,
+      "storage_read_bytes": 7476502528,
+      "storage_written_bytes": 16746287104,
+      "package_idle_wakeups": 6,
+      "interrupt_wakeups": 1225,
+      "lifetime_peak_rss_bytes": 251527168,
+      "counts": {
+        "chats": 50,
+        "chat_memberships": 101,
+        "identities": 2054,
+        "aliases": 1002,
+        "messages": 99999,
+        "canonical_units_rebuilt": 99999,
+        "attachments": 5000,
+        "events": 2,
+        "unsupported": {
+          "group_event_type:15": 1,
+          "message_type:99": 1,
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 213205,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "initial"
+    },
+    {
+      "stage": "sync-clean",
+      "wall_seconds": 0.22445420798612759,
+      "cpu_seconds": 0.17804400000001408,
+      "storage_read_bytes": 3653632,
+      "storage_written_bytes": 8126464,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 259096576,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-new-message",
+      "wall_seconds": 0.15438658301718533,
+      "cpu_seconds": 0.12917600000000107,
+      "storage_read_bytes": 1536000,
+      "storage_written_bytes": 2813952,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 261210112,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-clean-after-new",
+      "wall_seconds": 0.13773075002245605,
+      "cpu_seconds": 0.1188760000000002,
+      "storage_read_bytes": 65536,
+      "storage_written_bytes": 1011712,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 264601600,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-old-edit",
+      "wall_seconds": 0.15221329097403213,
+      "cpu_seconds": 0.1294059999999888,
+      "storage_read_bytes": 1409024,
+      "storage_written_bytes": 2490368,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 265109504,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-group-event",
+      "wall_seconds": 0.164497957972344,
+      "cpu_seconds": 0.13494399999999018,
+      "storage_read_bytes": 229376,
+      "storage_written_bytes": 1519616,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 265551872,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 1,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-group-title",
+      "wall_seconds": 0.10541270801331848,
+      "cpu_seconds": 0.10286000000000683,
+      "storage_read_bytes": 147456,
+      "storage_written_bytes": 1404928,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 265748480,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "chats": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 1,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-chat-archive",
+      "wall_seconds": 0.10121420898940414,
+      "cpu_seconds": 0.0990019999999987,
+      "storage_read_bytes": 114688,
+      "storage_written_bytes": 1388544,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 265977856,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "chats": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 1,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-chat-title",
+      "wall_seconds": 1.0832467500003986,
+      "cpu_seconds": 0.2660889999999938,
+      "storage_read_bytes": 35602432,
+      "storage_written_bytes": 1581056,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266403840,
+      "counts": {
+        "chats": 50,
+        "chat_memberships": 101,
+        "identities": 2054,
+        "aliases": 1002,
+        "events": 1,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 0,
+          "updated": 2,
+          "unchanged": 3206
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-auxiliary-noop",
+      "wall_seconds": 0.10521979100303724,
+      "cpu_seconds": 0.1010610000000014,
+      "storage_read_bytes": 61440,
+      "storage_written_bytes": 929792,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-auxiliary-edit",
+      "wall_seconds": 0.273826792021282,
+      "cpu_seconds": 0.23486299999999005,
+      "storage_read_bytes": 360448,
+      "storage_written_bytes": 1789952,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "chats": 50,
+        "chat_memberships": 101,
+        "identities": 2054,
+        "aliases": 1002,
+        "events": 1,
+        "absent_from_source:withdrawn": 2,
+        "unsupported": {
+          "group_change_type:5": 1
+        },
+        "written": {
+          "inserted": 2,
+          "updated": 0,
+          "unchanged": 3206
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-file-only-edit",
+      "wall_seconds": 0.1703632909920998,
+      "cpu_seconds": 0.12914700000000323,
+      "storage_read_bytes": 479232,
+      "storage_written_bytes": 2113536,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 1,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-clean-after-file",
+      "wall_seconds": 0.10145804099738598,
+      "cpu_seconds": 0.09673499999999535,
+      "storage_read_bytes": 32768,
+      "storage_written_bytes": 913408,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-file-missing",
+      "wall_seconds": 0.10371616703923792,
+      "cpu_seconds": 0.0984370000000041,
+      "storage_read_bytes": 49152,
+      "storage_written_bytes": 1601536,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-file-download",
+      "wall_seconds": 0.20114183402620256,
+      "cpu_seconds": 0.14518300000000295,
+      "storage_read_bytes": 479232,
+      "storage_written_bytes": 1724416,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "messages": 1,
+        "attachments": 1,
+        "canonical_units_rebuilt": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 1,
+          "updated": 1,
+          "unchanged": 2
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-old-delete",
+      "wall_seconds": 0.1513627499807626,
+      "cpu_seconds": 0.12335099999999954,
+      "storage_read_bytes": 413696,
+      "storage_written_bytes": 1564672,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_headers_reused": 1,
+        "absent_from_source:withdrawn": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    },
+    {
+      "stage": "sync-clean-after-changes",
+      "wall_seconds": 0.10248466697521508,
+      "cpu_seconds": 0.09955600000000686,
+      "storage_read_bytes": 180224,
+      "storage_written_bytes": 1126400,
+      "package_idle_wakeups": 0,
+      "interrupt_wakeups": 11,
+      "lifetime_peak_rss_bytes": 266436608,
+      "counts": {
+        "prepared_coverage_reused": 1,
+        "unsupported": {},
+        "written": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 0
+        }
+      },
+      "mode": "incremental"
+    }
+  ],
+  "database_layout": {},
+  "reset_scope": "Optional reset stages checkpoint/truncate the source WAL and commit a fresh frame before capture; these source-writer mutations are outside timings. Capture includes a full image backup, native page-graph rebuild and ordered raw-row comparison. This is not bounded reset discovery. Empty or invalid WALs retain ordinary fallback.",
+  "layout_scope": "Optional dbstat and journal inspection runs after all timed stages; it reads database pages and is diagnostic work, not part of a regular collector poll."
+}

@@ -8,13 +8,13 @@ from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import Any
 
+from .adapters import media_ledger
 from .adapters.base import check_schema
 from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
 from .adapters.whatsapp import auxiliary, chats, events
-from .adapters.whatsapp import media_watch as whatsapp_media_watch
 from .adapters.whatsapp.adapter import REQUIRED, WhatsAppAdapter
 from .cache import Cache
 from .config import Config, Identity
@@ -22,17 +22,12 @@ from .paths import DataDir
 from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
 from .sync import SyncOutcome
 
-POLICY_MODULES = (auxiliary, chats, events, whatsapp_media_watch)
-
-
-class MediaCaptureRequired(Exception):
-    pass
+POLICY_MODULES = (auxiliary, chats, events, media_ledger)
 
 
 def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
             cache: Cache, *, full: bool = False,
-            auxiliary_session: auxiliary.AuxiliarySession | None = None,
-            media_watch: whatsapp_media_watch.PreparedWhatsAppMediaWatch | None = None) -> SyncOutcome | None:
+            auxiliary_session: auxiliary.AuxiliarySession | None = None) -> SyncOutcome | None:
     namespace = f'whatsapp/{ident.scope_for(adapter.source)}'
     directory = dd.root / 'native'
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -47,6 +42,7 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
             resources.callback(auxiliary_session.close)
         policy = policy_signature(adapter, cfg)
         source_path = adapter.discover(cfg)['ChatStorage']
+        ledger = media_ledger.WhatsAppMediaLedger(cfg.source_root('whatsapp') / 'Message', dd)
         for continuation in (True, False):
             after = previous.cursor if continuation and previous and previous.policy_tag == policy and not previous.context.get('native_rebase_required') else None
             try:
@@ -54,47 +50,44 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                     if check_schema(view.connection, REQUIRED):
                         return None
                     baseline = previous is None or after is None or previous.schema_version != view.schema_version
-                    if baseline and media_watch is None and view.connection.execute("SELECT 1 FROM ZWAMEDIAITEM WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
-                        return None
                     reconcile = after is None and previous is not None and mirror.can_reconcile(
                         view, REQUIRED, expected_token=previous.token, namespace=namespace, policy_tag=policy)
                     baseline = baseline and not reconcile
-                    with auxiliary_session.views() as optional:
-                        context = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
-                                   'whatsapp_auxiliary': optional.evidence, 'whatsapp_events': {'format': 1}, 'whatsapp_chats': {'format': 1}}
-                        if media_watch is not None:
-                            context['whatsapp_media'] = {'format': 1}
-                        def validate(conn: sqlite3.Connection, baseline: bool = baseline,
-                                     context: dict[str, Any] = context) -> None:
-                            if not baseline and media_watch is None and conn.execute("SELECT 1 FROM ZWAMEDIAITEM INDEXED BY cs_wa_media_file WHERE ZMEDIALOCALPATH>'' LIMIT 1").fetchone():
-                                raise MediaCaptureRequired
-                            if media_watch is not None:
-                                media_watch.prepare(conn, full=baseline)
-                            events.prepare(conn, full=baseline)
-                            chats.prepare(conn, full=baseline)
+                    context: dict[str, Any] = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
+                               'whatsapp_events': {'format': 1}, 'whatsapp_chats': {'format': 1},
+                               'whatsapp_media': {'format': 1}}
+                    def validate(conn: sqlite3.Connection, baseline: bool = baseline,
+                                 context: dict[str, Any] = context) -> None:
+                        ledger.prepare(conn, full=baseline or full)
+                        events.prepare(conn, full=baseline)
+                        chats.prepare(conn, full=baseline)
+                        # Pin the alias databases only for their own short read: a baseline
+                        # backup can take minutes while WhatsApp keeps writing them.
+                        with auxiliary_session.views() as optional:
+                            context['whatsapp_auxiliary'] = optional.evidence
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
-                            context['whatsapp_alias_evidence_point'] = conn.execute(
-                                'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
-                        observed_at = datetime.now(UTC).isoformat()
-                        if previous is None:
-                            pending = mirror.initialize(view, REQUIRED, namespace=namespace, policy_tag=policy,
-                                observed_at=observed_at, context=context, validate_rows=validate)
-                        elif reconcile:
-                            pending = mirror.reconcile(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                        context['whatsapp_alias_evidence_point'] = conn.execute(
+                            'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
+                    observed_at = datetime.now(UTC).isoformat()
+                    if previous is None:
+                        pending = mirror.initialize(view, REQUIRED, namespace=namespace, policy_tag=policy,
+                            observed_at=observed_at, context=context, validate_rows=validate)
+                    elif reconcile:
+                        pending = mirror.reconcile(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                            policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
+                    elif after is None or previous.schema_version != view.schema_version:
+                        pending = mirror.rebase(view, REQUIRED, expected_token=previous.token, namespace=namespace,
+                            policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
+                    else:
+                        with WalPages(source_path.with_name(source_path.name + '-wal'), view.changes) as pages:
+                            pending = mirror.prepare(view, pages, expected_token=previous.token, namespace=namespace,
                                 policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
-                        elif after is None or previous.schema_version != view.schema_version:
-                            pending = mirror.rebase(view, REQUIRED, expected_token=previous.token, namespace=namespace,
-                                policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
-                        else:
-                            with WalPages(source_path.with_name(source_path.name + '-wal'), view.changes) as pages:
-                                pending = mirror.prepare(view, pages, expected_token=previous.token, namespace=namespace,
-                                    policy_tag=policy, observed_at=observed_at, context=context, validate_rows=validate)
                 break
-            except MediaCaptureRequired:
-                return None
             except (WalUnavailable, PageUnavailable):
-                if not continuation or after is None:
+                # The source moved under the view. Retry natively once (as a fresh
+                # baseline/rebase) before falling back to an ordinary snapshot capture.
+                if not continuation:
                     return None
         assert pending is not None
         return _run_prepared_sync(adapter, dd, cfg, ident, cache, PreparedSync(mirror, pending, 'ChatStorage'), full=full)

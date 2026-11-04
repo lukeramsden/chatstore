@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import (
-    media_watch,
+    media_ledger,
     monitor,
     native_mirror,
     page_index,
@@ -52,8 +52,11 @@ def policy_signature(adapter: SourceAdapter, cfg: Config) -> str:
             raise MirrorUnavailable('prepared Messages capture requires its decoder')
         with helper.open('rb') as binary:
             helper_digest = hashlib.file_digest(binary, 'sha256').hexdigest()
-    projection = (media_watch, monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector, whatsapp_dependencies)
-    policy = [code_signature(adapter, cfg, extra_modules=projection), helper_digest, os.getcwd()]
+    projection = (media_ledger, monitor, native_mirror, page_index, pages, source_view, wal, wal_image, native_collector, whatsapp_dependencies)
+    # The absolute source root, not the cwd: a relative configured root is the
+    # only way the process location can change which files a capture reads.
+    root = str(cfg.source_root(adapter.source).absolute())
+    policy = [code_signature(adapter, cfg, extra_modules=projection), helper_digest, root]
     return hashlib.sha256(json.dumps(policy).encode()).hexdigest()
 
 
@@ -311,14 +314,14 @@ def _messages_coverage(adapter, cfg, cache, prepared, scope, full):
         try:
             state = CaptureCoverage.resume(cache, token=capture.token, binding=prepared.binding)
             if full:
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             if state is not None and state.full:
-                return state, None
+                return state, None, False
             if capture.baseline:
-                return CaptureCoverage.begin(cache, **args, full=True), None
+                return CaptureCoverage.begin(cache, **args, full=True), None, False
             prior = cache.get_checkpoint(adapter.source, scope, 'adapter') or {}
             if 'rowids-file-v1' not in (prior.get('helper', {}).get('capabilities') or []):
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             media_ids = ()
             if capture.context.get('messages_media') == {'format': 1}:
                 # Older prepared points may have frozen bytes but no selective
@@ -326,34 +329,42 @@ def _messages_coverage(adapter, cfg, cache, prepared, scope, full):
                 exists = prepared.mirror.conn.execute("SELECT 1 FROM sqlite_schema WHERE name='cs_native_media_coverage' AND type='table'").fetchone()
                 coverage = prepared.mirror.conn.execute('SELECT point,full FROM cs_native_media_coverage WHERE id=1').fetchone() if exists else None
                 if coverage is None or coverage['point'] != capture.token or coverage['full']:
-                    return CaptureCoverage.restart_full(cache, **args), None
+                    return CaptureCoverage.restart_full(cache, **args), None, False
                 media_ids = tuple(row[0] for row in prepared.mirror.conn.execute('SELECT row_id FROM cs_native_media_changes'))
             elif prepared.mirror.conn.execute("SELECT 1 FROM attachment WHERE filename>'' LIMIT 1").fetchone():
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
             selection = route_changes(prepared.mirror, capture, media_attachment_ids=media_ids)
             for key in selection.old_unit_keys | selection.new_unit_keys:
                 if not key.isascii():
-                    return CaptureCoverage.restart_full(cache, **args), None
+                    return CaptureCoverage.restart_full(cache, **args), None, False
                 try:
                     uuid.UUID(key)
                 except ValueError:
-                    return CaptureCoverage.restart_full(cache, **args), None
+                    return CaptureCoverage.restart_full(cache, **args), None, False
             unique_guid = False
             for index in prepared.mirror.conn.execute('PRAGMA index_list(message)'):
                 if index['unique'] and not index['partial']:
                     columns = [row['name'] for row in prepared.mirror.conn.execute('PRAGMA index_info("' + index['name'].replace('"', '""') + '")')]
                     unique_guid = unique_guid or columns == ['guid']
             if not unique_guid:
-                return CaptureCoverage.restart_full(cache, **args), None
+                return CaptureCoverage.restart_full(cache, **args), None, False
+            # Nothing changed: no native row and no file. Retained coverage, headers
+            # included, is re-sighted without running the decoder or the adapter.
+            unchanged = (not media_ids and not selection.rowids and not selection.old_unit_keys
+                         and not prepared.mirror.conn.execute('SELECT 1 FROM cs_native_mirror_changes LIMIT 1').fetchone())
             if state is None:
                 proof = UnitWithdrawal.take(cache, adapter.source, scope, selection.old_unit_keys,
-                    expected_epoch=read_source(cache.conn, adapter.source, scope)).with_headers(cache,
-                    ['handle', 'chat', 'chat_handle_join', 'me'],
-                    inferred_keys=[messages_inferred_chat_key(key) for key in selection.inferred_chat_inputs])
+                    expected_epoch=read_source(cache.conn, adapter.source, scope))
+                if not unchanged:
+                    # Headers are re-emitted by extraction, so their prior coverage is withdrawn.
+                    proof = proof.with_headers(cache, ['handle', 'chat', 'chat_handle_join', 'me'],
+                        inferred_keys=[messages_inferred_chat_key(key) for key in selection.inferred_chat_inputs])
                 state = CaptureCoverage.begin(cache, **args, full=False, withdrawal=proof)
-            return state, set(selection.rowids)
+                return state, set(selection.rowids), unchanged
+            # A resumed attempt may already have withdrawn headers: extract them again.
+            return state, set(selection.rowids), False
         except (CoverageUnavailable, RoutingUnavailable):
-            return CaptureCoverage.restart_full(cache, **args), None
+            return CaptureCoverage.restart_full(cache, **args), None, False
 
 
 def _whatsapp_aliases_unchanged(cache, prepared):
@@ -469,7 +480,7 @@ def _run_prepared_sync(adapter: SourceAdapter, dd: DataDir, cfg: Config, ident: 
     prepared.check_parent(cache, adapter.source, scope)
     capture_state, selected, reuse_coverage, reuse_headers = None, None, False, False
     if type(adapter) is MessagesAdapter:
-        capture_state, selected = _messages_coverage(adapter, cfg, cache, prepared, scope, full)
+        capture_state, selected, reuse_coverage = _messages_coverage(adapter, cfg, cache, prepared, scope, full)
     elif type(adapter) is WhatsAppAdapter:
         capture_state, selected, reuse_coverage, reuse_headers = _whatsapp_coverage(adapter, cache, prepared, scope, full)
     selected_chats = None

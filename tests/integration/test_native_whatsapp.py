@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 import sqlite3
 import sys
 from contextlib import closing
@@ -89,26 +91,21 @@ def test_cli_whatsapp_pending_retry_does_not_open_expired_sources(collector, cap
         assert mirror.pending() is None and mirror.continuation() == pending
 
 
-def test_file_path_transition_rolls_back_native_candidate_before_fallback(collector, capsys):
+def test_file_path_transition_is_captured_by_native_delta(collector, capsys):
     root, dd, writer = collector
     cli(capsys, 'init', '--whatsapp-path', str(root))
     initial = cli(capsys, 'sync', '--source', 'whatsapp')[0]
     token = initial['snapshot']['prepared_native']['capture']['token']
     writer.execute("UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH='Media/x/pic.jpg' WHERE Z_PK=1")
     writer.commit()
-    with closing(Cache(dd.cache)) as cache:
-        assert collect_native(WhatsAppAdapter(), dd, load_config(dd), load_identity(dd), cache) is None
-    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
-    with NativeMirror(mirror_path) as mirror:
-        assert mirror.pending() is None and mirror.continuation().token == token
-        assert mirror.conn.execute('SELECT ZMEDIALOCALPATH FROM ZWAMEDIAITEM WHERE Z_PK=1').fetchone()[0] is None
-    fallback = cli(capsys, 'sync', '--source', 'whatsapp')[0]
-    assert 'prepared_native' not in fallback['snapshot']
+    delta = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert delta['snapshot']['prepared_native']['capture']['parent'] == token
+    assert delta['mode'] == 'incremental' and delta['counts']['messages'] == 1
     with closing(Cache(dd.cache)) as cache:
         assert next(cache.iter_records('attachments'))['availability'] == 'available'
 
 
-def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collector, capsys, monkeypatch):
+def test_auxiliary_alias_rows_are_skipped_until_change_across_restarts(collector, capsys, monkeypatch):
     from chatstore.adapters.whatsapp import aliases
     from chatstore.sync_session import SyncSession
 
@@ -142,9 +139,17 @@ def test_retained_auxiliary_monitor_skips_source_alias_rows_until_change(collect
         assert len(reads) == 2
         with NativeMirror(mirror_path) as mirror:
             assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == changed['token']
-        auxiliary.close()  # Simulate restart: the durable payload alone cannot authorize reuse.
+        auxiliary.close()  # Simulate restart: the persisted file fingerprint authorizes reuse.
         poll()
+        assert len(reads) == 2
+        auxiliary.close()
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as writer:
+            writer.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+1 555 333 5555' WHERE Z_PK=1")
+            writer.commit()
+        restarted = poll()
         assert len(reads) == 3
+        with NativeMirror(mirror_path) as mirror:
+            assert mirror.conn.execute('SELECT point FROM cs_native_wa_aliases').fetchone()[0] == restarted['token']
     assert auxiliary._monitor is None
 
 
@@ -569,3 +574,115 @@ def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collecto
             for row in cache.iter_records('chats'):
                 assert target.get(row['urn'])['revision_digest'] == row['revision_digest']
                 assert {r['revision_digest'] for r in target.revisions_of(row['urn'])} == {r['revision_digest'] for r in cache.revisions_of(row['urn'])}
+
+
+def test_one_shot_cli_with_downloaded_media_is_selective_and_cwd_independent(collector, capsys, monkeypatch, tmp_path):
+    root, dd, writer = collector
+    picture = root / 'Message/Media/x/pic.jpg'
+    writer.execute("UPDATE ZWAMEDIAITEM SET ZMEDIALOCALPATH='Media/x/pic.jpg' WHERE Z_PK=1")
+    writer.commit()
+    mirror_path = None
+
+    def media_state():
+        with NativeMirror(mirror_path) as mirror:
+            changes = [row[0] for row in mirror.conn.execute('SELECT row_id FROM cs_native_wa_media_changes')]
+            return changes, mirror.conn.execute('SELECT full FROM cs_native_wa_media_coverage').fetchone()[0]
+
+    monkeypatch.chdir('/')
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    initial = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    capture = initial['snapshot']['prepared_native']['capture']
+    assert capture['baseline'] and capture['context']['whatsapp_media'] == {'format': 1}
+    descriptors = len(os.listdir('/dev/fd'))
+    mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
+    monkeypatch.chdir(tmp_path)
+    clean = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    clean_capture = clean['snapshot']['prepared_native']['capture']
+    assert clean_capture['parent'] == capture['token'] and not clean_capture['baseline']
+    assert clean_capture['policy_tag'] == capture['policy_tag']
+    assert clean['counts']['prepared_coverage_reused'] == 1
+    assert media_state() == ([], 0)  # No file bytes were read.
+    writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='old edit with downloaded media present' WHERE Z_PK=1")
+    writer.commit()
+    edited = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert edited['mode'] == 'incremental' and edited['counts']['messages'] == 1
+    assert media_state() == ([], 0)
+    picture.write_bytes(b'rewritten in place between one-shot runs')
+    rewritten = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert rewritten['mode'] == 'incremental' and rewritten['counts']['messages'] == 1
+    assert media_state() == ([1], 0)
+    assert len(os.listdir('/dev/fd')) == descriptors  # No watcher state survives a run.
+    full = cli(capsys, 'sync', '--source', 'whatsapp', '--mode', 'full')[0]
+    assert full['mode'] == 'full_reconcile'
+    assert media_state() == ([], 1)  # --mode full re-hashes every file, not just dirty ones.
+    after_full = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert after_full['counts']['prepared_coverage_reused'] == 1 and media_state() == ([], 0)
+    with closing(Cache(dd.cache)) as cache:
+        assert next(cache.iter_records('attachments'))['blob_sha256'] == hashlib.sha256(picture.read_bytes()).hexdigest()
+
+
+@pytest.mark.racy_window
+def test_recently_written_auxiliary_database_is_reread_after_restart(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import aliases
+    from chatstore.adapters.whatsapp.auxiliary import AuxiliarySession
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    from chatstore.adapters import media_ledger
+
+    original, reads = aliases.collect, []
+    monkeypatch.setattr(aliases, 'collect', lambda sources: reads.append(1) or original(sources))
+    # Every scan happens 1s after LID.sqlite's last change, inside the racy window.
+    written = max(os.stat(root / name).st_ctime_ns for name in ('LID.sqlite',))
+    monkeypatch.setattr(media_ledger.time, 'time_ns', lambda: written + 10**9)
+    with closing(Cache(dd.cache)) as cache:
+        for _ in range(2):  # A new session per poll stands in for a new process.
+            session = AuxiliarySession(cfg.source_root('whatsapp'))
+            try:
+                assert collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=session).exit_code == 0
+            finally:
+                session.close()
+    # A racy fingerprint proves nothing, so the restarted session re-reads the rows.
+    assert len(reads) == 2
+
+
+def test_new_message_with_chat_bookkeeping_update_reuses_headers(collector, capsys):
+    root, _, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cli(capsys, 'sync', '--source', 'whatsapp')
+    columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWAMESSAGE)')]
+    values = dict(zip(columns, writer.execute('SELECT * FROM ZWAMESSAGE WHERE Z_PK=1').fetchone(), strict=True))
+    values.update(Z_PK=writer.execute('SELECT max(Z_PK)+1 FROM ZWAMESSAGE').fetchone()[0],
+                  ZSORT=writer.execute('SELECT max(ZSORT)+1 FROM ZWAMESSAGE').fetchone()[0],
+                  ZSTANZAID='NEW-WITH-CHAT-BOOKKEEPING', ZTEXT='arrives with a chat row update')
+    writer.execute(f"INSERT INTO ZWAMESSAGE({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                   [values[column] for column in columns])
+    # WhatsApp rewrites the chat's bookkeeping columns with every message.
+    writer.execute('UPDATE ZWACHATSESSION SET ZLASTMESSAGEDATE=coalesce(ZLASTMESSAGEDATE,0)+1, Z_OPT=coalesce(Z_OPT,0)+1 WHERE Z_PK=?',
+                   (values['ZCHATSESSION'],))
+    writer.commit()
+    result = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert result['mode'] == 'incremental' and result['counts']['messages'] == 1
+    assert result['counts'].get('prepared_headers_reused') == 1
+    assert result['counts'].get('identities', 0) == 0 and result['counts'].get('chats') == 1
+
+
+def test_alias_database_write_during_long_baseline_does_not_reject_capture(collector, capsys, monkeypatch):
+    from chatstore.adapters.whatsapp import events
+
+    root, dd, _ = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    original = events.prepare
+    def baseline_work_while_whatsapp_writes(conn, *, full):
+        # Stands in for minutes of baseline work while WhatsApp updates LID.sqlite.
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as lid:
+            lid.execute("UPDATE ZWAZACCOUNT SET ZPHONENUMBER='+1 555 777 0000' WHERE Z_PK=1")
+            lid.commit()
+        return original(conn, full=full)
+    monkeypatch.setattr(events, 'prepare', baseline_work_while_whatsapp_writes)
+    result = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert result['status'] == 'complete'
+    assert result['snapshot']['prepared_native']['capture']['baseline']
+    with closing(Cache(dd.cache)) as cache:
+        assert any('15557770000' in (row.get('address') or '') for row in cache.iter_records('identities'))

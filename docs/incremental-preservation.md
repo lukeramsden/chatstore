@@ -1,11 +1,12 @@
 # Incremental preservation
 
-As of v1.2.1, vnode monitoring covers symlink inodes and their target chains,
-including symlinked ancestor directories. Link replacement invalidates the owning
-paths, rearms target coverage and retires unneeded handles. Registration races
-fail closed. The historical sections below that describe blanket symlink
-rejection predate this support; source identity and media-capture restrictions
-still apply independently of watch coverage.
+Since issue #22, one-shot `chatstore sync` takes the native delta path. A
+persisted `lstat` ledger replaces per-file vnode watches as media coverage, so
+nothing needs to stay running between polls; see
+[durable media ledger](#durable-media-ledger-for-one-shot-sync). Sections below
+that describe per-file media watches, one-shot fallback to snapshot capture, or
+cwd-dependent policy predate this change. Watch mode still exists, but its media
+coverage now also comes from the ledger.
 
 The workflow below describes the current implementation. Later component sections retain
 development-stage measurements and limitations; statements about a component not being
@@ -17,10 +18,11 @@ batches form a baseline; subsequent batches contain changes and compact freshnes
 Monthly exports remain available without `--consumer`. The changefeed format requires this
 version of chatstore on both machines.
 
-Keep a collector process running across 15-minute polls to retain source and file
-monitoring. It emits one flushed JSON envelope per poll:
+Run sync every 15 minutes, either as a fresh one-shot process from a scheduler or as a
+persistent collector that emits one flushed JSON envelope per poll:
 
 ```sh
+chatstore --json --quiet sync
 chatstore --json --quiet sync --watch-interval 900
 ```
 
@@ -32,9 +34,8 @@ chatstore --json --quiet archive export --consumer linux --media text --output /
 ```
 
 The exporter shares the canonical writer lock and maintains its own checkpoint.
-Existing one-shot launchers must be switched to a persistent collector to obtain
-the file-watch fast path; invoking standalone sync remains correct but can require
-source/file reconciliation. This PR does not install or replace a LaunchAgent.
+Both forms use the same durable native cursor and media ledger, so either one
+reads only changed rows and changed files.
 
 Repeat the export while `data.has_more` is true. The default limit is 5,000 journal events per
 invocation; `--batch-size` changes it. The encoded UTF-8 journal member is also capped at the
@@ -1370,3 +1371,132 @@ Tests verify actual WAL reuse across committed batches, rollback of an interrupt
 batch without losing prior commits, unchanged durability/cache settings, and pinned
 readers retaining their snapshot until release. This controls temporary WAL growth;
 it does not compress or prune the canonical journal, revisions or ciphertext.
+
+
+## Durable media ledger for one-shot sync
+
+Before this change, each one-shot process discarded the native delta whenever any
+referenced attachment existed. The media guards checked the whole mirror, not the
+delta, and only a live per-file vnode watcher could prove that files behind
+unchanged rows were unchanged. Watch mode needed roughly one descriptor per referenced
+file and ancestor, about 15k on a real history, and failed with EMFILE at the default limit.
+
+`adapters/media_ledger.py` replaces that watcher. For each mirror row with a file path,
+the ledger stores the path and an `lstat` fingerprint `(dev, ino, mode, size, mtime_ns,
+ctime_ns, birthtime)`, or the `lstat` errno. It writes in the same mirror transaction as
+the media observations, bound to the same point. Each run:
+
+1. `lstat`s every referenced path (milliseconds for thousands of files; no descriptors held).
+2. Marks rows dirty when the path, fingerprint or presence changed, when the entry is
+   racy, or when `lstat` failed with an error other than absence or permission. Missing
+   and permission-denied files are recorded as `missing` and re-checked only when their
+   fingerprint changes, so one unreadable attachment cannot block a source's capture. Changed native rows are
+   added by media preparation as before.
+3. Hashes only dirty files. Each hash is bracketed by the stored `lstat` and a fresh one.
+   On a mismatch, it rolls back to a savepoint and retries once, then raises
+   `MediaUnavailable`. Nothing is published, and the CLI reports `capture_retry_required`.
+4. Records coverage `full=0`, so WhatsApp and Messages take the selective routes. With no
+   row or file changes, WhatsApp re-sights retained coverage without adapter extraction.
+
+**Racy-clean rule.** As in git's index, an entry whose `mtime` or `ctime` is within 2s of
+the scan start is stored as racy and re-hashed next run. This covers writes within
+timestamp granularity and unflushed `mmap` writes.
+
+**Full reconcile.** Every file is re-hashed on a baseline, rebase, `--mode full`, policy
+change, a missing or foreign ledger or media point, or a scan clock earlier than the
+previous one.
+
+Soundness: the kernel updates `ctime` on every write, truncate and metadata change,
+whichever handle performs it, and userspace cannot set `ctime`. `utimes` can restore
+`mtime`, but not `ctime`. Replace-by-rename changes `ino` and `birthtime`. `lstat` follows
+intermediate symlinks, so retargeting a symlinked directory changes the fingerprint of
+files below it. A symlink at the leaf is recorded as a link (mode and inode) and
+captured as absent, as before. This differs from the rejected FSEvents-history
+shortcut: it compares current inode metadata with persisted metadata and does not
+replay event history.
+
+The ledger and media observations commit or roll back with the native point. An
+interrupted run therefore leaves the parent point, its ledger and the cache checkpoints
+as they were, and the next run re-derives the same dirty set.
+
+The guards that forced a snapshot capture whenever media existed are gone. Both native
+collectors always attach retained media evidence. `policy_signature` and `SyncSession`
+no longer hash the working directory: they hash the absolute configured source root.
+Relative Messages attachment filenames, which have no defined base, are recorded as
+`unknown` and never resolved against the cwd. Running from `/` or `/tmp` gives the same
+capture path.
+
+The per-file `MediaWatch`, `PreparedMediaWatch` and `PreparedWhatsAppMediaWatch` classes
+were removed. Watch mode keeps the source database monitors and the auxiliary alias
+monitor, a handful of descriptors.
+
+Tests cover in-place rewrites with the same size and restored `mtime`, deletion,
+re-download after absence, symlink swaps, racy re-hashing until timestamps age, clock
+rollback, a change during hashing (retry, then rejection), rolled-back publication, and
+fresh-instance continuation. A CLI test runs one-shot syncs from `/` and from a
+temporary directory against a history with downloaded media. It checks that the no-change
+run re-sights coverage with no file reads, that an old edit stays incremental, that an
+in-place file rewrite re-hashes exactly one file, and that descriptor counts stay flat
+across runs.
+
+[Synthetic benchmark](incremental-media-ledger-benchmark.json): 100k WhatsApp messages,
+5,000 distinct 4 KiB media files, with a fresh ledger for each capture. After the 185s
+baseline, every capture took 0.10-0.27s wall except a direct-chat rename at 1.1s: clean,
+new message, old edit, old delete, file rewrite, deletion and re-download. Reproduce with
+`PYTHONPATH=src:. .venv/bin/python scripts/benchmark_native_whatsapp.py --messages 100000
+--file-media --media-items 5000 --media-files 5000 --media-bytes 4096 --chats 50`. The
+benchmark lets fixture files age past the racy window before timing, as a 15-minute
+schedule would. It does not include process start-up, which is about 0.15s.
+
+Alias databases (LID, ContactsV2) get the same treatment. `lstat` fingerprints of each
+database and its WAL are stored in `cs_native_wa_alias_files`, bound to the point. A
+fresh process reuses the retained alias evidence without reading the tables when the
+fingerprints match the parent. A fingerprint within the racy window never authorizes reuse.
+
+Real-history check (macOS, Python 3.14), measured from fresh processes with
+`ulimit -n 256` against a temporary data directory. The history had 200,854 WhatsApp
+messages and 4,456 media rows with local paths, 2.9 GB retained:
+
+| run | wall | result |
+|---|---|---|
+| initial baseline from `/` (copies all media into the blob store) | 934s | native baseline |
+| rebase after a code/policy change | 94s | `full_reconcile` |
+| no source change, from `/tmp` | 1.50s | delta, `prepared_coverage_reused=1` |
+| five no-change polls a minute apart, from `/` | 0.61-0.65s | 0 rows, 0 files hashed, coverage `full=0` |
+
+| new messages with a photo, before the chat-selection fix | 19.7s | 2 groups rebuilt, 1 file hashed, ~73k headers re-emitted |
+| new messages with a photo, after the fix | 2.01s | 4 groups rebuilt, headers reused, 2 files hashed |
+| next run with 2 organic messages | 0.40s | 2 groups rebuilt, headers reused |
+
+| edit of a message from January 2021 (on a private copy) | 0.32s | 1 group rebuilt, headers reused |
+| deletion of an old message whose sender has other messages (copy) | 0.29s | withdrawn as absent, headers reused |
+| deletion of the only message ever received from a JID (copy) | 8.63s | conservative full header rebuild: an identity may disappear |
+| next run after three `kill -9`s of a `--mode full` sync (copy) | 30.5s | interrupted full capture finished; then 0.48s clean |
+
+The old-history mutations ran against a consistent SQLite backup of the real database,
+with the real media folder symlinked read-only, so WhatsApp's own files were never
+written. After the kills, the edited message was present with all three revisions.
+
+WhatsApp rewrites its chat row (last message, dates, counters) with every message. Chat
+selection used to compare every column except a short allow-list, so each real new
+message rebuilt every chat, membership and identity header. It now compares only the
+chat columns the adapter reads.
+
+Rebases after a code change were rejected or fell back while WhatsApp was writing: the
+alias databases changed mid-capture (`capture_retry_required`), or a WAL page changed and
+the run took ordinary snapshot capture. Each case published nothing wrong, and a later
+run completed the native rebase in 92-94s. Since then, alias views are pinned only for
+their own read inside the pre-commit step, not for the whole backup. A WAL change during
+a native baseline or rebase now retries natively once before falling back. `--mode full`
+re-hashes every media file.
+
+Messages on a real history (82,530 messages), measured with
+`.venv/bin/python scripts/measure_one_shot.py --source messages --polls 3` from a terminal
+with Full Disk Access. The script uses a private temporary data directory and deletes it
+afterwards. The native baseline took 82s. No-change one-shot runs took 0.40-0.72s,
+alternating `/` and `/tmp`, compared with about 7s on the ordinary path. Those runs
+invoked the adapter with an empty row selection. Messages now has the same shortcut as
+WhatsApp: when a capture changes no native row and no file, coverage starts without
+withdrawing headers. The retained coverage, headers included, is re-sighted without
+running the decoder or the adapter (`prepared_coverage_reused=1`). With it, no-change runs
+on the same real history took 0.23-0.34s (baseline 95s).
