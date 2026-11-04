@@ -120,6 +120,16 @@ Existing caches need one `sync` per source to pick up the new WhatsApp records.
   yet, it builds one, which copies every referenced attachment into the blob store. On the
   history above that was 2.9 GB, and took about 11-15 minutes.
 
+## v1.3.1 — keyed WhatsApp headers (2026-11-04)
+
+- WhatsApp captures that add a chat, contact, group member or alias pair re-extract only
+  the changed chat, membership, identity and alias records (#24). Each capture hashes
+  every header's inputs in the native mirror and diffs them against the previous point.
+  On a 200k-message history, a new chat with a new contact took 1.1s instead of 15-28s.
+  Every capture now spends about 0.5s on header hashing.
+- The first sync after upgrading re-extracts everything once, because the extraction
+  policy changed.
+
 ## Plan corrections worth remembering
 
 | Plan assumption | What evidence showed |
