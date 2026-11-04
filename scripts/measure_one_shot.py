@@ -50,6 +50,8 @@ def summary(label, wall, envelope):
                      f'rebuilt={counts.get("canonical_units_rebuilt")} '
                      f'coverage_reused={counts.get("prepared_coverage_reused")} '
                      f'headers_reused={counts.get("prepared_headers_reused")}')
+        if r['status'] != 'complete':
+            lines.append('  errors: ' + '; '.join(f'{e["code"]}: {e.get("sample") or ""}' for e in r['errors']))
     return '\n'.join(lines)
 
 
