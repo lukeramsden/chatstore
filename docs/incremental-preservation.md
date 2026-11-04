@@ -1488,7 +1488,10 @@ their own read inside the pre-commit step, not for the whole backup. A WAL chang
 a native baseline or rebase now retries natively once before falling back. `--mode full`
 re-hashes every media file.
 
-Messages was not measured on a real history because the measuring shell lacked Full Disk
-Access. From a terminal that has it, run
-`.venv/bin/python scripts/measure_one_shot.py --source messages --polls 3`. It uses a
-private temporary data directory and deletes it afterwards.
+Messages on a real history (82,530 messages), measured with
+`.venv/bin/python scripts/measure_one_shot.py --source messages --polls 3` from a terminal
+with Full Disk Access. The script uses a private temporary data directory and deletes it
+afterwards. The native baseline took 82s. No-change one-shot runs took 0.40-0.72s,
+alternating `/` and `/tmp`, compared with about 7s on the ordinary path. Messages has no
+retained-coverage shortcut: a no-change run invokes the adapter with an empty row
+selection, so it does not report `prepared_coverage_reused`.
