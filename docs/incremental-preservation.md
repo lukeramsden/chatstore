@@ -1466,6 +1466,15 @@ messages and 4,456 media rows with local paths, 2.9 GB retained:
 | new messages with a photo, after the fix | 2.01s | 4 groups rebuilt, headers reused, 2 files hashed |
 | next run with 2 organic messages | 0.40s | 2 groups rebuilt, headers reused |
 
+| edit of a message from January 2021 (on a private copy) | 0.32s | 1 group rebuilt, headers reused |
+| deletion of an old message whose sender has other messages (copy) | 0.29s | withdrawn as absent, headers reused |
+| deletion of the only message ever received from a JID (copy) | 8.63s | conservative full header rebuild: an identity may disappear |
+| next run after three `kill -9`s of a `--mode full` sync (copy) | 30.5s | interrupted full capture finished; then 0.48s clean |
+
+The old-history mutations ran against a consistent SQLite backup of the real database,
+with the real media folder symlinked read-only, so WhatsApp's own files were never
+written. After the kills, the edited message was present with all three revisions.
+
 WhatsApp rewrites its chat row (last message, dates, counters) with every message. Chat
 selection used to compare every column except a short allow-list, so each real new
 message rebuilt every chat, membership and identity header. It now compares only the
@@ -1474,5 +1483,12 @@ chat columns the adapter reads.
 Rebases after a code change were rejected or fell back while WhatsApp was writing: the
 alias databases changed mid-capture (`capture_retry_required`), or a WAL page changed and
 the run took ordinary snapshot capture. Each case published nothing wrong, and a later
-run completed the native rebase in 92-94s. Messages was not measured because the
-measuring shell lacked Full Disk Access.
+run completed the native rebase in 92-94s. Since then, alias views are pinned only for
+their own read inside the pre-commit step, not for the whole backup. A WAL change during
+a native baseline or rebase now retries natively once before falling back. `--mode full`
+re-hashes every media file.
+
+Messages was not measured on a real history because the measuring shell lacked Full Disk
+Access. From a terminal that has it, run
+`.venv/bin/python scripts/measure_one_shot.py --source messages --polls 3`. It uses a
+private temporary data directory and deletes it afterwards.
