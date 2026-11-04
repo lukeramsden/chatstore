@@ -1388,7 +1388,9 @@ the media observations, bound to the same point. Each run:
 
 1. `lstat`s every referenced path (milliseconds for thousands of files; no descriptors held).
 2. Marks rows dirty when the path, fingerprint or presence changed, when the entry is
-   racy, or when the errno is anything but an absence error. Changed native rows are
+   racy, or when `lstat` failed with an error other than absence or permission. Missing
+   and permission-denied files are recorded as `missing` and re-checked only when their
+   fingerprint changes, so one unreadable attachment cannot block a source's capture. Changed native rows are
    added by media preparation as before.
 3. Hashes only dirty files. Each hash is bracketed by the stored `lstat` and a fresh one.
    On a mismatch, it rolls back to a savepoint and retries once, then raises

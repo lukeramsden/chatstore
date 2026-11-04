@@ -32,9 +32,9 @@ POLICY_MODULES = (prepared_media, whatsapp_media)
 
 FORMAT = 1
 RACY_WINDOW_NS = 2_000_000_000
-# Absence errors are stable observations; anything else forces capture, which
-# raises MediaUnavailable instead of publishing evidence for an unreadable file.
-_ABSENT = frozenset((errno.ENOENT, errno.ENOTDIR, errno.ELOOP))
+# Absence and permission errors are stable observations (captured as missing).
+# Anything else, such as EIO, is re-captured every run until it resolves.
+_ABSENT = frozenset((errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EACCES, errno.EPERM))
 
 
 def fingerprint(path: str) -> str:

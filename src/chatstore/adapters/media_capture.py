@@ -89,7 +89,9 @@ def capture_attachment(a: dict[str, Any], root: Path, dd: DataDir) -> CapturedMe
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError as exc:
-        if exc.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+        # Permission errors are stable source state, as for the ordinary path's
+        # is_file(): record the file as missing rather than blocking every capture.
+        if exc.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EACCES, errno.EPERM):
             return absent
         raise MediaUnavailable(f'cannot open source media: errno {exc.errno}') from exc
     temporary: Path | None = None

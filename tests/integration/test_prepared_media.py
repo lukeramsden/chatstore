@@ -393,3 +393,25 @@ def test_policy_upgrade_rebinds_retained_media_after_source_expiry(media_history
     assert attachment['blob_sha256'] == hashlib.sha256(content).hexdigest()
     assert blob_path(dd, attachment['blob_sha256']).read_bytes() == content
     assert mirror.conn.execute('SELECT point FROM cs_native_media_state').fetchone()[0] == recovered.token
+
+
+@pytest.mark.parametrize('blocked', ['file', 'directory'])
+def test_unreadable_media_is_recorded_missing_without_blocking_capture(media_history, blocked):
+    _, dd, cfg, _, _, mirror, _, _, filename, _ = media_history
+    point = _ledger_point(media_history)
+    target = filename if blocked == 'file' else filename.parent
+    mode = target.stat().st_mode
+    target.chmod(0)
+    try:
+        unreadable, captured = _delta(media_history, point, _ledger(cfg, dd).prepare)
+        assert captured == [str(filename)]
+        assert read_media(mirror.conn, unreadable.token, {'rowid': 1, 'filename': str(filename)})[0] == 'missing'
+        assert sync(media_history, unreadable).exit_code == 0
+        stable, captured = _delta(media_history, unreadable, _ledger(cfg, dd).prepare)
+        assert captured == []  # A stable permission error is not re-captured every run.
+        assert sync(media_history, stable).exit_code == 0
+    finally:
+        target.chmod(mode)
+    restored, captured = _delta(media_history, stable, _ledger(cfg, dd).prepare)
+    assert captured == [str(filename)]
+    assert read_media(mirror.conn, restored.token, {'rowid': 1, 'filename': str(filename)})[0] == 'available'
