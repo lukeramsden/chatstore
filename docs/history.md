@@ -130,6 +130,17 @@ Existing caches need one `sync` per source to pick up the new WhatsApp records.
 - The first sync after upgrading re-extracts everything once, because the extraction
   policy changed.
 
+## v1.3.2 — distinct WhatsApp group-change events (2026-11-04)
+
+- WhatsApp group membership changes that share group, time and change type but list
+  different members are now separate events (#25). Previously they shared one event URN:
+  one change was lost, and every `--mode full` run added a revision by rewriting the
+  shared record. The existing URN is kept and holds the row with the lowest `Z_PK`. Each
+  other member list gets an extended key (see `specs/identity.md`). Rows that do not
+  collide keep their URNs.
+- Selective syncs apply the same rule to whole collision groups, and withdraw an extended
+  event once its collision resolves. The results match full extraction.
+
 ## Plan corrections worth remembering
 
 | Plan assumption | What evidence showed |
