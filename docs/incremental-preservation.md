@@ -1492,6 +1492,8 @@ Messages on a real history (82,530 messages), measured with
 `.venv/bin/python scripts/measure_one_shot.py --source messages --polls 3` from a terminal
 with Full Disk Access. The script uses a private temporary data directory and deletes it
 afterwards. The native baseline took 82s. No-change one-shot runs took 0.40-0.72s,
-alternating `/` and `/tmp`, compared with about 7s on the ordinary path. Messages has no
-retained-coverage shortcut: a no-change run invokes the adapter with an empty row
-selection, so it does not report `prepared_coverage_reused`.
+alternating `/` and `/tmp`, compared with about 7s on the ordinary path. Those runs
+invoked the adapter with an empty row selection. Messages now has the same shortcut as
+WhatsApp: when a capture changes no native row and no file, coverage starts without
+withdrawing headers. The retained coverage, headers included, is re-sighted without
+running the decoder or the adapter (`prepared_coverage_reused=1`).

@@ -250,3 +250,39 @@ def test_watch_cli_reports_failure_when_media_remains_unavailable(collector, cap
     mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
     with NativeMirror(mirror_path) as mirror:
         assert mirror.pending() is None and mirror.continuation() is None
+
+
+def test_unchanged_messages_source_reuses_coverage_without_extraction(collector, capsys):
+    dd, root, writer = collector
+    filename = root / 'Attachments' / 'kept.bin'
+    filename.write_bytes(b'retained attachment bytes')
+    writer.execute("INSERT INTO attachment(ROWID,guid,filename,total_bytes) VALUES(1,'kept-guid',?,25)", (str(filename),))
+    writer.execute('INSERT INTO message_attachment_join(message_id,attachment_id) VALUES(1,1)')
+    writer.commit()
+    cli(capsys, 'init', '--messages-path', str(root), '--timezone', 'UTC')
+    initial = cli(capsys, 'sync', '--source', 'messages')[0]
+    kinds = ('identities', 'chats', 'chat_memberships', 'messages', 'attachments')
+    with closing(Cache(dd.cache)) as cache:
+        before = {kind: sum(1 for _ in cache.iter_records(kind)) for kind in kinds}
+    clean = cli(capsys, 'sync', '--source', 'messages')[0]
+    capture = clean['snapshot']['prepared_native']['capture']
+    assert capture['parent'] == initial['snapshot']['prepared_native']['capture']['token'] and not capture['baseline']
+    assert clean['counts']['prepared_coverage_reused'] == 1
+    # The adapter did not run: nothing was emitted, headers included, and nothing became absent.
+    assert not any(clean['counts'].get(kind) for kind in kinds)
+    assert clean['counts']['written'] == {'inserted': 0, 'updated': 0, 'unchanged': 0}
+    assert not any(key.startswith('absent') for key in clean['counts'])
+    with closing(Cache(dd.cache)) as cache:
+        assert {kind: sum(1 for _ in cache.iter_records(kind)) for kind in kinds} == before
+        for kind in ('identities', 'chats', 'chat_memberships'):
+            assert all(observation['present'] == 'present' for record in cache.iter_records(kind)
+                       for observation in cache.observations_of(record['urn']))
+    filename.write_bytes(b'a file-only change still extracts')
+    changed = cli(capsys, 'sync', '--source', 'messages')[0]
+    assert 'prepared_coverage_reused' not in changed['counts'] and changed['counts']['messages'] == 1
+    writer.execute("UPDATE message SET text='edit after reuse' WHERE ROWID=2")
+    writer.commit()
+    edited = cli(capsys, 'sync', '--source', 'messages')[0]
+    assert 'prepared_coverage_reused' not in edited['counts'] and edited['counts']['messages'] == 1
+    again = cli(capsys, 'sync', '--source', 'messages')[0]
+    assert again['counts']['prepared_coverage_reused'] == 1
