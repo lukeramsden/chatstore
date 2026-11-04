@@ -100,6 +100,26 @@ Existing caches need one `sync` per source to pick up the new WhatsApp records.
   `ZTOJID`, closed over LID↔phone pairs, and flagged `is_me` (`b927be7`). One `sync` updates an
   existing cache.
 
+## v1.3.0 — one-shot sync without watchers (2026-11-04)
+
+- #22 One-shot `chatstore sync` now takes the native delta path when attachments have local
+  files. A persisted `lstat` ledger in the native mirror replaces the per-file vnode watchers:
+  each run re-hashes only changed or racy files, and holds no descriptors between runs. Watch
+  mode uses the same ledger, so it no longer runs into the descriptor limit (EMFILE). On a real
+  history (200k WhatsApp messages, 82k Messages), no-change runs take 0.2-0.7s instead of
+  about 52s, and a new message with a photo takes about 2s.
+- WhatsApp alias databases (LID, ContactsV2) are re-read only when their file fingerprint
+  changes. WhatsApp's per-message chat-row bookkeeping no longer forces every header to be
+  rebuilt. Unchanged Messages sources re-sight retained coverage without running the decoder.
+- The capture policy hashes the absolute source root instead of the working directory, and
+  relative Messages attachment names are never resolved against the cwd. `--mode full`
+  re-hashes every media file. Unreadable attachments are recorded as `missing` instead of
+  blocking capture. One-shot runs report `capture_retry_required` when a file changes during
+  capture.
+- The first sync after upgrading rebases the native mirror once. If no native mirror exists
+  yet, it builds one, which copies every referenced attachment into the blob store. On the
+  history above that was 2.9 GB, and took about 11-15 minutes.
+
 ## Plan corrections worth remembering
 
 | Plan assumption | What evidence showed |
