@@ -1496,4 +1496,5 @@ alternating `/` and `/tmp`, compared with about 7s on the ordinary path. Those r
 invoked the adapter with an empty row selection. Messages now has the same shortcut as
 WhatsApp: when a capture changes no native row and no file, coverage starts without
 withdrawing headers. The retained coverage, headers included, is re-sighted without
-running the decoder or the adapter (`prepared_coverage_reused=1`).
+running the decoder or the adapter (`prepared_coverage_reused=1`). With it, no-change runs
+on the same real history took 0.23-0.34s (baseline 95s).
