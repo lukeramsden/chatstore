@@ -424,7 +424,8 @@ def _whatsapp_coverage(adapter, cache, prepared, scope, full):
                 if keyed:
                     tables = dict(header_keys or {})
                     if event_keys:
-                        tables['ZWAGROUPMEMBERSCHANGE'] = set(event_keys)
+                        tables['ZWAGROUPMEMBERSCHANGE'] = whatsapp_events.observed_keys(
+                            cache.conn, adapter.source, scope, event_keys)
                     if tables:
                         proof = proof.with_headers(cache, [], keyed_tables=tables)
                 else:

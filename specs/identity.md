@@ -80,9 +80,25 @@ that e-mail addresses (containing `@`) are lower-cased. Phone numbers are not re
 | message | `[chat_jid, sender, stanza_id]` where `sender` is `"me"` when `ZISFROMME = 1`, else `ZFROMJID` verbatim |
 | attachment | `[message_native_key_json, "media", index]` — `index` is `"0"` for the single `ZWAMEDIAITEM` |
 | event | the message tuple of the row carrying the event (reactions, edits and system events are rows with stanza IDs) |
+| event (group membership change) | `["groupchange", group_jid, str(ZCHANGEDATE), str(ZCHANGETYPE)]`, extended on collision (below) |
 
 Normalisation: JIDs are lower-cased (they are ASCII in practice). Stanza IDs verbatim.
 The original observed `ZFROMJID` is used even when an alias later resolves it to another JID.
+
+`ZWAGROUPMEMBERSCHANGE` rows have no stanza ID, and distinct rows can share group, date and
+type. Rows sharing that base key form a collision group, resolved as a whole:
+
+- the member list of the row with the lowest `Z_PK` keeps the base key, so a row that never
+  collides, or collided before a later row arrived, keeps the key it always had;
+- every other distinct member list gets the base array extended by one element, its
+  normalised member JIDs (`ZMEMBERJIDS` split on `,`/`;`, lower-cased, native order) joined
+  by `,`, e.g. `["groupchange","g@g.us","700000090.0","5","a@lid,b@lid"]`;
+- rows with identical member lists collapse to one key, like duplicate message rows.
+
+Keys are a function of the current group, not of history: if the base holder is deleted or
+moves, the next-lowest `Z_PK` takes the base key and its extended URN is withdrawn
+(`absent_from_source`), never aliased. Before this rule, colliding rows shared the base URN,
+which held whichever row was extracted last; it is kept and now always holds the base holder.
 
 Validated against real data in `source-findings.md`: `(chat, stanza)` is unique per logical
 message with a consistent sender; row duplicates collapse.
