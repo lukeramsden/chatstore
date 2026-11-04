@@ -14,7 +14,7 @@ from .adapters.native_mirror import NativeMirror
 from .adapters.pages import PageUnavailable
 from .adapters.source_view import WalSource
 from .adapters.wal import WalPages, WalUnavailable
-from .adapters.whatsapp import auxiliary, chats, events
+from .adapters.whatsapp import auxiliary, events, headers
 from .adapters.whatsapp.adapter import REQUIRED, WhatsAppAdapter
 from .cache import Cache
 from .config import Config, Identity
@@ -22,7 +22,7 @@ from .paths import DataDir
 from .prepared_sync import PreparedSync, _capture_lock, _run_prepared_sync, policy_signature
 from .sync import SyncOutcome
 
-POLICY_MODULES = (auxiliary, chats, events, media_ledger)
+POLICY_MODULES = (auxiliary, events, headers, media_ledger)
 
 
 def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
@@ -54,19 +54,19 @@ def collect(adapter: WhatsAppAdapter, dd: DataDir, cfg: Config, ident: Identity,
                         view, REQUIRED, expected_token=previous.token, namespace=namespace, policy_tag=policy)
                     baseline = baseline and not reconcile
                     context: dict[str, Any] = {'collector': 'whatsapp-native-v1', 'whatsapp_aliases': {'format': 1},
-                               'whatsapp_events': {'format': 1}, 'whatsapp_chats': {'format': 1},
+                               'whatsapp_events': {'format': 1}, 'whatsapp_headers': {'format': 1},
                                'whatsapp_media': {'format': 1}}
                     def validate(conn: sqlite3.Connection, baseline: bool = baseline,
                                  context: dict[str, Any] = context) -> None:
                         ledger.prepare(conn, full=baseline or full)
                         events.prepare(conn, full=baseline)
-                        chats.prepare(conn, full=baseline)
                         # Pin the alias databases only for their own short read: a baseline
                         # backup can take minutes while WhatsApp keeps writing them.
                         with auxiliary_session.views() as optional:
                             context['whatsapp_auxiliary'] = optional.evidence
                             auxiliary_session.prepare(conn, optional, full=baseline)
                             optional.validate()
+                        headers.prepare(conn, full=baseline)
                         context['whatsapp_alias_evidence_point'] = conn.execute(
                             'SELECT evidence_point FROM cs_native_wa_alias_state WHERE id=1').fetchone()[0]
                     observed_at = datetime.now(UTC).isoformat()

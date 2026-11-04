@@ -212,6 +212,7 @@ def main():
                 ('new-message', 'new-message'), ('clean-after-new', None),
                 *([('wal-reset-clean', 'reset-clean'), ('wal-reset-old-edit', 'reset-edit')] if args.wal_resets else []),
                 ('old-edit', "UPDATE ZWAMESSAGE SET ZTEXT='benchmark historical edit' WHERE Z_PK=1"),
+                ('new-chat', 'new-chat'),
                 ('group-event', "UPDATE ZWAGROUPMEMBERSCHANGE SET ZMEMBERJIDS='benchmark@s.whatsapp.net' WHERE Z_PK=1"),
                 ('group-title', "UPDATE ZWACHATSESSION SET ZPARTNERNAME='benchmark group title' WHERE Z_PK=2"),
                 ('chat-archive', 'UPDATE ZWACHATSESSION SET ZARCHIVED=1-ZARCHIVED WHERE Z_PK=1'),
@@ -241,6 +242,23 @@ def main():
                         writer.execute(f'PRAGMA user_version={version + 1}')
                     else:
                         writer.execute("UPDATE ZWAMESSAGE SET ZTEXT='historical edit after WAL reset' WHERE Z_PK=1")
+                    writer.commit()
+                elif mutation == 'new-chat':
+                    # A new direct chat with its first incoming message from a new contact.
+                    chat_columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWACHATSESSION)')]
+                    chat = dict(zip(chat_columns, writer.execute('SELECT * FROM ZWACHATSESSION WHERE Z_PK=1').fetchone(), strict=True))
+                    chat.update(Z_PK=writer.execute('SELECT max(Z_PK)+1 FROM ZWACHATSESSION').fetchone()[0],
+                                ZCONTACTJID='15550008888@s.whatsapp.net', ZPARTNERNAME='benchmark new contact')
+                    writer.execute(f"INSERT INTO ZWACHATSESSION({','.join(chat_columns)}) VALUES({','.join('?' for _ in chat_columns)})",
+                                   [chat[column] for column in chat_columns])
+                    columns = [row[1] for row in writer.execute('PRAGMA table_info(ZWAMESSAGE)')]
+                    values = dict(zip(columns, writer.execute('SELECT * FROM ZWAMESSAGE WHERE Z_PK=1').fetchone(), strict=True))
+                    values.update(Z_PK=writer.execute('SELECT max(Z_PK)+1 FROM ZWAMESSAGE').fetchone()[0],
+                                  ZSORT=writer.execute('SELECT max(ZSORT)+1 FROM ZWAMESSAGE').fetchone()[0],
+                                  ZCHATSESSION=chat['Z_PK'], ZFROMJID=chat['ZCONTACTJID'], ZISFROMME=0, ZMEDIAITEM=None,
+                                  ZSTANZAID='BENCHMARK-NEW-CHAT', ZTEXT='first message from a new contact')
+                    writer.execute(f"INSERT INTO ZWAMESSAGE({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                                   [values[column] for column in columns])
                     writer.commit()
                 elif mutation == 'auxiliary-noop':
                     lid.execute('PRAGMA user_version=1')
@@ -273,6 +291,8 @@ def main():
                         assert counts.get('messages', 0) == (0 if label == 'wal-reset-clean' else 1), counts
                     if label in ('file-only-edit', 'file-missing', 'file-download'):
                         assert counts.get('messages') == 1 and counts.get('prepared_headers_reused') == 1, counts
+                    if label == 'new-chat':
+                        assert counts.get('prepared_headers_reused') == 1 and counts.get('chats') == 1, counts
                     if label in ('group-title', 'chat-archive'):
                         assert counts.get('chats') == 1 and counts.get('prepared_headers_reused') == 1, counts
                         assert counts.get('messages', 0) == 0, counts

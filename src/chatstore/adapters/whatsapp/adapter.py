@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, closing
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -28,9 +29,9 @@ from ..base import (
     native_fingerprint,
 )
 from ..snapshot import Snapshot, check_readable, snapshot_databases
-from . import aliases, chats, events, header_ownership, media
+from . import aliases, events, media
 
-POLICY_MODULES = (aliases, chats, events, media)
+POLICY_MODULES = (aliases, events, media)
 
 SOURCE = "whatsapp"
 ADAPTER_VERSION = "whatsapp-adapter/1.0.0"
@@ -96,6 +97,183 @@ def chat_kind(jid: str, session_type: int | None) -> str:
     if k == "jid_status":
         return "status"
     return f"unknown:{session_type}"
+
+
+@dataclass(frozen=True)
+class HeaderEntry:
+    """One canonical header record's complete native inputs.
+
+    `table` and `key` are the record's observation native table and key. The record
+    is a pure function of `kind` and `payload`, so equal payloads mean equal records.
+    """
+    table: str
+    key: str
+    kind: str
+    payload: tuple[Any, ...]
+
+
+def owner_jids(conn: sqlite3.Connection, alias_pairs: Mapping[tuple[str, str], Any], stats: ExtractStats) -> set[str]:
+    """The account owner's own JIDs.
+
+    On incoming rows (ZISFROMME = 0) ZTOJID, when populated, is the recipient, i.e. the owner
+    (validated on real data: exactly one distinct phone JID; it is also the most frequent group
+    member and its LID is the self-chat's ZCONTACTJID). Nothing else in ChatStorage names the
+    owner. The set is closed over LID<->phone alias pairs so both forms are flagged."""
+    owners: set[str] = set()
+    for jid in _message_jids(conn, 'ZTOJID', incoming=True):
+        j = U.whatsapp_jid(jid)
+        if jid_kind(j) in ("jid_phone", "jid_lid"):
+            owners.add(j)
+    if not owners:
+        stats.notes.append("owner JID not detected: no incoming message carries ZTOJID; only the synthetic `me` identity is is_me")
+        return owners
+    changed = True
+    while changed:
+        changed = False
+        for lid, phone in alias_pairs:
+            if (lid in owners) != (phone in owners):
+                owners |= {lid, phone}
+                changed = True
+    phones = sorted(j for j in owners if jid_kind(j) == "jid_phone")
+    if len(phones) > 1:
+        stats.notes.append(f"{len(phones)} distinct owner phone JIDs detected (number change?); all flagged is_me")
+    return owners
+
+
+def header_entries(conn: sqlite3.Connection, alias_pairs: Mapping[tuple[str, str], list[dict[str, Any]]],
+                   stats: ExtractStats) -> tuple[list[HeaderEntry], dict[int, str]]:
+    """Every chat, membership, identity and alias header, plus chat JIDs by row ID.
+
+    Shared by full extraction, keyed header extraction and the mirror's header
+    fingerprints, so all three agree on exactly what each header depends on.
+    """
+    entries: list[HeaderEntry] = []
+    names: dict[str, list[dict[str, str]]] = {}
+
+    def add_name(jid: str | None, name: str | None, origin: str) -> None:
+        if not jid or not name:
+            return
+        lst = names.setdefault(U.whatsapp_jid(jid), [])
+        if not any(n["name"] == name for n in lst):
+            lst.append({"name": name, "origin": origin})
+
+    for r in conn.execute("SELECT ZJID, ZPUSHNAME FROM ZWAPROFILEPUSHNAME WHERE ZJID IS NOT NULL"):
+        add_name(r[0], r[1], "push_name")
+    for r in conn.execute("SELECT ZMEMBERJID, ZCONTACTNAME FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
+        add_name(r[0], r[1], "contact_card")
+
+    # --- chats ---------------------------------------------------------------------
+    chat_jids: dict[int, str] = {}
+    chat_kinds: dict[int, str] = {}
+    group_info = {r[0]: r[1] for r in conn.execute(
+        "SELECT ZCHATSESSION, ZCREATIONDATE FROM ZWAGROUPINFO WHERE ZCHATSESSION IS NOT NULL")}
+    for r in conn.execute("SELECT Z_PK, ZCONTACTJID, ZSESSIONTYPE, ZPARTNERNAME, ZARCHIVED, ZREMOVED FROM ZWACHATSESSION"):
+        pk, raw_jid, session_type, partner, archived, removed = tuple(r)
+        jid = U.whatsapp_jid(raw_jid)
+        chat_jids[pk] = jid
+        kind = chat_kind(jid, session_type)
+        chat_kinds[pk] = kind
+        if kind == "direct":
+            add_name(jid, partner, "chat_partner_name")
+        entries.append(HeaderEntry('ZWACHATSESSION', jid, 'chat',
+                                   (pk, jid, session_type, partner, archived, removed, group_info.get(pk))))
+
+    # --- memberships -----------------------------------------------------------------
+    # Non-group chats have no ZWAGROUPMEMBER rows. Synthesise the counterpart (the chat's own
+    # JID) and `me` so callers can find the other party without reading messages (issue #1).
+    me_key = U.whatsapp_me_key()
+    member_jids: set[str] = set()
+    for pk, chat_jid in chat_jids.items():
+        if chat_kinds[pk] == "group":
+            continue
+        for member_key, evidence in ((chat_jid, "chat_session_jid"), (me_key, "chat_session_me")):
+            entries.append(HeaderEntry('ZWACHATSESSION', U.composite_key("membership", chat_jid, member_key),
+                                       'direct_membership', (pk, chat_jid, member_key, evidence)))
+    for r in conn.execute("SELECT Z_PK, ZCHATSESSION, ZMEMBERJID, ZISACTIVE, ZISADMIN FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
+        pk, chat, raw_member, active, admin = tuple(r)
+        if chat not in chat_jids:
+            stats.error("membership_without_chat", f"ZWAGROUPMEMBER Z_PK={pk} ZCHATSESSION={chat}")
+            continue
+        chat_jid, mj = chat_jids[chat], U.whatsapp_jid(raw_member)
+        member_jids.add(mj)
+        entries.append(HeaderEntry('ZWAGROUPMEMBER', U.composite_key("membership", chat_jid, mj),
+                                   'group_membership', (pk, chat_jid, mj, active, admin)))
+
+    # --- identities (all JIDs seen anywhere) -------------------------------------------
+    # Alias pairs come from LID.sqlite / ContactsV2.sqlite; the phone side often never appears
+    # in ChatStorage, so include both sides here or the alias target would dangle (issue #3).
+    all_jids = set(names) | member_jids | set(chat_jids.values())
+    all_jids |= {j for pair in alias_pairs for j in pair}
+    for jid in _message_jids(conn, 'ZFROMJID'):
+        all_jids.add(U.whatsapp_jid(jid))
+    for jid in _message_jids(conn, 'ZTOJID'):
+        all_jids.add(U.whatsapp_jid(jid))
+    # The owner's real JIDs (phone + LID) appear as group members and as the counterpart of the
+    # "message yourself" chat; flag them is_me so consumers do not treat the owner as a third
+    # party (issue #7). The synthetic `me` identity below stays the sender of outgoing messages.
+    owners = owner_jids(conn, alias_pairs, stats)
+    all_jids |= owners
+    for jid in sorted(all_jids):
+        entries.append(HeaderEntry('jid', jid, 'identity', (jid, names.get(jid, []), jid in owners)))
+    entries.append(HeaderEntry('me', me_key, 'me', (me_key,)))
+
+    # --- aliases: LID <-> phone evidence ----------------------------------------------
+    # Detect ambiguity: one LID mapping to multiple phones.
+    by_lid: dict[str, set[str]] = {}
+    for lid, phone in alias_pairs:
+        by_lid.setdefault(lid, set()).add(phone)
+    for (lid, phone), ev in sorted(alias_pairs.items()):
+        if len(by_lid[lid]) > 1:
+            stats.error("ambiguous_lid_phone_pair", "one LID maps to multiple phone JIDs")
+            continue
+        entries.append(HeaderEntry('lid_phone_pair', U.composite_key("alias", lid, phone), 'alias', (lid, phone, ev)))
+    return entries, chat_jids
+
+
+def build_header(entry: HeaderEntry, scope: str, urn: Callable[[str, str], str], stats: ExtractStats) -> Emit:
+    """The canonical record for one header entry, from its payload alone."""
+    kind, payload = entry.kind, entry.payload
+    if kind == 'chat':
+        pk, jid, session_type, partner, archived, removed, created = payload
+        rec = record("chats", urn("chat", jid), SOURCE, scope, native_key=jid, kind=chat_kind(jid, session_type),
+                     observed_name=partner, service="whatsapp", assignment="source",
+                     is_archived=bool(archived) if archived is not None else None,
+                     created_at=timestamp(created, "s", EPOCH_2001) if created is not None else None)
+        stats.bump('chats')
+        return Emit(rec, Observation("ZWACHATSESSION", [pk], jid, fingerprint(jid, partner, session_type, archived, removed)))
+    if kind == 'direct_membership':
+        pk, chat_jid, member_key, evidence = payload
+        rec = record("chat_memberships", urn("event", entry.key), SOURCE, scope, chat_urn=urn("chat", chat_jid),
+                     identity_urn=urn("identity", member_key), role="member", state="active", first_seen=None,
+                     last_seen=None, evidence=[{"type": evidence}])
+        stats.bump("chat_memberships")
+        return Emit(rec, Observation("ZWACHATSESSION", [pk], entry.key, fingerprint(chat_jid, member_key, evidence)))
+    if kind == 'group_membership':
+        pk, chat_jid, mj, active, admin = payload
+        rec = record("chat_memberships", urn("event", entry.key), SOURCE, scope, chat_urn=urn("chat", chat_jid),
+                     identity_urn=urn("identity", mj), role="admin" if admin else "member",
+                     state="active" if active else "left", first_seen=None, last_seen=None,
+                     evidence=[{"type": "group_member_table"}])
+        stats.bump("chat_memberships")
+        return Emit(rec, Observation("ZWAGROUPMEMBER", [pk], entry.key, fingerprint(chat_jid, mj, active, admin)))
+    if kind == 'identity':
+        jid, observed, is_me = payload
+        rec = record("identities", urn("identity", jid), SOURCE, scope, native_key=jid, kind=jid_kind(jid), address=jid,
+                     service="whatsapp", is_me=is_me, observed_names=observed)
+        stats.bump("identities")
+        return Emit(rec, Observation("jid", [jid], jid, fingerprint(jid, observed, is_me)))
+    if kind == 'me':
+        (me_key,) = payload
+        stats.bump("identities")
+        return Emit(record("identities", urn("identity", me_key), SOURCE, scope, native_key=me_key, kind="me", address=None,
+                           service="whatsapp", is_me=True, observed_names=[]), Observation("me", [], me_key, fingerprint("me")))
+    if kind == 'alias':
+        lid, phone, ev = payload
+        rec = record("aliases", urn("event", entry.key), SOURCE, scope, old_urn=urn("identity", lid), new_urn=urn("identity", phone),
+                     reason="lid_phone_pair", evidence=ev, created_at=0)
+        stats.bump("aliases")
+        return Emit(rec, Observation("lid_phone_pair", [lid], entry.key, fingerprint(lid, phone)))
+    raise ValueError(f'unknown header kind {kind}')
 
 
 class WhatsAppAdapter:
@@ -178,131 +356,28 @@ class WhatsAppAdapter:
             stats.bump('prepared_headers_reused')
             try:
                 yield from self._messages(conn, scope, stats, urn, selected_chats, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
-                if stats.selected_whatsapp_chat_rowids is not None:
-                    yield from self._selected_chats(conn, scope, stats, urn, stats.selected_whatsapp_chat_rowids)
+                if stats.selected_whatsapp_header_keys:
+                    # Header-derived errors and notes belong to full extraction, as in plain reuse.
+                    entries, _ = header_entries(conn, self._alias_pairs(snap), ExtractStats())
+                    for entry in entries:
+                        if entry.key in stats.selected_whatsapp_header_keys.get(entry.table, ()):
+                            yield build_header(entry, scope, urn, stats)
                 if stats.selected_whatsapp_event_rowids is not None:
                     yield from self._events(conn, scope, stats, urn, stats.selected_whatsapp_event_rowids)
             finally:
                 conn.close()
             return
         stats.scanned_tables |= {"ZWACHATSESSION", "ZWAGROUPMEMBER", "ZWAGROUPMEMBERSCHANGE", "jid", "me", "lid_phone_pair"}
-        names: dict[str, list[dict[str, str]]] = {}
-
-        def add_name(jid: str | None, name: str | None, origin: str) -> None:
-            if not jid or not name:
-                return
-            lst = names.setdefault(U.whatsapp_jid(jid), [])
-            if not any(n["name"] == name for n in lst):
-                lst.append({"name": name, "origin": origin})
-
-        for r in conn.execute("SELECT ZJID, ZPUSHNAME FROM ZWAPROFILEPUSHNAME WHERE ZJID IS NOT NULL"):
-            add_name(r[0], r[1], "push_name")
-        for r in conn.execute("SELECT ZMEMBERJID, ZCONTACTNAME FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
-            add_name(r[0], r[1], "contact_card")
-
-        # --- chats ---------------------------------------------------------------------
-        chat_by_pk: dict[int, tuple[str, str]] = {}  # pk -> (jid, urn)
-        chat_kinds: dict[int, str] = {}
-        group_info = {r["ZCHATSESSION"]: r for r in conn.execute(
-            "SELECT ZCHATSESSION, ZCREATIONDATE, ZCREATORJID, ZOWNERJID FROM ZWAGROUPINFO WHERE ZCHATSESSION IS NOT NULL")}
-        for r in conn.execute("SELECT * FROM ZWACHATSESSION"):
-            jid = U.whatsapp_jid(r["ZCONTACTJID"])
-            c_urn = urn("chat", jid)
-            chat_by_pk[r["Z_PK"]] = (jid, c_urn)
-            kind = chat_kind(jid, r["ZSESSIONTYPE"])
-            chat_kinds[r["Z_PK"]] = kind
-            gi = group_info.get(r["Z_PK"])
-            if kind == "direct":
-                add_name(jid, r["ZPARTNERNAME"], "chat_partner_name")
-            yield self._chat(r, gi, scope, urn)
-            stats.bump('chats')
-
-        # --- memberships -----------------------------------------------------------------
-        # Non-group chats have no ZWAGROUPMEMBER rows. Synthesise the counterpart (the chat's own
-        # JID) and `me` so callers can find the other party without reading messages (issue #1).
-        member_jids: set[str] = set()
-        for pk, (chat_jid, c_urn) in chat_by_pk.items():
-            if chat_kinds[pk] == "group":
-                continue
-            for member_key, identity_urn, evidence in (
-                (chat_jid, urn("identity", chat_jid), "chat_session_jid"),
-                (me_key, me_urn, "chat_session_me"),
-            ):
-                key = U.composite_key("membership", chat_jid, member_key)
-                rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=c_urn, identity_urn=identity_urn,
-                             role="member", state="active", first_seen=None, last_seen=None, evidence=[{"type": evidence}])
-                yield Emit(rec, Observation("ZWACHATSESSION", [pk], key, fingerprint(chat_jid, member_key, evidence)))
-                stats.bump("chat_memberships")
-        for r in conn.execute("SELECT Z_PK, ZCHATSESSION, ZMEMBERJID, ZISACTIVE, ZISADMIN FROM ZWAGROUPMEMBER WHERE ZMEMBERJID IS NOT NULL"):
-            if r["ZCHATSESSION"] not in chat_by_pk:
-                stats.error("membership_without_chat", f"ZWAGROUPMEMBER Z_PK={r['Z_PK']} ZCHATSESSION={r['ZCHATSESSION']}")
-                continue
-            chat_jid, c_urn = chat_by_pk[r["ZCHATSESSION"]]
-            mj = U.whatsapp_jid(r["ZMEMBERJID"])
-            member_jids.add(mj)
-            key = U.composite_key("membership", chat_jid, mj)
-            rec = record("chat_memberships", urn("event", key), SOURCE, scope, chat_urn=c_urn, identity_urn=urn("identity", mj),
-                         role="admin" if r["ZISADMIN"] else "member", state="active" if r["ZISACTIVE"] else "left",
-                         first_seen=None, last_seen=None, evidence=[{"type": "group_member_table"}])
-            yield Emit(rec, Observation("ZWAGROUPMEMBER", [r["Z_PK"]], key, fingerprint(chat_jid, mj, r["ZISACTIVE"], r["ZISADMIN"])))
-            stats.bump("chat_memberships")
-
-        # --- identities (all JIDs seen anywhere) -------------------------------------------
-        # Alias pairs come from LID.sqlite / ContactsV2.sqlite; the phone side often never appears
-        # in ChatStorage, so include both sides here or the alias target would dangle (issue #3).
-        alias_pairs = self._alias_pairs(snap)
-        all_jids = set(names) | member_jids | {j for j, _ in chat_by_pk.values()}
-        all_jids |= {j for pair in alias_pairs for j in pair}
-        for jid in _message_jids(conn, 'ZFROMJID'):
-            all_jids.add(U.whatsapp_jid(jid))
-        for jid in _message_jids(conn, 'ZTOJID'):
-            all_jids.add(U.whatsapp_jid(jid))
-        # The owner's real JIDs (phone + LID) appear as group members and as the counterpart of the
-        # "message yourself" chat; flag them is_me so consumers do not treat the owner as a third
-        # party (issue #7). The synthetic `me` identity below stays the sender of outgoing messages.
-        owner_jids = self._owner_jids(conn, alias_pairs, stats)
-        all_jids |= owner_jids
-        for jid in sorted(all_jids):
-            is_me = jid in owner_jids
-            rec = record("identities", urn("identity", jid), SOURCE, scope, native_key=jid, kind=jid_kind(jid), address=jid,
-                         service="whatsapp", is_me=is_me, observed_names=names.get(jid, []))
-            yield Emit(rec, Observation("jid", [jid], jid, fingerprint(jid, names.get(jid, []), is_me)))
-        yield Emit(record("identities", me_urn, SOURCE, scope, native_key=me_key, kind="me", address=None, service="whatsapp",
-                          is_me=True, observed_names=[]), Observation("me", [], me_key, fingerprint("me")))
-        stats.bump("identities", len(all_jids) + 1)
-
-        # --- aliases: LID <-> phone evidence ----------------------------------------------
-        yield from self._aliases(alias_pairs, scope, stats, urn)
+        entries, chat_jids = header_entries(conn, self._alias_pairs(snap), stats)
+        for entry in entries:
+            yield build_header(entry, scope, urn, stats)
+        chat_by_pk = {pk: (jid, urn("chat", jid)) for pk, jid in chat_jids.items()}
 
         # --- messages ---------------------------------------------------------------------
         yield from self._messages(conn, scope, stats, urn, chat_by_pk, me_urn, media_root, checkpoints, full, snap.whatsapp_media_probe)
 
         yield from self._events(conn, scope, stats, urn)
         conn.close()
-
-    def _chat(self, r, gi, scope, urn):
-        jid = U.whatsapp_jid(r['ZCONTACTJID'])
-        c_urn = urn('chat', jid)
-        kind = chat_kind(jid, r['ZSESSIONTYPE'])
-        rec = record("chats", c_urn, SOURCE, scope, native_key=jid, kind=kind,
-                     observed_name=r["ZPARTNERNAME"], service="whatsapp", assignment="source",
-                     is_archived=bool(r["ZARCHIVED"]) if r["ZARCHIVED"] is not None else None,
-                     created_at=timestamp(gi["ZCREATIONDATE"], "s", EPOCH_2001) if gi and gi["ZCREATIONDATE"] is not None else None)
-        return Emit(rec, Observation("ZWACHATSESSION", [r["Z_PK"]], jid,
-                                    fingerprint(jid, r["ZPARTNERNAME"], r["ZSESSIONTYPE"], r["ZARCHIVED"], r["ZREMOVED"])))
-
-    def _selected_chats(self, conn, scope, stats, urn, selected):
-        if not selected:
-            return
-        identity = header_ownership.rowid_alias(conn, 'ZWACHATSESSION')
-        info_identity = header_ownership.rowid_alias(conn, 'ZWAGROUPINFO')
-        for pk in sorted(selected):
-            row = conn.execute(f'SELECT * FROM ZWACHATSESSION WHERE {identity}=?', (pk,)).fetchone()
-            if row is None:
-                raise IncompatibleSource('selected chat metadata row is missing')
-            info = conn.execute(f'SELECT * FROM ZWAGROUPINFO WHERE ZCHATSESSION=? ORDER BY {info_identity} DESC LIMIT 1', (row['Z_PK'],)).fetchone()
-            yield self._chat(row, info, scope, urn)
-            stats.bump('chats')
 
     def _events(self, conn, scope, stats, urn, selected=None):
         fields = 'Z_PK,ZCHANGETYPE,ZCHANGEDATE,ZGROUPJID,ZMEMBERJIDS'
@@ -322,34 +397,6 @@ class WhatsAppAdapter:
             stats.unsupported_bump(f"group_change_type:{r['ZCHANGETYPE']}")
             stats.bump("events")
 
-    def _owner_jids(self, conn: sqlite3.Connection, alias_pairs: dict[tuple[str, str], list[dict[str, Any]]],
-                    stats: ExtractStats) -> set[str]:
-        """The account owner's own JIDs.
-
-        On incoming rows (ZISFROMME = 0) ZTOJID, when populated, is the recipient, i.e. the owner
-        (validated on real data: exactly one distinct phone JID; it is also the most frequent group
-        member and its LID is the self-chat's ZCONTACTJID). Nothing else in ChatStorage names the
-        owner. The set is closed over LID<->phone alias pairs so both forms are flagged."""
-        owners: set[str] = set()
-        for jid in _message_jids(conn, 'ZTOJID', incoming=True):
-            j = U.whatsapp_jid(jid)
-            if jid_kind(j) in ("jid_phone", "jid_lid"):
-                owners.add(j)
-        if not owners:
-            stats.notes.append("owner JID not detected: no incoming message carries ZTOJID; only the synthetic `me` identity is is_me")
-            return owners
-        changed = True
-        while changed:
-            changed = False
-            for lid, phone in alias_pairs:
-                if (lid in owners) != (phone in owners):
-                    owners |= {lid, phone}
-                    changed = True
-        phones = sorted(j for j in owners if jid_kind(j) == "jid_phone")
-        if len(phones) > 1:
-            stats.notes.append(f"{len(phones)} distinct owner phone JIDs detected (number change?); all flagged is_me")
-        return owners
-
     def _alias_pairs(self, snap: Snapshot) -> dict[tuple[str, str], list[dict[str, Any]]]:
         """(lid_jid, phone_jid) -> evidence, from LID.sqlite and ContactsV2.sqlite."""
         if snap.whatsapp_alias_pairs is not None:
@@ -358,22 +405,6 @@ class WhatsAppAdapter:
             sources = {name: stack.enter_context(closing(sqlite3.connect(snap.files[name].snapshot_path)))
                        if name in snap.files else None for name in aliases.SOURCES}
             return aliases.pairs(aliases.collect(sources))
-
-    def _aliases(self, pairs: dict[tuple[str, str], list[dict[str, Any]]], scope: str, stats: ExtractStats,
-                 urn: Any) -> Iterator[Emit]:
-        # Detect ambiguity: one LID mapping to multiple phones.
-        by_lid: dict[str, set[str]] = {}
-        for lid, phone in pairs:
-            by_lid.setdefault(lid, set()).add(phone)
-        for (lid, phone), ev in sorted(pairs.items()):
-            if len(by_lid[lid]) > 1:
-                stats.error("ambiguous_lid_phone_pair", "one LID maps to multiple phone JIDs")
-                continue
-            key = U.composite_key("alias", lid, phone)
-            rec = record("aliases", urn("event", key), SOURCE, scope, old_urn=urn("identity", lid), new_urn=urn("identity", phone),
-                         reason="lid_phone_pair", evidence=ev, created_at=0)
-            yield Emit(rec, Observation("lid_phone_pair", [lid], key, fingerprint(lid, phone)))
-            stats.bump("aliases")
 
     def _messages(self, conn: sqlite3.Connection, scope: str, stats: ExtractStats, urn: Any,
                   chat_by_pk: dict[int, tuple[str, str]], me_urn: str, media_root: Path,

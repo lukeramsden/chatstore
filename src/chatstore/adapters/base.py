@@ -87,7 +87,8 @@ class Diagnosis:
 class ExtractStats:
     selected_message_rowids: set[int] | None = None
     reuse_whatsapp_headers: bool = False
-    selected_whatsapp_chat_rowids: set[int] | None = None
+    # Changed header keys by observation native table, from adapters.whatsapp.headers.
+    selected_whatsapp_header_keys: dict[str, set[str]] | None = None
     selected_whatsapp_event_rowids: set[int] | None = None
     watch_path: Callable[[Path], None] | None = None
     memo: UnitMemo | None = None

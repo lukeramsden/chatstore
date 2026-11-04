@@ -4,7 +4,7 @@ from contextlib import closing
 import pytest
 
 from chatstore.adapters.base import ExtractStats
-from chatstore.adapters.whatsapp.adapter import WhatsAppAdapter, _message_jids
+from chatstore.adapters.whatsapp.adapter import _message_jids, owner_jids
 
 
 @pytest.mark.parametrize(('field', 'incoming'), [('ZFROMJID', False), ('ZTOJID', False), ('ZTOJID', True)])
@@ -34,10 +34,10 @@ def test_owner_detection_keeps_alias_closure_and_ignores_outgoing_recipients():
             ('15550000002@s.whatsapp.net', 1), ('', 0), (None, 0),
         ])
         pair = ('100@lid', '15550000001@s.whatsapp.net')
-        assert WhatsAppAdapter()._owner_jids(conn, {pair: []}, ExtractStats()) == set(pair)
+        assert owner_jids(conn, {pair: []}, ExtractStats()) == set(pair)
         conn.execute('DELETE FROM ZWAMESSAGE WHERE ZISFROMME=0')
         stats = ExtractStats()
-        assert WhatsAppAdapter()._owner_jids(conn, {pair: []}, stats) == set()
+        assert owner_jids(conn, {pair: []}, stats) == set()
         assert any('owner JID not detected' in note for note in stats.notes)
 
 
