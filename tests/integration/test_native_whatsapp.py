@@ -58,7 +58,9 @@ def test_cli_whatsapp_dispatch_preserves_old_changes_and_optional_creation(colle
         contacts.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES('123456@lid','15550000000@s.whatsapp.net')")
         contacts.commit()
     auxiliary = cli(capsys, 'sync', '--source', 'whatsapp')[0]
-    assert auxiliary['counts'].get('messages', 0) == 0 and auxiliary['counts']['aliases'] == 3
+    # Only the new alias pair and its two identities are re-extracted.
+    assert auxiliary['counts'].get('messages', 0) == 0 and auxiliary['counts']['aliases'] == 1
+    assert auxiliary['counts']['identities'] == 2 and auxiliary['counts']['prepared_headers_reused'] == 1
     assert auxiliary['snapshot']['prepared_native']['capture']['context']['whatsapp_auxiliary']['files']['ContactsV2']['present']
     writer.execute('DELETE FROM ZWAMESSAGE WHERE Z_PK=1')
     writer.commit()
@@ -202,28 +204,31 @@ def test_clean_prepared_poll_skips_header_materialization_and_preserves_freshnes
         assert cache.get(chat['urn'])['observed_name'] == 'new source chat title'
 
 
-@pytest.mark.parametrize(('mutation', 'reuse'), [
-    ("UPDATE ZWAMESSAGE SET ZTEXT='header-safe edit' WHERE Z_PK=1", True),
+def assert_matches_full_extraction(cache, dd, cfg, ident):
+    """Selective output is correct iff a full re-extraction finds nothing to change."""
+    full = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, full=True)
+    assert full is not None and full.exit_code == 0, full.run
+    counts = full.run['counts']
+    assert counts['written']['inserted'] == 0 and counts['written']['updated'] == 0, counts['written']
+    assert not any(key.startswith('absent_from_source') for key in counts), counts
+
+
+@pytest.mark.parametrize(('mutation', 'headers'), [
+    ("UPDATE ZWAMESSAGE SET ZTEXT='header-safe edit' WHERE Z_PK=1", False),
     (("INSERT INTO ZWAMESSAGE(Z_PK,ZCHATSESSION,ZSTANZAID,ZTEXT,ZFROMJID,ZTOJID,ZISFROMME,ZMESSAGETYPE,ZMESSAGEDATE,ZSORT) "
-      "VALUES(999,1,'NEW-STANZA','new known sender','15550001111@s.whatsapp.net','15550009999@s.whatsapp.net',0,0,800000000,999)"), True),
-    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=2', True),
-    ("UPDATE ZWAMESSAGE SET ZFROMJID='new-sender@lid' WHERE Z_PK=1", False),
-    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=1', False),
-    ("UPDATE ZWACHATSESSION SET ZPARTNERNAME='header changed' WHERE Z_PK=1", False),
+      "VALUES(999,1,'NEW-STANZA','new known sender','15550001111@s.whatsapp.net','15550009999@s.whatsapp.net',0,0,800000000,999)"), False),
+    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=2', False),
+    # These change header records: only their keys are withdrawn and re-extracted.
+    ("UPDATE ZWAMESSAGE SET ZFROMJID='new-sender@lid' WHERE Z_PK=1", True),
+    ('DELETE FROM ZWAMESSAGE WHERE Z_PK=1', True),
+    ("UPDATE ZWACHATSESSION SET ZPARTNERNAME='header changed' WHERE Z_PK=1", True),
 ])
-def test_message_capture_reuses_only_proven_unchanged_headers(collector, capsys, monkeypatch, mutation, reuse):
-    from chatstore.adapters.whatsapp import aliases
+def test_message_capture_reextracts_only_changed_headers(collector, capsys, mutation, headers):
     from chatstore.sync_session import SyncSession
 
     root, dd, writer = collector
     cli(capsys, 'init', '--whatsapp-path', str(root))
     cfg, ident = load_config(dd), load_identity(dd)
-    reads = []
-    original = aliases.read
-    def read(*args, **kwargs):
-        reads.append(1)
-        return original(*args, **kwargs)
-    monkeypatch.setattr(aliases, 'read', read)
     with SyncSession() as session, closing(Cache(dd.cache)) as cache:
         def poll():
             result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache,
@@ -232,20 +237,24 @@ def test_message_capture_reuses_only_proven_unchanged_headers(collector, capsys,
             return result.run
         poll()
         header = next(cache.iter_records('aliases'))
+        total = sum(1 for kind in ('identities', 'chats', 'chat_memberships', 'aliases') for _ in cache.iter_records(kind))
         writer.execute(mutation)
         writer.commit()
         changed = poll()
-        assert bool(changed['counts'].get('prepared_headers_reused')) is reuse
-        assert len(reads) == (1 if reuse else 2)
-        if reuse:
-            assert not any(key in changed['counts'] for key in ('identities', 'aliases', 'chats', 'chat_memberships'))
+        assert changed['counts']['prepared_headers_reused'] == 1
+        emitted = sum(changed['counts'].get(kind, 0) for kind in ('identities', 'aliases', 'chats', 'chat_memberships'))
+        if headers:
+            assert 0 < emitted < total
+        else:
+            assert emitted == 0
             assert changed['counts']['written']['unchanged'] == (1 if mutation.startswith('DELETE') else 0)
-            assert cache.get(header['urn'])['revision_digest'] == header['revision_digest']
-            evidence = cache.observations_of(header['urn'])[0]
-            assert evidence['present'] == 'present'
-            observed_run = cache.get(evidence['sync_run'])
-            assert observed_run['snapshot']['prepared_native']['capture']['token'] == changed['snapshot']['prepared_native']['capture']['token']
+        assert cache.get(header['urn'])['revision_digest'] == header['revision_digest']
+        evidence = cache.observations_of(header['urn'])[0]
+        assert evidence['present'] == 'present'
+        observed_run = cache.get(evidence['sync_run'])
+        assert observed_run['snapshot']['prepared_native']['capture']['token'] == changed['snapshot']['prepared_native']['capture']['token']
         assert poll()['counts']['prepared_coverage_reused'] == 1
+        assert_matches_full_extraction(cache, dd, cfg, ident)
 
 
 def test_header_reuse_retries_offline_and_cold_restores_freshness(collector, capsys, monkeypatch, tmp_path):
@@ -475,27 +484,40 @@ def test_failed_native_header_preparation_rolls_back_ownership_with_source_point
             assert result is not None and result.exit_code == 0, result
             return result.run
         first = poll()['snapshot']['prepared_native']['capture']
-        prefix = 'cs_wa_event' if metadata == 'event' else 'cs_wa_chat'
         mirror_path = next((dd.root / 'native').glob('*.sqlite3'))
-        with NativeMirror(mirror_path) as mirror:
-            before = list(map(tuple, mirror.conn.execute(f'SELECT * FROM {prefix}_keys ORDER BY row_id')))
+        tables = (('cs_wa_event_keys', 'row_id'), ('cs_wa_event_state', 'id'), ('cs_wa_event_changes', 'event_key')) if metadata == 'event' else (
+            ('cs_wa_header_fp', 'native_table,native_key'), ('cs_wa_header_state', 'id'), ('cs_wa_header_changes', 'native_table,native_key'))
+        def snapshot():
+            with NativeMirror(mirror_path) as mirror:
+                return {table: list(map(tuple, mirror.conn.execute(f'SELECT * FROM {table} ORDER BY {order}'))) for table, order in tables}
+        before = snapshot()
+        assert before[tables[1][0]][0][1] == first['token']
         sql = 'UPDATE ZWAGROUPMEMBERSCHANGE SET ZCHANGEDATE=700000091 WHERE Z_PK=1' if metadata == 'event' else "UPDATE ZWACHATSESSION SET ZPARTNERNAME='retried group title' WHERE Z_PK=2"
         writer.execute(sql)
         writer.commit()
-        original = auxiliary.prepare
-        def reject(*args, **kwargs):
-            original(*args, **kwargs)
-            raise RuntimeError('reject after event ownership preparation')
         with monkeypatch.context() as patch:
-            patch.setattr(auxiliary, 'prepare', reject)
-            with pytest.raises(RuntimeError, match='reject after event ownership'):
+            if metadata == 'event':
+                original = auxiliary.prepare
+                def reject(*args, **kwargs):
+                    original(*args, **kwargs)
+                    raise RuntimeError('reject after header preparation')
+                patch.setattr(auxiliary, 'prepare', reject)
+            else:
+                from types import SimpleNamespace
+
+                from chatstore import native_whatsapp
+                from chatstore.adapters.whatsapp import headers
+                def reject_headers(conn, *, full):
+                    headers.prepare(conn, full=full)
+                    raise RuntimeError('reject after header preparation')
+                # Not a policy module function, so the extraction policy is unchanged.
+                patch.setattr(native_whatsapp, 'headers', SimpleNamespace(prepare=reject_headers))
+            with pytest.raises(RuntimeError, match='reject after header preparation'):
                 poll()
         with NativeMirror(mirror_path) as mirror:
             assert mirror.pending() is None
             assert mirror.continuation().token == first['token']
-            assert mirror.conn.execute(f'SELECT point FROM {prefix}_state').fetchone()[0] == first['token']
-            assert list(map(tuple, mirror.conn.execute(f'SELECT * FROM {prefix}_keys ORDER BY row_id'))) == before
-            assert not mirror.conn.execute(f'SELECT 1 FROM {prefix}_changes').fetchone()
+        assert snapshot() == before
         changed = poll()
         assert changed['counts']['events' if metadata == 'event' else 'chats'] == 1
         assert changed['counts']['prepared_headers_reused'] == 1
@@ -509,7 +531,6 @@ def test_failed_native_header_preparation_rolls_back_ownership_with_source_point
     "UPDATE ZWACHATSESSION SET ZPARTNERNAME='edited group title' WHERE Z_PK=2",
 ])
 def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collector, capsys, monkeypatch, duplicate, mutation):
-    from chatstore.adapters.whatsapp import aliases
     from chatstore.archive.import_ import import_archive
     from chatstore.archive.incremental import export_changes
     from chatstore.config import Identity
@@ -528,13 +549,6 @@ def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collecto
     writer.commit()
     cli(capsys, 'init', '--whatsapp-path', str(root))
     cfg, ident = load_config(dd), load_identity(dd)
-    forbidden = False
-    original_read = aliases.read
-    def read(*args, **kwargs):
-        if forbidden:
-            pytest.fail('chat metadata materialized unrelated headers')
-        return original_read(*args, **kwargs)
-    monkeypatch.setattr(aliases, 'read', read)
     with SyncSession() as session, closing(Cache(dd.cache)) as cache:
         def poll():
             result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache, auxiliary_session=session.native_auxiliary(cfg))
@@ -547,14 +561,12 @@ def test_chat_metadata_selects_key_owners_and_retains_unrelated_headers(collecto
         baseline = export()
         writer.execute(mutation)
         writer.commit()
-        forbidden = True
         changed = poll()
         assert changed['counts']['prepared_headers_reused'] == 1
         assert changed['counts']['chats'] == (2 if duplicate and 'Z_PK=2' in mutation else 1)
         assert not any(changed['counts'].get(kind) for kind in ('messages', 'identities', 'aliases', 'chat_memberships', 'events'))
         assert changed['counts'].get('absent_from_source:withdrawn', 0) == 0
         assert cache.observations_of(unrelated['urn'])[0]['sync_run'] != unrelated['sync_run']
-        forbidden = False
         from chatstore.adapters.base import Emit, ExtractStats
         from chatstore.prepared_sync import PreparedSync
         with NativeMirror(next((dd.root / 'native').glob('*.sqlite3'))) as mirror:
@@ -665,7 +677,8 @@ def test_new_message_with_chat_bookkeeping_update_reuses_headers(collector, caps
     result = cli(capsys, 'sync', '--source', 'whatsapp')[0]
     assert result['mode'] == 'incremental' and result['counts']['messages'] == 1
     assert result['counts'].get('prepared_headers_reused') == 1
-    assert result['counts'].get('identities', 0) == 0 and result['counts'].get('chats') == 1
+    # Bookkeeping columns feed no header payload: no chat, identity or membership is re-emitted.
+    assert not any(result['counts'].get(kind) for kind in ('identities', 'chats', 'chat_memberships', 'aliases'))
 
 
 def test_alias_database_write_during_long_baseline_does_not_reject_capture(collector, capsys, monkeypatch):
@@ -686,3 +699,50 @@ def test_alias_database_write_during_long_baseline_does_not_reject_capture(colle
     assert result['snapshot']['prepared_native']['capture']['baseline']
     with closing(Cache(dd.cache)) as cache:
         assert any('15557770000' in (row.get('address') or '') for row in cache.iter_records('identities'))
+
+
+HEADER_MUTATIONS = {
+    'new_direct_chat_and_message': [
+        "INSERT INTO ZWACHATSESSION VALUES (40,1,1,0,0,0,0,NULL,'15550004040@s.whatsapp.net','New Contact',800000000)",
+        ("INSERT INTO ZWAMESSAGE(Z_PK,ZCHATSESSION,ZSTANZAID,ZTEXT,ZFROMJID,ZISFROMME,ZMESSAGETYPE,ZMESSAGEDATE,ZSORT) "
+         "VALUES(4040,40,'NEW-CHAT-1','hello','15550004040@s.whatsapp.net',0,0,800000001,4040)")],
+    'new_group_member': ["INSERT INTO ZWAGROUPMEMBER VALUES (40,1,0,2,'15550004141@s.whatsapp.net','New Member')"],
+    'member_leaves_and_promoted': ['UPDATE ZWAGROUPMEMBER SET ZISACTIVE=0 WHERE Z_PK=2', 'UPDATE ZWAGROUPMEMBER SET ZISADMIN=1 WHERE Z_PK=3'],
+    'push_name_change': ["INSERT INTO ZWAPROFILEPUSHNAME(ZJID,ZPUSHNAME) VALUES('15550004242@s.whatsapp.net','Pushy')",
+                         "UPDATE ZWAPROFILEPUSHNAME SET ZPUSHNAME=ZPUSHNAME||' renamed' WHERE Z_PK=1"],
+    'direct_chat_renamed': ["UPDATE ZWACHATSESSION SET ZPARTNERNAME='Alice Renamed' WHERE Z_PK=1"],
+    'chat_deleted': ['DELETE FROM ZWAMESSAGE WHERE ZCHATSESSION=3', 'DELETE FROM ZWACHATSESSION WHERE Z_PK=3'],
+    'group_created_at': ["UPDATE ZWAGROUPINFO SET ZCREATIONDATE=690000123 WHERE ZCHATSESSION=2"],
+    'new_owner_jid': [("INSERT INTO ZWAMESSAGE(Z_PK,ZCHATSESSION,ZSTANZAID,ZTEXT,ZFROMJID,ZTOJID,ZISFROMME,ZMESSAGETYPE,ZMESSAGEDATE,ZSORT) "
+                       "VALUES(4343,1,'OWNER-1','to me','15550004343@s.whatsapp.net','15550009998@s.whatsapp.net',0,0,800000002,4343)")],
+    'new_alias_pair': ['lid:INSERT INTO ZWAZACCOUNT VALUES (40, \'4040@lid\', \'+1 555 000 4040\')'],
+    'alias_removed': ['lid:DELETE FROM ZWAZACCOUNT WHERE Z_PK=1'],
+    'alias_becomes_ambiguous': ['lid:INSERT INTO ZWAZACCOUNT VALUES (41, (SELECT ZIDENTIFIER FROM ZWAZACCOUNT WHERE Z_PK=1), \'+1 555 000 4141\')'],
+}
+
+
+@pytest.mark.parametrize('name', sorted(HEADER_MUTATIONS))
+def test_header_changes_reextract_only_affected_keys_and_match_full_extraction(collector, capsys, name):
+    root, dd, writer = collector
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    cfg, ident = load_config(dd), load_identity(dd)
+    with closing(Cache(dd.cache)) as cache:
+        def poll():
+            result = collect_native(WhatsAppAdapter(), dd, cfg, ident, cache)
+            assert result is not None and result.exit_code in (0, 5), result.run
+            return result.run
+        poll()
+        total = sum(1 for kind in ('identities', 'chats', 'chat_memberships', 'aliases') for _ in cache.iter_records(kind))
+        with closing(sqlite3.connect(root / 'LID.sqlite')) as lid:
+            for statement in HEADER_MUTATIONS[name]:
+                (lid if statement.startswith('lid:') else writer).execute(statement.removeprefix('lid:'))
+            lid.commit()
+        writer.commit()
+        changed = poll()
+        assert changed['mode'] == 'incremental'
+        assert changed['counts']['prepared_headers_reused'] == 1, changed['counts']
+        emitted = sum(changed['counts'].get(kind, 0) for kind in ('identities', 'aliases', 'chats', 'chat_memberships'))
+        withdrawn = changed['counts'].get('absent_from_source:withdrawn', 0)
+        assert 0 < emitted + withdrawn and emitted < total, (emitted, withdrawn, total)
+        assert poll()['counts']['prepared_coverage_reused'] == 1
+        assert_matches_full_extraction(cache, dd, cfg, ident)

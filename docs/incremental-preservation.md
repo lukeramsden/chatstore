@@ -1500,3 +1500,47 @@ WhatsApp: when a capture changes no native row and no file, coverage starts with
 withdrawing headers. The retained coverage, headers included, is re-sighted without
 running the decoder or the adapter (`prepared_coverage_reused=1`). With it, no-change runs
 on the same real history took 0.23-0.34s (baseline 95s).
+
+
+## Keyed WhatsApp headers
+
+Real 15-minute polls usually carry more than new messages. A new chat, a new group
+member or contact, or a new alias pair each used to disable header reuse. That
+re-emitted all ~73k chat, membership, identity and alias records, 15-22s per poll on a
+200k-message history. A profile of one such poll found about 7.6s spent building
+records, 7.8s upserting them, 4.6s recording observations and 3.6s withdrawing header
+coverage.
+
+`adapter.header_entries` is now the single description of every header: one
+`HeaderEntry(table, key, kind, payload)` per canonical record. `table` and `key` are its
+observation's native table and key, and the record is a pure function of `kind` and
+`payload` (`build_header`). Full extraction, keyed extraction and the mirror's
+fingerprints all use it.
+
+`adapters/whatsapp/headers.py` runs in the native pre-commit step, after alias evidence
+is prepared. It hashes every payload per key and diffs the hashes against the parent
+point's stored hashes (`cs_wa_header_fp`). The changed, added and removed keys go to
+`cs_wa_header_changes`, bound to the point. The diff is exact whatever caused the change:
+a chat or member row, a push name, a message introducing or removing a JID, an
+incoming-recipient owner JID, group info, or an added, removed or now-ambiguous alias
+pair. Canonical capture withdraws only those keys' coverage, and the adapter emits only
+their records. A vanished key is withdrawn and reconciled absent.
+
+These cases fall back to re-emitting every header: a baseline or `--mode full`; a
+missing, foreign or full fingerprint state; a group-event change without event key
+ownership. A resumed attempt reaches the same keyed decision as its original, because the
+decision is a pure function of the pending point. Header-derived run errors and notes
+(orphan members, ambiguous LIDs, owner detection) are reported only by full extraction,
+as with plain header reuse.
+
+This replaces the chat-only metadata selection (`whatsapp/chats.py`), the JID-presence
+proof (`dependencies.headers_unchanged`) and the alias-evidence-unchanged check. Each
+capture now pays for building and hashing all header entries, about 0.37s on the real
+history, plus 0.12s to load the stored hashes.
+
+Tests run each header mutation and then check against full extraction: a following
+`--mode full` must insert, update and withdraw nothing. The mutations are a new direct
+chat with its first message, a new group member, a member leaving or being promoted,
+push names, a direct-chat rename, a chat deletion, a group creation date, a new owner
+JID, and an alias pair being added, removed or made ambiguous. A deliberately broken
+keyed path fails the check.
