@@ -364,8 +364,8 @@ def test_group_event_changes_skip_unrelated_headers_and_preserve_history(collect
     root, dd, writer = collector
     writer.executemany('INSERT INTO ZWAGROUPMEMBERSCHANGE VALUES(?,?,?,?,?)',
         ((100 + i, 5, 800000000 + i, 'unrelated@g.us', 'member@s.whatsapp.net') for i in range(1000)))
-    # Same canonical key after normalization: deleting one native owner must not
-    # withdraw the surviving event, and extraction must preserve native row order.
+    # Same base key after normalization but different members: the duplicate is a
+    # distinct event, and moving or deleting Z_PK=1 hands it the base key.
     if duplicate:
         writer.execute("INSERT INTO ZWAGROUPMEMBERSCHANGE SELECT 2,ZCHANGETYPE,ZCHANGEDATE,upper(ZGROUPJID),'duplicate@s.whatsapp.net' FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1")
     writer.commit()
@@ -402,7 +402,7 @@ def test_group_event_changes_skip_unrelated_headers_and_preserve_history(collect
         observation = cache.observations_of(unchanged['urn'])[0]
         assert observation['sync_run'] != unchanged['sync_run']
         assert observation['present'] == 'present'
-        expected_absent = int(not duplicate and ('DELETE' in mutation or 'ZCHANGEDATE=' in mutation))
+        expected_absent = int('DELETE' in mutation or 'ZCHANGEDATE=' in mutation)
         assert changed['counts'].get('absent_from_source:withdrawn', 0) == expected_absent
         delta = export()
         restored = DataDir(dd.root.parent / 'event-restore')
@@ -415,6 +415,80 @@ def test_group_event_changes_skip_unrelated_headers_and_preserve_history(collect
                 assert {r['revision_digest'] for r in target.revisions_of(urn)} == {r['revision_digest'] for r in cache.revisions_of(urn)}
                 assert [(o['native_table'], o['present']) for o in target.observations_of(urn)] == [(o['native_table'], o['present']) for o in cache.observations_of(urn)]
         assert first['counts']['events'] >= 1001
+
+
+def test_colliding_group_events_stay_distinct_and_selective_matches_full(collector, capsys):
+    from chatstore.adapters.base import Emit, ExtractStats
+    from chatstore.adapters.whatsapp import events
+    from chatstore.identity import urn as U
+    from chatstore.prepared_sync import PreparedSync
+
+    root, dd, writer = collector
+    # Z_PK=2 shares group, date and type with Z_PK=1 but lists other members;
+    # Z_PK=3 repeats Z_PK=1 exactly and collapses into it.
+    writer.execute("INSERT INTO ZWAGROUPMEMBERSCHANGE SELECT 2,ZCHANGETYPE,ZCHANGEDATE,upper(ZGROUPJID),'Other@s.whatsapp.net' FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1")
+    writer.execute('INSERT INTO ZWAGROUPMEMBERSCHANGE SELECT 3,ZCHANGETYPE,ZCHANGEDATE,ZGROUPJID,ZMEMBERJIDS FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1')
+    writer.commit()
+    base = writer.execute('SELECT ZGROUPJID,ZCHANGEDATE,ZCHANGETYPE,ZMEMBERJIDS FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1').fetchone()
+    base_key = events.key(dict(zip(('ZGROUPJID', 'ZCHANGEDATE', 'ZCHANGETYPE'), base[:3])))
+    cli(capsys, 'init', '--whatsapp-path', str(root))
+    scope = load_identity(dd).scope_for('whatsapp')
+    base_urn = U.derive_urn('whatsapp', scope, 'event', base_key)
+    other_urn = U.derive_urn('whatsapp', scope, 'event', events.disambiguated(base_key, ['other@s.whatsapp.net']))
+    late_urn = U.derive_urn('whatsapp', scope, 'event', events.disambiguated(base_key, ['late@s.whatsapp.net']))
+
+    def state():
+        with closing(Cache(dd.cache)) as cache:
+            return {row['urn']: (row['revision_digest'], len(cache.revisions_of(row['urn'])),
+                                 [o['present'] for o in cache.observations_of(row['urn'])])
+                    for row in cache.iter_records('events')}
+
+    def members(urn):
+        with closing(Cache(dd.cache)) as cache:
+            return cache.get(urn)['payload']['member_identity_urns']
+
+    def assert_matches_full():
+        cfg = load_config(dd)
+        with NativeMirror(next((dd.root / 'native').glob('*.sqlite3'))) as mirror:
+            snap = PreparedSync(mirror, mirror.continuation(), 'ChatStorage').snapshot()
+            full = {item.record['urn']: item.record['revision_digest']
+                    for item in WhatsAppAdapter().extract(snap, scope, cfg, ExtractStats(), None, full=True)
+                    if isinstance(item, Emit) and item.record['entity'] == 'events'}
+        present = {urn: digest for urn, (digest, _, seen) in state().items() if not seen or 'present' in seen}
+        assert present == full
+        before = state()
+        rerun = cli(capsys, 'sync', '--source', 'whatsapp', '--mode', 'full')[0]
+        assert rerun['mode'] == 'full_reconcile'
+        assert not any(k.startswith('absent_from_source') for k in rerun['counts'])
+        assert state() == before
+
+    cli(capsys, 'sync', '--source', 'whatsapp')
+    first = state()
+    assert {base_urn, other_urn} <= set(first)
+    assert members(base_urn) == [U.derive_urn('whatsapp', scope, 'identity', U.whatsapp_jid(base[3]))]
+    assert members(other_urn) == [U.derive_urn('whatsapp', scope, 'identity', 'other@s.whatsapp.net')]
+    assert first[base_urn][1] == first[other_urn][1] == 1
+    assert_matches_full()
+
+    # A later colliding row arrives selectively; existing keys do not move.
+    writer.execute("INSERT INTO ZWAGROUPMEMBERSCHANGE SELECT 4,ZCHANGETYPE,ZCHANGEDATE,ZGROUPJID,'late@s.whatsapp.net' FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK=1")
+    writer.commit()
+    late = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert late['counts']['prepared_headers_reused'] == 1
+    assert late['counts']['written']['inserted'] == 1 and late['counts']['written']['updated'] == 0
+    assert set(state()) == set(first) | {late_urn}
+    assert_matches_full()
+
+    # Deleting the base holder (and its exact duplicate) hands the base key to Z_PK=2,
+    # the next lowest; its old extended key is withdrawn, not left stale.
+    writer.execute('DELETE FROM ZWAGROUPMEMBERSCHANGE WHERE Z_PK IN (1,3)')
+    writer.commit()
+    moved = cli(capsys, 'sync', '--source', 'whatsapp')[0]
+    assert moved['counts']['prepared_headers_reused'] == 1
+    assert moved['counts']['absent_from_source:withdrawn'] == 1
+    assert members(base_urn) == [U.derive_urn('whatsapp', scope, 'identity', 'other@s.whatsapp.net')]
+    assert state()[other_urn][2] == ['absent_from_source']
+    assert_matches_full()
 
 
 @pytest.mark.parametrize('metadata', ['event', 'chat'])

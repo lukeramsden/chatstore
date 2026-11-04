@@ -312,10 +312,8 @@ class WhatsAppAdapter:
             identity = events.rowid_alias(conn)
             rows = (row for pk in sorted(selected) for row in conn.execute(
                 f'SELECT {fields} FROM ZWAGROUPMEMBERSCHANGE WHERE {identity}=?', (pk,)))
-        for r in rows:
+        for r, key, members in events.keyed(rows):
             gj = U.whatsapp_jid(r["ZGROUPJID"] or "")
-            key = events.key(r)
-            members = [U.whatsapp_jid(m) for m in str(r["ZMEMBERJIDS"] or "").replace(";", ",").split(",") if m.strip()]
             rec = record("events", urn("event", key), SOURCE, scope, kind=f"unknown:{r['ZCHANGETYPE']}",
                          target_urn=urn("chat", gj) if gj else None, target_native=gj or None, actor_urn=None,
                          at=timestamp(r["ZCHANGEDATE"], "s", EPOCH_2001),

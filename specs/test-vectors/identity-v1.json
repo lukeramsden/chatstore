@@ -145,6 +145,28 @@
       },
       "serialised_name": "[\"chatstore-id-v1\",\"messages\",\"11111111-2222-4333-8444-555555555555\",\"message\",\"g\\\"u\\\\id\"]",
       "urn": "urn:uuid:41a2093e-f766-59c1-a3f0-200eccc9b6dd"
+    },
+    {
+      "name": "whatsapp group change event",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "event",
+        "native_key": "[\"groupchange\",\"120363000000000001@g.us\",\"700000090.0\",\"5\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"event\",\"[\\\"groupchange\\\",\\\"120363000000000001@g.us\\\",\\\"700000090.0\\\",\\\"5\\\"]\"]",
+      "urn": "urn:uuid:be4a45bb-d40c-52ce-be45-c0365e34f08f"
+    },
+    {
+      "name": "whatsapp group change event, colliding row disambiguated by members",
+      "input": {
+        "source": "whatsapp",
+        "account_scope": "11111111-2222-4333-8444-555555555555",
+        "entity_type": "event",
+        "native_key": "[\"groupchange\",\"120363000000000001@g.us\",\"700000090.0\",\"5\",\"111@lid,222@s.whatsapp.net\"]"
+      },
+      "serialised_name": "[\"chatstore-id-v1\",\"whatsapp\",\"11111111-2222-4333-8444-555555555555\",\"event\",\"[\\\"groupchange\\\",\\\"120363000000000001@g.us\\\",\\\"700000090.0\\\",\\\"5\\\",\\\"111@lid,222@s.whatsapp.net\\\"]\"]",
+      "urn": "urn:uuid:a0889708-35fa-55f2-9ce7-e2f40387fb56"
     }
   ]
 }

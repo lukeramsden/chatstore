@@ -434,7 +434,8 @@ def _whatsapp_coverage(adapter, cache, prepared, scope, full):
                 if headers_reused and chat_keys:
                     proof = proof.with_headers(cache, [], keyed_tables={'ZWACHATSESSION': chat_keys})
                 if headers_reused and event_keys:
-                    proof = proof.with_headers(cache, [], keyed_tables={'ZWAGROUPMEMBERSCHANGE': event_keys})
+                    proof = proof.with_headers(cache, [], keyed_tables={'ZWAGROUPMEMBERSCHANGE':
+                        whatsapp_events.observed_keys(cache.conn, adapter.source, scope, event_keys)})
                 if not headers_reused:
                     proof = proof.with_headers(cache,
                         ['ZWACHATSESSION', 'ZWAGROUPMEMBER', 'ZWAGROUPMEMBERSCHANGE', 'jid', 'me', 'lid_phone_pair'])
